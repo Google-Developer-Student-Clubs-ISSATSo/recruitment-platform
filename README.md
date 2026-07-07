@@ -1,36 +1,148 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
 
-## Getting Started
+# GDGC Recruitment Platform
 
-First, run the development server:
+**The core team recruitment pipeline for GDGC-ISSATSO — from application to final decision, in one place.**
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+![Last Commit](https://img.shields.io/github/last-commit/Google-Developer-Student-Clubs-ISSATSo/recruitment-platform)
+![Languages](https://img.shields.io/github/languages/count/Google-Developer-Student-Clubs-ISSATSo/recruitment-platform)
+![License](https://img.shields.io/badge/license-Private-lightgrey)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+![Tech Stack](https://skillicons.dev/icons?i=nextjs,typescript,tailwind,postgres,prisma,docker,vercel)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+</div>
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 📋 Table of Contents
 
-To learn more about Next.js, take a look at the following resources:
+- [Overview](#-overview)
+- [Features](#-features)
+- [Tech Stack](#-tech-stack)
+- [Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Usage](#-usage)
+- [Testing](#-testing)
+- [Credit](#-credit)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🎯 Overview
 
-## Deploy on Vercel
+GDGC Recruitment Platform replaces the scattered forms, spreadsheets, manual sheet-copying, and
+external booking links previously used to run **GDGC-ISSATSO's** annual core team recruitment.
+It centralizes the entire process --- application intake, Phase 1 screening, interview
+scheduling, and final decisions --- into one member-only platform, across the club's three
+competitive committees: **Marketing (MKT)**, **Team Management (TM)**, and **Events & External
+Relations (EER)**.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## ✨ Features
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 🔐 **Permission-based access control** --- no fixed roles, the TM Lead grants exactly the
+  access each member needs, and can revoke or adjust it any time
+- 📊 **Weighted Phase 1 scoring** --- configurable questions, coefficients, and note scales rank
+  every applicant automatically
+- 🤝 **Cross-committee interview panels** --- one interviewer per committee, self-claimed from an
+  open board
+- 📝 **Single shared interview notes** --- no more copying scores between spreadsheets
+- 🖥️ **Live final decision dashboard** --- built for the actual Discord-call decision meeting
+- 🔄 **In-app Admin Handoff** --- the TM Lead role transfers yearly via invite-and-accept, no
+  manual credential handoff required
+- 🗂️ **Full activity log** --- every meaningful action, visible to the TM Lead
+
+## 🛠️ Tech Stack
+
+| Layer     | Technology                                     |
+| --------- | ---------------------------------------------- |
+| Frontend  | Next.js (App Router), TypeScript, Tailwind CSS |
+| Backend   | Next.js API routes                             |
+| Database  | PostgreSQL via Prisma                          |
+| Local Dev | Docker (Postgres)                              |
+| Hosting   | Vercel                                         |
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18 or later
+- npm or pnpm
+- [Docker](https://www.docker.com/)
+
+### Installation
+
+1. **Clone the repo**
+
+   ```bash
+   git clone git@github.com:Google-Developer-Student-Clubs-ISSATSo/recruitment-platform.git
+   cd recruitment-platform
+   ```
+
+2. **Start the local database**
+
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Install dependencies**
+
+   ```bash
+   npm install
+   ```
+
+4. **Configure environment variables**
+
+   Create a `.env` file in the project root:
+
+   ```
+   DATABASE_URL="postgresql://gdgc:dev_password@localhost:5432/gdgc_recruitment"
+   ```
+
+5. **Run database migrations**
+
+   ```bash
+   npx prisma migrate dev
+   ```
+
+6. **Start the dev server**
+
+   ```bash
+   npm run dev
+   ```
+
+   Visit [http://localhost:3000](http://localhost:3000).
+
+## 📖 Usage
+
+Access is entirely permission-based --- there are no fixed job titles baked into the system, only
+starting templates the TM Lead can customize per person:
+
+| Role template            | Typical access                                                   |
+| ------------------------ | ---------------------------------------------------------------- |
+| Interviewer              | Claim panel seats, write interview notes for assigned applicants |
+| TM Reviewer              | Phase 1 screening across the full applicant pool                 |
+| Technical Scorer         | Score the Technical Skills column only                           |
+| Committee Representative | Read access to their committee's final-decision dashboard        |
+| TM Lead (Administrator)  | Full control, including granting/revoking anyone's permissions   |
+
+Full process details, the permission catalog, and the data model live in
+[`docs/PRODUCT_SPECIFICATION.md`](docs/PRODUCT_SPECIFICATION.md).
+
+Ownership, credentials, and the yearly TM Lead / Tech Lead handoff procedures live in
+[`docs/HANDOFF_RUNBOOK.md`](docs/HANDOFF_RUNBOOK.md).
+
+## 🧪 Testing
+
+Testing setup hasn't been added yet --- it's planned as part of the build process (full-flow and
+permission edge-case testing) before the platform is used for a real recruitment cycle. This
+section will be updated once test tooling is in place.
+
+## 🙌 Credit
+
+Built and maintained by the **GDGC-ISSATSO** tech team.
+
+<div align="center">
+
+Made with ❤️ for [Google Developer Group on Campus ISSAT Sousse](https://github.com/Google-Developer-Student-Clubs-ISSATSo)
+
+</div>
