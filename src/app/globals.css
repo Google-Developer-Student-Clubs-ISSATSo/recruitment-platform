@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -19,6 +21,14 @@
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --color-status-accepted: #4ade80; /* lighter, holds contrast on dark bg */
+  --color-status-rejected: #f87171;
+  --color-status-pending: #fde047;
 }
 
 body {

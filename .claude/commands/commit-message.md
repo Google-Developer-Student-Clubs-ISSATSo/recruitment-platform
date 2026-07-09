@@ -1,19 +1,105 @@
 ---
-description: Generate a professional commit message for the current changes
+description: Generate a Conventional Commit message for the current Git changes
+allowed-tools:
+  - Bash(git status:*)
+  - Bash(git diff:*)
+  - Bash(git log:*)
 ---
 
-Analyze the current git changes and produce a professional commit message.
+Generate a professional Git commit message following the Conventional Commits v1.0.0 specification.
 
-Steps:
+## Workflow
 
-1. Run `git status` to see untracked/modified files.
-2. Run `git diff` (and `git diff --staged` if anything is staged) to see the actual changes.
-3. Run `git log -10 --oneline` to match this repo's existing commit message style/tone.
-4. Write a commit message that:
-   - Uses the imperative mood (e.g. "Add", "Fix", "Refactor", not "Added"/"Adds").
-   - Has a concise subject line (ideally under 70 characters, no trailing period).
-   - Explains _why_ the change was made, not just what changed, in the body when the change isn't self-evident from the subject alone.
-   - Omits filler like "This commit...".
-5. Output only the drafted commit message in a fenced code block — do not run `git commit` or stage/modify anything unless the user explicitly asks you to.
+1. Run `git status --short`.
+2. If staged changes exist, analyze `git diff --staged`.
+3. Otherwise, analyze `git diff`.
+4. Run `git log -10 --oneline` to learn the repository's existing style.
+5. Determine whether the changes represent a single logical commit.
+   - If not, do NOT generate a commit message.
+   - Instead, explain why the changes should be split and suggest the separate commits.
 
-If there are no staged or unstaged changes, say so instead of inventing a message.
+## Commit Rules
+
+Use the format:
+
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+
+### Types
+
+Choose exactly one:
+
+- feat → New feature
+- fix → Bug fix
+- refactor → Internal code improvement without behavior change
+- perf → Performance improvement
+- docs → Documentation only
+- test → Add or update tests
+- build → Build system or dependencies
+- ci → CI/CD changes
+- chore → Maintenance or tooling
+- revert → Revert a previous commit
+
+### Scope
+
+- Infer the scope from the affected module when appropriate.
+- Examples:
+  - auth
+  - api
+  - ui
+  - survey
+  - booking
+  - database
+  - docker
+- Omit the scope if none is meaningful.
+
+### Subject
+
+- Imperative mood.
+- Present tense.
+- No trailing period.
+- Maximum 72 characters.
+- Describe the primary intent.
+- Never use vague subjects such as:
+  - Update
+  - Changes
+  - Misc
+  - WIP
+  - Fix stuff
+
+### Body
+
+Include only when useful.
+
+Explain:
+
+- Why the change was made.
+- What problem it solves.
+
+Do NOT repeat the diff.
+
+Wrap lines at approximately 72 characters.
+
+### Footer
+
+Include only when applicable, for example:
+
+BREAKING CHANGE: ...
+Closes #123
+Refs #456
+
+## Output
+
+Output ONLY the commit message inside a fenced code block.
+
+Do NOT:
+
+- run `git add`
+- run `git commit`
+- modify any files
+- add explanations before or after the code block
+
+If there are no staged or unstaged changes, state that there are no changes to commit.
