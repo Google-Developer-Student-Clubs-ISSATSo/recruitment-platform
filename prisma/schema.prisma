@@ -1,7 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +7,200 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ============ AUTH (NextAuth / Auth.js compatible) ============
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  permissions     UserPermission[]
+  activityLogs    ActivityLogEntry[]
+  sentInvites     AdminTransferInvite[] @relation("InviteInitiator")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============ PERMISSION SYSTEM ============
+
+enum PermissionKey {
+  VIEW_FULL_POOL
+  CONFIGURE_SCREENING
+  SCREEN_PHASE1
+  ENTER_TECHNICAL_SCORE
+  ENTER_INTERVIEW_SLOT
+  CLAIM_PANEL_SEAT
+  EDIT_OWN_INTERVIEW_NOTES
+  VIEW_COMMITTEE_DASHBOARD
+  ENTER_FINAL_DECISION
+  MANAGE_CAPACITY
+  IMPORT_APPLICANTS
+  MANAGE_ACCOUNTS
+  MANAGE_CAMPAIGNS
+  SEND_EMAILS
+  VIEW_CAMPAIGN_HISTORY
+  VIEW_STATISTICS
+  VIEW_ACTIVITY_LOG
+}
+
+enum Committee {
+  MKT
+  TM
+  EER
+}
+
+enum RoleTemplateName {
+  INTERVIEWER
+  TM_REVIEWER
+  TECHNICAL_SCORER
+  COMMITTEE_REPRESENTATIVE
+  TM_LEAD
+}
+
+model RoleTemplate {
+  id          String                    @id @default(cuid())
+  name        RoleTemplateName          @unique
+  description String?
+  permissions RoleTemplatePermission[]
+}
+
+model RoleTemplatePermission {
+  id             String        @id @default(cuid())
+  roleTemplateId String
+  permission     PermissionKey
+
+  roleTemplate RoleTemplate @relation(fields: [roleTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([roleTemplateId, permission])
+}
+
+// The actual source of truth for what a user can do.
+// committee = null means the permission is global (not committee-scoped).
+model UserPermission {
+  id         String        @id @default(cuid())
+  userId     String
+  permission PermissionKey
+  committee  Committee?
+  grantedBy  String?
+  grantedAt  DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permission, committee])
+}
+
+// ============ ADMIN HANDOFF ============
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  CANCELLED
+  EXPIRED
+}
+
+model AdminTransferInvite {
+  id           String       @id @default(cuid())
+  invitedEmail String
+  token        String       @unique
+  status       InviteStatus @default(PENDING)
+  initiatedBy  String
+  createdAt    DateTime     @default(now())
+  respondedAt  DateTime?
+
+  initiator User @relation("InviteInitiator", fields: [initiatedBy], references: [id])
+}
+
+// ============ ACTIVITY LOG ============
+
+model ActivityLogEntry {
+  id         String   @id @default(cuid())
+  actorId    String
+  actionType String
+  targetType String?
+  targetId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+}
+
+// ============ MINIMAL CAMPAIGN + APPLICANT (full fields in Stage 3) ============
+
+model Campaign {
+  id        String   @id @default(cuid())
+  name      String
+  isOpen    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  applicants Applicant[]
+}
+
+enum ApplicantStatus {
+  SUBMITTED
+  SHORTLISTED
+  REJECTED_PHASE1
+  INVITED_GDG_DAY
+  INTERVIEW_SCHEDULED
+  ACCEPTED
+  PENDING
+  REJECTED_FINAL
+}
+
+model Applicant {
+  id                 String          @id @default(cuid())
+  campaignId         String
+  fullName           String
+  email              String
+  isIssatsoStudent   Boolean
+  preferredCommittee Committee
+  assignedCommittee  Committee?
+  status             ApplicantStatus @default(SUBMITTED)
+  rawFormData         Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([campaignId, email])
 }
