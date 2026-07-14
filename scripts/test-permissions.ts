@@ -13,6 +13,15 @@ async function userIdFor(email: string): Promise<string> {
   return user.id;
 }
 
+async function committeeOf(email: string): Promise<Committee> {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { committee: true },
+  });
+  if (!user) throw new Error(`Seed user not found: ${email} — run the seed.`);
+  return user.committee;
+}
+
 type Case = {
   label: string;
   expect: boolean;
@@ -21,50 +30,40 @@ type Case = {
 
 async function main() {
   // Seed identities (see prisma/seed.ts).
-  const ons = await userIdFor("krifaaziz04@gmail.com"); // TM_LEAD ("Ons" / One El Maleh)
-  const lina = await userIdFor("lina@gdgc-issatso.dev"); // COMMITTEE_REPRESENTATIVE, MKT-scoped
-  const karim = await userIdFor("karim@gdgc-issatso.dev"); // INTERVIEWER
+  const ons = await userIdFor("krifaaziz04@gmail.com"); // TM_LEAD (Ons El Maleh)
+  const lina = await userIdFor("lina@gdgc-issatso.dev"); // COMMITTEE_REPRESENTATIVE, home committee MKT
+  const karim = await userIdFor("karim@gdgc-issatso.dev"); // COMMITTEE_REPRESENTATIVE
   const yassine = await userIdFor("yassine@gdgc-issatso.dev"); // TM_REVIEWER
   const sami = await userIdFor("sami@gdgc-issatso.dev"); // TECHNICAL_SCORER
 
   const cases: Case[] = [
     {
-      label: "Ons (TM Lead) ENTER_FINAL_DECISION @ MKT",
+      label: "Ons (TM Lead) ENTER_FINAL_DECISION (global flag)",
       expect: true,
-      run: () => hasPermission(ons, PermissionKey.ENTER_FINAL_DECISION, Committee.MKT),
+      run: () => hasPermission(ons, PermissionKey.ENTER_FINAL_DECISION),
     },
     {
-      label: "Ons (TM Lead) ENTER_FINAL_DECISION @ TM",
+      label: "Lina (Committee Rep) home committee is MKT",
       expect: true,
-      run: () => hasPermission(ons, PermissionKey.ENTER_FINAL_DECISION, Committee.TM),
+      run: async () => (await committeeOf("lina@gdgc-issatso.dev")) === Committee.MKT,
     },
     {
-      label: "Ons (TM Lead) ENTER_FINAL_DECISION @ EER",
+      label: "Lina (Committee Rep) VIEW_COMMITTEE_DASHBOARD (unscoped)",
       expect: true,
-      run: () => hasPermission(ons, PermissionKey.ENTER_FINAL_DECISION, Committee.EER),
+      run: () => hasPermission(lina, PermissionKey.VIEW_COMMITTEE_DASHBOARD),
     },
     {
-      label: "Lina (Committee Rep, MKT) VIEW_COMMITTEE_DASHBOARD @ MKT",
-      expect: true,
-      run: () => hasPermission(lina, PermissionKey.VIEW_COMMITTEE_DASHBOARD, Committee.MKT),
-    },
-    {
-      label: "Lina (Committee Rep, MKT) VIEW_COMMITTEE_DASHBOARD @ TM (no wildcard)",
+      label: "Lina (Committee Rep) ENTER_FINAL_DECISION (not granted)",
       expect: false,
-      run: () => hasPermission(lina, PermissionKey.VIEW_COMMITTEE_DASHBOARD, Committee.TM),
+      run: () => hasPermission(lina, PermissionKey.ENTER_FINAL_DECISION),
     },
     {
-      label: "Karim (Interviewer) SCREEN_PHASE1",
+      label: "Karim (Committee Rep) SCREEN_PHASE1",
       expect: false,
       run: () => hasPermission(karim, PermissionKey.SCREEN_PHASE1),
     },
     {
-      label: "Yassine (TM Reviewer) SCREEN_PHASE1 @ TM (committee-scoped)",
-      expect: false,
-      run: () => hasPermission(yassine, PermissionKey.SCREEN_PHASE1, Committee.TM),
-    },
-    {
-      label: "Yassine (TM Reviewer) SCREEN_PHASE1 (no committee / global)",
+      label: "Yassine (TM Reviewer) SCREEN_PHASE1",
       expect: true,
       run: () => hasPermission(yassine, PermissionKey.SCREEN_PHASE1),
     },

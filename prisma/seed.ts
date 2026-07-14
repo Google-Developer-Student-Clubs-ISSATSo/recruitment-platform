@@ -19,41 +19,32 @@ const prisma = new PrismaClient({ adapter });
 // Deterministic mock data across runs.
 faker.seed(2026);
 
-const ALL_COMMITTEES: Committee[] = [
-  Committee.MKT,
-  Committee.TM,
-  Committee.EER,
-];
-
-// Permissions that are meaningful per-committee. For the TM_LEAD these are
-// granted as THREE separate rows (one per committee) rather than a single
-// null-committee row, so that `committee = null` unambiguously means
-// "not committee-specific" and never "all committees".
-const COMMITTEE_SCOPED: PermissionKey[] = [
+// The Committee Representative baseline — the smallest committee-member bundle.
+// Every non-lead template builds on top of it.
+const COMMITTEE_REPRESENTATIVE_BASELINE: PermissionKey[] = [
+  PermissionKey.CLAIM_PANEL_SEAT,
+  PermissionKey.EDIT_OWN_INTERVIEW_NOTES,
   PermissionKey.VIEW_COMMITTEE_DASHBOARD,
-  PermissionKey.ENTER_FINAL_DECISION,
 ];
 
-// Which PermissionKeys each RoleTemplate grants.
+// Which PermissionKeys each RoleTemplate grants. Permissions are plain global
+// flags now — committee scoping comes from each User.committee, never from the
+// permission row itself.
 const ROLE_PERMISSIONS: Record<RoleTemplateName, PermissionKey[]> = {
-  [RoleTemplateName.INTERVIEWER]: [
-    PermissionKey.CLAIM_PANEL_SEAT,
-    PermissionKey.EDIT_OWN_INTERVIEW_NOTES,
+  [RoleTemplateName.COMMITTEE_REPRESENTATIVE]: [
+    ...COMMITTEE_REPRESENTATIVE_BASELINE,
   ],
   [RoleTemplateName.TM_REVIEWER]: [
+    ...COMMITTEE_REPRESENTATIVE_BASELINE,
     PermissionKey.VIEW_FULL_POOL,
     PermissionKey.SCREEN_PHASE1,
     PermissionKey.ENTER_INTERVIEW_SLOT,
-    PermissionKey.CLAIM_PANEL_SEAT,
-    PermissionKey.EDIT_OWN_INTERVIEW_NOTES,
   ],
-  [RoleTemplateName.TECHNICAL_SCORER]: [PermissionKey.ENTER_TECHNICAL_SCORE],
-  [RoleTemplateName.COMMITTEE_REPRESENTATIVE]: [
-    PermissionKey.CLAIM_PANEL_SEAT,
-    PermissionKey.EDIT_OWN_INTERVIEW_NOTES,
-    PermissionKey.VIEW_COMMITTEE_DASHBOARD,
+  [RoleTemplateName.TECHNICAL_SCORER]: [
+    ...COMMITTEE_REPRESENTATIVE_BASELINE,
+    PermissionKey.ENTER_TECHNICAL_SCORE,
   ],
-  // Every PermissionKey value (all 17).
+  // Every PermissionKey value, one row each.
   [RoleTemplateName.TM_LEAD]: Object.values(PermissionKey),
 };
 
@@ -61,92 +52,71 @@ type SeedUser = {
   name: string;
   email: string;
   role: RoleTemplateName;
-  // Committee that VIEW_COMMITTEE_DASHBOARD is scoped to for this user
-  // (COMMITTEE_REPRESENTATIVE only). Ignored for TM_LEAD.
-  dashboardCommittee?: Committee;
+  // Every user has exactly one home committee.
+  committee: Committee;
 };
 
 const USERS: SeedUser[] = [
   {
     name: "Med Aziz Krifa",
     email: "krifaaziz80@gmail.com",
-    role: RoleTemplateName.INTERVIEWER,
+    role: RoleTemplateName.COMMITTEE_REPRESENTATIVE,
+    committee: Committee.MKT,
   },
   {
-    name: "One El Maleh",
+    name: "Ons El Maleh",
     email: "krifaaziz04@gmail.com",
     role: RoleTemplateName.TM_LEAD,
+    committee: Committee.TM,
   },
   {
     name: "Yassine Trabelsi",
     email: "yassine@gdgc-issatso.dev",
     role: RoleTemplateName.TM_REVIEWER,
+    committee: Committee.TM,
   },
   {
     name: "Nour Gharbi",
     email: "nour@gdgc-issatso.dev",
     role: RoleTemplateName.TM_REVIEWER,
+    committee: Committee.EER,
   },
   {
     name: "Karim Mansour",
     email: "karim@gdgc-issatso.dev",
-    role: RoleTemplateName.INTERVIEWER,
+    role: RoleTemplateName.COMMITTEE_REPRESENTATIVE,
+    committee: Committee.EER,
   },
   {
     name: "Sami Jaziri",
     email: "sami@gdgc-issatso.dev",
     role: RoleTemplateName.TECHNICAL_SCORER,
+    committee: Committee.MKT,
   },
   {
     name: "Lina Chaabane",
     email: "lina@gdgc-issatso.dev",
     role: RoleTemplateName.COMMITTEE_REPRESENTATIVE,
-    dashboardCommittee: Committee.MKT,
+    committee: Committee.MKT,
   },
   {
     name: "Mehdi Ayari",
     email: "mehdi@gdgc-issatso.dev",
     role: RoleTemplateName.COMMITTEE_REPRESENTATIVE,
-    dashboardCommittee: Committee.TM,
+    committee: Committee.TM,
   },
   {
     name: "Rania Ferchichi",
     email: "rania@gdgc-issatso.dev",
     role: RoleTemplateName.COMMITTEE_REPRESENTATIVE,
-    dashboardCommittee: Committee.EER,
+    committee: Committee.EER,
   },
 ];
 
-type PermRow = { permission: PermissionKey; committee: Committee | null };
-
-// Expand a user's role template into concrete UserPermission rows.
-function buildUserPermissions(user: SeedUser): PermRow[] {
-  const rows: PermRow[] = [];
-
-  if (user.role === RoleTemplateName.TM_LEAD) {
-    for (const permission of ROLE_PERMISSIONS[RoleTemplateName.TM_LEAD]) {
-      if (COMMITTEE_SCOPED.includes(permission)) {
-        // One row per committee — never a single null-committee catch-all.
-        for (const committee of ALL_COMMITTEES)
-          rows.push({ permission, committee });
-      } else {
-        rows.push({ permission, committee: null });
-      }
-    }
-    return rows;
-  }
-
-  for (const permission of ROLE_PERMISSIONS[user.role]) {
-    if (
-      permission === PermissionKey.VIEW_COMMITTEE_DASHBOARD &&
-      user.dashboardCommittee
-    ) {
-      rows.push({ permission, committee: user.dashboardCommittee });
-    } else {
-      rows.push({ permission, committee: null });
-    }
-  }
-  return rows;
+// Expand a user's role template into concrete UserPermission rows. Permissions
+// are plain (userId, permission) flags — no committee column any more.
+function buildUserPermissions(user: SeedUser): PermissionKey[] {
+  return ROLE_PERMISSIONS[user.role];
 }
 
 // --- Applicants -----------------------------------------------------------
@@ -255,43 +225,54 @@ async function main() {
   await prisma.roleTemplatePermission.deleteMany({});
   await prisma.applicant.deleteMany({});
   await prisma.campaign.deleteMany({});
+  // Drop the User -> RoleTemplate references before deleting templates, or the
+  // foreign key would block the delete (any user may still point at one).
+  await prisma.user.updateMany({ data: { roleTemplateId: null } });
   await prisma.roleTemplate.deleteMany({});
   await prisma.user.deleteMany({ where: { email: { in: seedEmails } } });
 
   // 3a. Role templates + their permissions.
   let roleTemplateCount = 0;
   let roleTemplatePermissionCount = 0;
+  const templateIdByName = {} as Record<RoleTemplateName, string>;
   for (const name of Object.keys(ROLE_PERMISSIONS) as RoleTemplateName[]) {
     const perms = ROLE_PERMISSIONS[name];
-    await prisma.roleTemplate.create({
+    const template = await prisma.roleTemplate.create({
       data: {
         name,
         permissions: { create: perms.map((permission) => ({ permission })) },
       },
     });
+    templateIdByName[name] = template.id;
     roleTemplateCount += 1;
     roleTemplatePermissionCount += perms.length;
   }
 
-  // 3b. Users + their concrete UserPermission rows.
+  // 3b. Users + their concrete UserPermission rows. Every user records the
+  // role template they were assigned (roleTemplateId) so the permissions UI
+  // can label/reset against their OWN template rather than inferring one.
   let userCount = 0;
   let userPermissionCount = 0;
   for (const seedUser of USERS) {
     const user = await prisma.user.create({
-      data: { name: seedUser.name, email: seedUser.email },
+      data: {
+        name: seedUser.name,
+        email: seedUser.email,
+        committee: seedUser.committee,
+        roleTemplateId: templateIdByName[seedUser.role],
+      },
     });
-    const rows = buildUserPermissions(seedUser);
-    if (rows.length > 0) {
+    const perms = buildUserPermissions(seedUser);
+    if (perms.length > 0) {
       await prisma.userPermission.createMany({
-        data: rows.map((r) => ({
+        data: perms.map((permission) => ({
           userId: user.id,
-          permission: r.permission,
-          committee: r.committee,
+          permission,
         })),
       });
     }
     userCount += 1;
-    userPermissionCount += rows.length;
+    userPermissionCount += perms.length;
   }
 
   // 3c. Campaign.

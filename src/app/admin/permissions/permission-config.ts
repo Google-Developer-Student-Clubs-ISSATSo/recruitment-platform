@@ -7,26 +7,16 @@ export const COMMITTEES: Committee[] = [
   Committee.EER,
 ];
 
-/**
- * Permissions that are granted per-committee. In the UI these render as three
- * separate MKT/TM/EER toggles instead of one; everywhere else they are stored
- * as a null-committee row.
- */
-export const COMMITTEE_SCOPED_PERMISSIONS: PermissionKey[] = [
-  PermissionKey.VIEW_COMMITTEE_DASHBOARD,
-  PermissionKey.ENTER_FINAL_DECISION,
-];
-
-export function isCommitteeScoped(permission: PermissionKey): boolean {
-  return COMMITTEE_SCOPED_PERMISSIONS.includes(permission);
-}
-
 export type PermissionCategory = {
   title: string;
   permissions: PermissionKey[];
 };
 
-/** Every PermissionKey, grouped into sensible categories for the toggle UI. */
+/**
+ * Every PermissionKey, grouped into sensible categories for the toggle UI.
+ * All permissions are plain global flags — committee scoping comes from each
+ * user's own home committee, not from the permission itself.
+ */
 export const PERMISSION_CATEGORIES: PermissionCategory[] = [
   {
     title: "Screening",
@@ -44,7 +34,6 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       PermissionKey.ENTER_INTERVIEW_SLOT,
       PermissionKey.CLAIM_PANEL_SEAT,
       PermissionKey.EDIT_OWN_INTERVIEW_NOTES,
-      PermissionKey.MANAGE_CAPACITY,
     ],
   },
   {
@@ -57,6 +46,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
   {
     title: "Admin",
     permissions: [
+      PermissionKey.MANAGE_CAPACITY,
       PermissionKey.MANAGE_ACCOUNTS,
       PermissionKey.MANAGE_CAMPAIGNS,
       PermissionKey.SEND_EMAILS,
@@ -69,33 +59,54 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
 
 /** Human-friendly names for the role templates. */
 export const ROLE_TEMPLATE_LABELS: Record<RoleTemplateName, string> = {
-  [RoleTemplateName.INTERVIEWER]: "Interviewer",
   [RoleTemplateName.TM_REVIEWER]: "TM Reviewer",
   [RoleTemplateName.TECHNICAL_SCORER]: "Technical Scorer",
-  [RoleTemplateName.COMMITTEE_REPRESENTATIVE]: "Committee Rep",
+  [RoleTemplateName.COMMITTEE_REPRESENTATIVE]: "Committee Representative",
   [RoleTemplateName.TM_LEAD]: "TM Lead",
 };
 
-export type UserPermissionLite = {
-  permission: PermissionKey;
-  committee: Committee | null;
-};
+/**
+ * High-consequence permissions. Toggling any of these OFF is hard to undo or
+ * has broad reach, so it must be confirmed before it takes effect (STEP 5).
+ */
+export const HIGH_CONSEQUENCE_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PermissionKey.MANAGE_ACCOUNTS,
+  PermissionKey.ENTER_FINAL_DECISION,
+  PermissionKey.CONFIGURE_SCREENING,
+  PermissionKey.VIEW_ACTIVITY_LOG,
+]);
 
 /** A serialisable user row passed from the server page to the client table. */
 export type AdminUserRow = {
   id: string;
   name: string;
   email: string;
-  /** Template name if the permission set matches one exactly, else "Custom". */
-  badgeLabel: string;
-  isExactTemplate: boolean;
-  /** Best-overlap template, used by "Reset to template defaults". */
-  closestTemplate: RoleTemplateName;
-  committees: Committee[];
-  permissions: UserPermissionLite[];
+  /** Every user has exactly one home committee. */
+  committee: Committee;
+  /** The role template this user was originally assigned (their OWN template). */
+  templateName: RoleTemplateName;
+  /** Human-friendly label for {@link templateName}. */
+  templateLabel: string;
+  /**
+   * True when the user's current permission set deviates from their assigned
+   * template — the badge then reads "{templateLabel} Custom".
+   */
+  isCustom: boolean;
+  /** Plain global permission flags this user holds. */
+  permissions: PermissionKey[];
 };
 
 export type TemplateOption = { name: RoleTemplateName; label: string };
+
+/** A PENDING UserInvite shown alongside active members in the admin list. */
+export type PendingInviteRow = {
+  id: string;
+  name: string;
+  email: string;
+  committee: Committee;
+  templateLabel: string;
+  createdAtISO: string;
+};
 
 /** "ENTER_FINAL_DECISION" -> "Enter Final Decision" */
 export function humanizePermission(permission: string): string {

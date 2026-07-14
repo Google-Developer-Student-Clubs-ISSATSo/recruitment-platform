@@ -15,16 +15,24 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   name          String?
+  committee     Committee
   emailVerified DateTime?
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  // The role template this user was originally assigned. Persisted so the
+  // permissions UI can label deviations against the user's OWN template and
+  // reset back to it, rather than inferring a template by scanning all of them.
+  roleTemplateId String?
+  roleTemplate   RoleTemplate? @relation(fields: [roleTemplateId], references: [id])
 
   accounts        Account[]
   sessions        Session[]
   permissions     UserPermission[]
   activityLogs    ActivityLogEntry[]
   sentInvites     AdminTransferInvite[] @relation("InviteInitiator")
+  sentUserInvites UserInvite[]          @relation("UserInviteInitiator")
 }
 
 model Account {
@@ -91,7 +99,6 @@ enum Committee {
 }
 
 enum RoleTemplateName {
-  INTERVIEWER
   TM_REVIEWER
   TECHNICAL_SCORER
   COMMITTEE_REPRESENTATIVE
@@ -103,6 +110,8 @@ model RoleTemplate {
   name        RoleTemplateName          @unique
   description String?
   permissions RoleTemplatePermission[]
+  users       User[]
+  userInvites UserInvite[]
 }
 
 model RoleTemplatePermission {
@@ -115,19 +124,19 @@ model RoleTemplatePermission {
   @@unique([roleTemplateId, permission])
 }
 
-// The actual source of truth for what a user can do.
-// committee = null means the permission is global (not committee-scoped).
+// The actual source of truth for what a user can do. Permissions are global
+// flags; where data must be scoped to a committee, that comes from the
+// holder's own User.committee, not from the permission row.
 model UserPermission {
   id         String        @id @default(cuid())
   userId     String
   permission PermissionKey
-  committee  Committee?
   grantedBy  String?
   grantedAt  DateTime      @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, permission, committee])
+  @@unique([userId, permission])
 }
 
 // ============ ADMIN HANDOFF ============
@@ -149,6 +158,24 @@ model AdminTransferInvite {
   respondedAt  DateTime?
 
   initiator User @relation("InviteInitiator", fields: [initiatedBy], references: [id])
+}
+
+// A pending invitation for a brand-new member. Holds the details the TM Lead
+// entered; the real User row is only created when the invite is accepted.
+model UserInvite {
+  id             String       @id @default(cuid())
+  email          String
+  name           String
+  committee      Committee
+  roleTemplateId String
+  token          String       @unique
+  status         InviteStatus @default(PENDING)
+  invitedBy      String
+  createdAt      DateTime     @default(now())
+  respondedAt    DateTime?
+
+  roleTemplate RoleTemplate @relation(fields: [roleTemplateId], references: [id])
+  inviter      User         @relation("UserInviteInitiator", fields: [invitedBy], references: [id])
 }
 
 // ============ ACTIVITY LOG ============

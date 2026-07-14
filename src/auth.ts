@@ -5,16 +5,7 @@ import { createTransport } from "nodemailer";
 
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
-
-const SMTP_TRANSPORT = {
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-} as const;
+import { SMTP_TRANSPORT } from "@/lib/email";
 
 function magicLinkEmail(url: string, host: string) {
   const text = [
