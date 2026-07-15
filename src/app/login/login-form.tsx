@@ -30,7 +30,7 @@ function MailIcon({ className }: { className?: string }) {
   );
 }
 
-export function LoginForm({ accepted = false }: { accepted?: boolean }) {
+export function LoginForm() {
   const [state, formAction, pending] = useActionState(
     requestMagicLink,
     initialState,
@@ -52,13 +52,6 @@ export function LoginForm({ accepted = false }: { accepted?: boolean }) {
                 : "Enter your email to sign in."}
             </p>
           </div>
-
-          {/* Post-accept confirmation */}
-          {accepted && state.status !== "sent" && (
-            <div className="mt-6 rounded-lg border border-status-accepted/30 bg-status-accepted/10 px-4 py-3 text-center text-sm font-medium text-status-accepted">
-              You&rsquo;re all set — sign in with your email below.
-            </div>
-          )}
 
           {state.status === "sent" ? (
             /* Confirmation state — no inputs, just a confirmation message. */

@@ -27,12 +27,11 @@ model User {
   roleTemplateId String?
   roleTemplate   RoleTemplate? @relation(fields: [roleTemplateId], references: [id])
 
-  accounts        Account[]
-  sessions        Session[]
-  permissions     UserPermission[]
-  activityLogs    ActivityLogEntry[]
-  sentInvites     AdminTransferInvite[] @relation("InviteInitiator")
-  sentUserInvites UserInvite[]          @relation("UserInviteInitiator")
+  accounts     Account[]
+  sessions     Session[]
+  permissions  UserPermission[]
+  activityLogs ActivityLogEntry[]
+  sentInvites  AdminTransferInvite[] @relation("InviteInitiator")
 }
 
 model Account {
@@ -111,7 +110,6 @@ model RoleTemplate {
   description String?
   permissions RoleTemplatePermission[]
   users       User[]
-  userInvites UserInvite[]
 }
 
 model RoleTemplatePermission {
@@ -158,24 +156,6 @@ model AdminTransferInvite {
   respondedAt  DateTime?
 
   initiator User @relation("InviteInitiator", fields: [initiatedBy], references: [id])
-}
-
-// A pending invitation for a brand-new member. Holds the details the TM Lead
-// entered; the real User row is only created when the invite is accepted.
-model UserInvite {
-  id             String       @id @default(cuid())
-  email          String
-  name           String
-  committee      Committee
-  roleTemplateId String
-  token          String       @unique
-  status         InviteStatus @default(PENDING)
-  invitedBy      String
-  createdAt      DateTime     @default(now())
-  respondedAt    DateTime?
-
-  roleTemplate RoleTemplate @relation(fields: [roleTemplateId], references: [id])
-  inviter      User         @relation("UserInviteInitiator", fields: [invitedBy], references: [id])
 }
 
 // ============ ACTIVITY LOG ============

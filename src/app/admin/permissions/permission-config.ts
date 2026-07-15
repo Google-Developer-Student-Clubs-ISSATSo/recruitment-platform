@@ -61,7 +61,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
 export const ROLE_TEMPLATE_LABELS: Record<RoleTemplateName, string> = {
   [RoleTemplateName.TM_REVIEWER]: "TM Reviewer",
   [RoleTemplateName.TECHNICAL_SCORER]: "Technical Scorer",
-  [RoleTemplateName.COMMITTEE_REPRESENTATIVE]: "Committee Representative",
+  [RoleTemplateName.COMMITTEE_REPRESENTATIVE]: "Committee Rep",
   [RoleTemplateName.TM_LEAD]: "TM Lead",
 };
 
@@ -97,16 +97,6 @@ export type AdminUserRow = {
 };
 
 export type TemplateOption = { name: RoleTemplateName; label: string };
-
-/** A PENDING UserInvite shown alongside active members in the admin list. */
-export type PendingInviteRow = {
-  id: string;
-  name: string;
-  email: string;
-  committee: Committee;
-  templateLabel: string;
-  createdAtISO: string;
-};
 
 /** "ENTER_FINAL_DECISION" -> "Enter Final Decision" */
 export function humanizePermission(permission: string): string {

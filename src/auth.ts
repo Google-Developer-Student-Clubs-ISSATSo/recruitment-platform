@@ -50,10 +50,11 @@ function magicLinkEmail(url: string, host: string) {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-
-  // Database-backed sessions so access can be revoked server-side (deleting the
-  // Session row cuts a user off immediately) rather than only expiring in a JWT.
-  session: { strategy: "database" },
+  session: {
+    strategy: "database",
+    maxAge: 60 * 60 * 24,
+    updateAge: 60 * 60 * 12, // only extend after 12h of activity
+  },
 
   // We run behind a plain Node server / local dev, so trust the host header
   // instead of requiring an explicit AUTH_URL.
@@ -74,6 +75,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async sendVerificationRequest({ identifier, url, provider }) {
         const { host } = new URL(url);
         const { text, html } = magicLinkEmail(url, host);
+
+        // Dev convenience only: print the magic link so it can be copy-pasted
+        // during local testing without opening an inbox. The real SMTP send
+        // below is unchanged, and the link still must be clicked to verify —
+        // this is not an auth bypass. Never logged in production.
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`🔗 DEV MAGIC LINK: ${url}`);
+        }
 
         const transport = createTransport(SMTP_TRANSPORT);
         const result = await transport.sendMail({

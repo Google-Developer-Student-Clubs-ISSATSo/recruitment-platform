@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 
@@ -18,8 +19,12 @@ import {
 // preview. Permission gating and data fetching live in the server-side
 // <NotificationBell> that renders this.
 export function NotificationBellMenu({ items }: { items: ActivityItem[] }) {
+  // Controlled so "View all" can explicitly close the popover as it navigates —
+  // otherwise it stays open behind the newly-loaded activity-log page.
+  const [open, setOpen] = useState(false);
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={(next) => setOpen(next)}>
       <PopoverTrigger
         aria-label="Notifications"
         className="flex size-9 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-primary dark:text-neutral-400 dark:hover:bg-neutral-800"
@@ -55,6 +60,7 @@ export function NotificationBellMenu({ items }: { items: ActivityItem[] }) {
 
         <Link
           href="/admin/activity-log"
+          onClick={() => setOpen(false)}
           className="block border-t border-neutral-200 px-4 py-2.5 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/5 dark:border-neutral-800"
         >
           View all

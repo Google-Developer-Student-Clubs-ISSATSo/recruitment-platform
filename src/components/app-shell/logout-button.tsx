@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 
-import { Icon } from "./material-icon";
+import { Icon } from "./icon";
 import { logout } from "./actions";
 
 export function LogoutButton() {

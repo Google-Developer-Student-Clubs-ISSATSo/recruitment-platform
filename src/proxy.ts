@@ -6,8 +6,8 @@ export default auth((req) => {
   const { pathname, origin } = req.nextUrl;
   const isAuthenticated = Boolean(req.auth);
   const isLoginPage = pathname === "/login";
-  // The invite accept flow must be reachable while signed out.
-  const isPublicPage = isLoginPage || pathname.startsWith("/invite");
+  // Login is the only page reachable while signed out.
+  const isPublicPage = isLoginPage;
 
   // Already signed in and sitting on the login page → send them to the app.
   if (isAuthenticated && isLoginPage) {

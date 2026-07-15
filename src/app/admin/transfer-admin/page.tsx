@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/lib/permissions";
-import { PermissionKey, InviteStatus } from "@/generated/prisma/enums";
+import { InviteStatus } from "@/generated/prisma/enums";
 
-import { AdminShell } from "../admin-shell";
 import { TransferForm, type PendingInvite } from "./transfer-form";
 
 type InviteRow = {
@@ -12,20 +10,13 @@ type InviteRow = {
   initiator: { name: string | null } | null;
 };
 
+// Guarded by the /admin layout (MANAGE_ACCOUNTS); the shell is provided there.
 export default async function TransferAdminPage() {
-  const actorId = await requirePermission(PermissionKey.MANAGE_ACCOUNTS);
-
-  const [me, invites] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: actorId },
-      select: { name: true, email: true, committee: true },
-    }),
-    prisma.adminTransferInvite.findMany({
-      where: { status: InviteStatus.PENDING },
-      orderBy: { createdAt: "desc" },
-      include: { initiator: { select: { name: true } } },
-    }),
-  ]);
+  const invites = await prisma.adminTransferInvite.findMany({
+    where: { status: InviteStatus.PENDING },
+    orderBy: { createdAt: "desc" },
+    include: { initiator: { select: { name: true } } },
+  });
 
   const pending: PendingInvite[] = invites.map((i: InviteRow) => ({
     id: i.id,
@@ -34,16 +25,5 @@ export default async function TransferAdminPage() {
     initiatorName: i.initiator?.name ?? "Admin",
   }));
 
-  const currentUserName = me?.name ?? "Admin";
-  const currentUserSubtitle = me ? `TM Lead · ${me.committee}` : "Administrator";
-
-  return (
-    <AdminShell
-      userName={currentUserName}
-      userSubtitle={currentUserSubtitle}
-      canManageAccounts
-    >
-      <TransferForm pending={pending} />
-    </AdminShell>
-  );
+  return <TransferForm pending={pending} />;
 }

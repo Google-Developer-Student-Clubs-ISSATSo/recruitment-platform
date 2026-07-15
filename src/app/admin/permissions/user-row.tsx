@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 
 import { PermissionKey } from "@/generated/prisma/enums";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Icon } from "../material-icon";
+import { Icon } from "@/components/app-shell/icon";
 import {
   PERMISSION_CATEGORIES,
   type AdminUserRow,
@@ -41,6 +42,8 @@ export function UserRow({
   pending,
   onToggle,
   onReset,
+  canDelete,
+  onDelete,
 }: {
   user: AdminUserRow;
   expanded: boolean;
@@ -48,8 +51,12 @@ export function UserRow({
   pending: boolean;
   onToggle: (permission: PermissionKey, grant: boolean) => void;
   onReset: () => void;
+  /** Whether this row may be deleted (false for the signed-in admin's own row). */
+  canDelete: boolean;
+  onDelete: () => void;
 }) {
   const [resetOpen, setResetOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const held = new Set(user.permissions);
   const access = accessLevel(held.size);
 
@@ -109,7 +116,7 @@ export function UserRow({
           </span>
         </div>
 
-        <div className="flex justify-start sm:justify-end">
+        <div className="flex items-center justify-start gap-1 sm:justify-end">
           <button
             onClick={onToggleExpand}
             disabled={pending}
@@ -118,6 +125,16 @@ export function UserRow({
           >
             <Icon name="more_vert" />
           </button>
+          {canDelete && (
+            <button
+              onClick={() => setDeleteOpen(true)}
+              disabled={pending}
+              className="text-neutral-400 transition-colors hover:text-status-rejected disabled:opacity-50"
+              aria-label={`Delete ${user.name}`}
+            >
+              <Trash2 className="size-[18px]" aria-hidden />
+            </button>
+          )}
         </div>
       </div>
 
@@ -173,6 +190,23 @@ export function UserRow({
           />
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`Delete ${user.name}?`}
+        description={
+          <>
+            This permanently removes <strong>{user.name}</strong> (
+            {user.email}) and all of their permissions and active sessions.
+            This can&rsquo;t be undone.
+          </>
+        }
+        confirmLabel="Delete Member"
+        cancelLabel="Keep Member"
+        destructive
+        onConfirm={onDelete}
+      />
     </div>
   );
 }

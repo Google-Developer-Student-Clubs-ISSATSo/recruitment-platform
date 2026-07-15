@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Icon } from "../material-icon";
+import { Icon } from "@/components/app-shell/icon";
 import {
   cancelTransferInvite,
   createTransferInvite,

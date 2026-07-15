@@ -1,5 +1,5 @@
 // Presentational Material Symbols icon. No hooks → usable from both server and
-// client components. The font + base rule are loaded once by <AdminShell>.
+// client components. The font + base rule are loaded once by <AppShell>.
 export function Icon({
   name,
   className = "",

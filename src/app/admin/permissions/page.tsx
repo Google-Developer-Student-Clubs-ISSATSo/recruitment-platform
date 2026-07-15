@@ -1,5 +1,5 @@
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/lib/permissions";
 import {
   Committee,
   PermissionKey,
@@ -10,22 +10,11 @@ import {
   COMMITTEES,
   ROLE_TEMPLATE_LABELS,
   type AdminUserRow,
-  type PendingInviteRow,
   type TemplateOption,
 } from "./permission-config";
 import { PermissionTable } from "./permission-table";
-import { AdminShell } from "../admin-shell";
-import { InviteStatus } from "@/generated/prisma/enums";
 
 type PermRow = { permission: PermissionKey };
-type InviteQueryRow = {
-  id: string;
-  name: string;
-  email: string;
-  committee: Committee;
-  createdAt: Date;
-  roleTemplate: { name: RoleTemplateName };
-};
 type UserQueryRow = {
   id: string;
   name: string | null;
@@ -45,10 +34,13 @@ function samePermissions(a: PermissionKey[], b: PermissionKey[]): boolean {
   return b.every((p) => set.has(p));
 }
 
+// Access is guarded once in the /admin layout (MANAGE_ACCOUNTS); this page no
+// longer repeats that check.
 export default async function PermissionsPage() {
-  const actorId = await requirePermission(PermissionKey.MANAGE_ACCOUNTS);
+  const session = await auth();
+  const currentUserId = session?.user?.id ?? "";
 
-  const [users, templates, invites] = await Promise.all([
+  const [users, templates] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -62,21 +54,7 @@ export default async function PermissionsPage() {
       },
     }),
     prisma.roleTemplate.findMany({ select: { name: true } }),
-    prisma.userInvite.findMany({
-      where: { status: InviteStatus.PENDING },
-      orderBy: { createdAt: "desc" },
-      include: { roleTemplate: { select: { name: true } } },
-    }),
   ]);
-
-  const pendingInvites: PendingInviteRow[] = invites.map((i: InviteQueryRow) => ({
-    id: i.id,
-    name: i.name,
-    email: i.email,
-    committee: i.committee,
-    templateLabel: ROLE_TEMPLATE_LABELS[i.roleTemplate.name],
-    createdAtISO: i.createdAt.toISOString(),
-  }));
 
   const rows: AdminUserRow[] = users.map((u: UserQueryRow) => {
     const permissions = u.permissions.map((p) => p.permission);
@@ -117,28 +95,13 @@ export default async function PermissionsPage() {
     }),
   );
 
-  const me = rows.find((r) => r.id === actorId);
-  const currentUserName = me?.name ?? "Admin";
-  const currentUserSubtitle = me
-    ? `${me.isCustom ? `${me.templateLabel} Custom` : me.templateLabel} · ${me.committee}`
-    : "Administrator";
-  const canManageAccounts = me
-    ? me.permissions.includes(PermissionKey.MANAGE_ACCOUNTS)
-    : true;
-
   return (
-    <AdminShell
-      userName={currentUserName}
-      userSubtitle={currentUserSubtitle}
-      canManageAccounts={canManageAccounts}
-    >
-      <PermissionTable
-        leads={leads}
-        members={members}
-        pendingInvites={pendingInvites}
-        templates={templateOptions}
-        committees={COMMITTEES}
-      />
-    </AdminShell>
+    <PermissionTable
+      leads={leads}
+      members={members}
+      templates={templateOptions}
+      committees={COMMITTEES}
+      currentUserId={currentUserId}
+    />
   );
 }

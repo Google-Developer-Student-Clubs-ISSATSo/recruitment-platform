@@ -28,6 +28,15 @@ export const getUserPermissions = cache(async function getUserPermissions(
 
 export async function requirePermission(
   permission: PermissionKey,
+  options?: {
+    /**
+     * Where to send a signed-in user who lacks the permission. When set, they
+     * are redirected there instead of hitting the raw 403 `forbidden()` page —
+     * used by the /admin guard to bounce non-admins to /dashboard with a clear
+     * message rather than an error.
+     */
+    redirectTo?: string;
+  },
 ): Promise<string> {
   const session = await auth();
   const userId = session?.user?.id;
@@ -37,6 +46,9 @@ export async function requirePermission(
   }
 
   if (!(await hasPermission(userId, permission))) {
+    if (options?.redirectTo) {
+      redirect(options.redirectTo);
+    }
     forbidden();
   }
 

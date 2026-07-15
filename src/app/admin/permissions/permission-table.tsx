@@ -3,22 +3,19 @@
 import { useActionState, useMemo, useState, useTransition } from "react";
 
 import { Committee, PermissionKey } from "@/generated/prisma/enums";
-import { Icon } from "../material-icon";
+import { Icon } from "@/components/app-shell/icon";
 import {
   type AdminUserRow,
-  type PendingInviteRow as PendingInvite,
   type TemplateOption,
 } from "./permission-config";
 import {
-  cancelInvite,
-  createInvite,
-  resendInvite,
+  createUser,
+  deleteUser,
   resetToTemplate,
   togglePermission,
-  type CreateInviteState,
+  type CreateUserState,
 } from "./actions";
 import { UserRow } from "./user-row";
-import { PendingInviteRow } from "./pending-invite-row";
 import {
   EMPTY_FILTERS,
   SearchFilterBar,
@@ -26,31 +23,32 @@ import {
   type MemberFilters,
 } from "./search-filter-bar";
 
-const createInitial: CreateInviteState = { status: "idle" };
+const createInitial: CreateUserState = { status: "idle" };
 
 export function PermissionTable({
   leads,
   members,
-  pendingInvites,
   templates,
   committees,
+  currentUserId,
 }: {
   leads: AdminUserRow[];
   members: AdminUserRow[];
-  pendingInvites: PendingInvite[];
   templates: TemplateOption[];
   committees: Committee[];
+  /** The signed-in admin — their own row is not deletable from here. */
+  currentUserId: string;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [filters, setFilters] = useState<MemberFilters>(EMPTY_FILTERS);
   const [pending, startTransition] = useTransition();
   const [createState, createAction, creating] = useActionState(
-    createInvite,
+    createUser,
     createInitial,
   );
 
-  // Collapse the invite panel the moment the action reports success. Adjusting
+  // Collapse the create panel the moment the action reports success. Adjusting
   // state during render on a changed value (rather than in an effect) is the
   // React-recommended pattern; the panel is conditionally rendered, so it
   // remounts with cleared fields the next time it is opened.
@@ -85,6 +83,12 @@ export function PermissionTable({
     });
   }
 
+  function remove(userId: string) {
+    startTransition(async () => {
+      await deleteUser(userId);
+    });
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Page header */}
@@ -103,19 +107,14 @@ export function PermissionTable({
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
         >
           <Icon name={showCreate ? "close" : "person_add"} className="text-[18px]" />
-          {showCreate ? "Close" : "Invite Member"}
+          {showCreate ? "Close" : "Create User"}
         </button>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatCard label="Total Members" value={allUsers.length} />
         <StatCard label="Role Templates" value={templates.length} tone="primary" />
-        <StatCard
-          label="Pending Invites"
-          value={pendingInvites.length}
-          tone="pending"
-        />
         <StatCard label="Customized" value={customizedCount} tone="rejected" />
       </div>
 
@@ -126,11 +125,11 @@ export function PermissionTable({
           className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
         >
           <h2 className="text-sm font-semibold text-foreground">
-            Invite new member
+            Create new member
           </h2>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            Sends an email invitation. The account is created only once they
-            accept.
+            Adds the account immediately with the chosen role template. They can
+            sign in with their email right away.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <input
@@ -183,7 +182,7 @@ export function PermissionTable({
               disabled={creating}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
             >
-              {creating ? "Sending…" : "Send Invite"}
+              {creating ? "Creating…" : "Create User"}
             </button>
             {createState.status === "error" && (
               <span className="text-sm text-status-rejected">
@@ -194,39 +193,6 @@ export function PermissionTable({
               <span className="text-sm text-status-accepted">
                 {createState.message}
               </span>
-            )}
-            {createState.status === "duplicate" && createState.existingInviteId && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-[color:var(--status-pending)]">
-                  {createState.message}
-                </span>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    const id = createState.existingInviteId!;
-                    startTransition(async () => {
-                      await resendInvite(id);
-                    });
-                  }}
-                  className="rounded-md px-2 py-1 text-xs font-bold text-primary hover:bg-primary/10 disabled:opacity-50"
-                >
-                  Resend
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    const id = createState.existingInviteId!;
-                    startTransition(async () => {
-                      await cancelInvite(id);
-                    });
-                  }}
-                  className="rounded-md px-2 py-1 text-xs font-bold text-status-rejected hover:bg-status-rejected/10 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
             )}
           </div>
         </form>
@@ -239,20 +205,6 @@ export function PermissionTable({
         committees={committees}
         templates={templates}
       />
-
-      {/* Pending invitations — people invited who haven't accepted yet */}
-      {pendingInvites.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
-            Pending Invitations
-          </h3>
-          <div className="overflow-hidden rounded-xl border border-dashed border-[color:var(--status-pending)]/50 bg-status-pending/5">
-            {pendingInvites.map((invite) => (
-              <PendingInviteRow key={invite.id} invite={invite} />
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* TM Lead — distinct section at the top */}
       {visibleLeads.length > 0 && (
@@ -272,6 +224,8 @@ export function PermissionTable({
                 pending={pending}
                 onToggle={(permission, grant) => toggle(user.id, permission, grant)}
                 onReset={() => reset(user.id)}
+                canDelete={user.id !== currentUserId}
+                onDelete={() => remove(user.id)}
               />
             ))}
           </div>
@@ -308,6 +262,8 @@ export function PermissionTable({
                 pending={pending}
                 onToggle={(permission, grant) => toggle(user.id, permission, grant)}
                 onReset={() => reset(user.id)}
+                canDelete={user.id !== currentUserId}
+                onDelete={() => remove(user.id)}
               />
             ))
           )}

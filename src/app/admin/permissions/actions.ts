@@ -1,16 +1,12 @@
 "use server";
 
-import { randomBytes } from "crypto";
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions";
 import { logActivity } from "@/lib/activity-log";
-import { sendMail } from "@/lib/email";
 import {
   Committee,
-  InviteStatus,
   PermissionKey,
   RoleTemplateName,
 } from "@/generated/prisma/enums";
@@ -20,72 +16,18 @@ const ADMIN = PermissionKey.MANAGE_ACCOUNTS;
 const PATH = "/admin/permissions";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export type CreateInviteState = {
-  /** "duplicate" → a PENDING invite already exists (offer resend/cancel). */
-  status: "idle" | "success" | "error" | "duplicate";
+export type CreateUserState = {
+  status: "idle" | "success" | "error";
   message?: string;
-  /** Set on "duplicate" so the form can offer Resend/Cancel for it inline. */
-  existingInviteId?: string;
 };
 
-/** Absolute URL the invitee follows to accept, e.g. https://host/invite/accept?token=… */
-async function acceptUrl(token: string): Promise<string> {
-  const h = await headers();
-  const host =
-    h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}/invite/accept?token=${token}`;
-}
-
-function inviteEmail(url: string, name: string, roleLabel: string) {
-  const text = [
-    `Hi ${name},`,
-    "",
-    "You've been invited to join the GDGC Recruitment Platform as a",
-    `${roleLabel}. Accept your invitation here:`,
-    "",
-    url,
-    "",
-    "After accepting, you'll sign in with your email via a magic link.",
-  ].join("\n");
-
-  const html = `
-  <div style="background:#f6f7f9;padding:32px 0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      <tr><td align="center">
-        <table role="presentation" width="440" cellpadding="0" cellspacing="0"
-               style="background:#ffffff;border-radius:12px;padding:32px;border:1px solid #e6e8eb;">
-          <tr><td style="font-size:18px;font-weight:600;color:#1a1a1a;padding-bottom:8px;">
-            You've been invited to GDGC Recruitment Platform
-          </td></tr>
-          <tr><td style="font-size:14px;color:#5f6368;padding-bottom:24px;">
-            Hi ${name}, you've been invited to join as a <strong>${roleLabel}</strong>.
-          </td></tr>
-          <tr><td align="center" style="padding-bottom:24px;">
-            <a href="${url}"
-               style="background:#4285f4;color:#ffffff;text-decoration:none;font-size:15px;
-                      font-weight:600;padding:12px 28px;border-radius:8px;display:inline-block;">
-              Accept Invite
-            </a>
-          </td></tr>
-          <tr><td style="font-size:12px;color:#80868b;line-height:1.5;">
-            After accepting, you'll sign in with your email via a magic link.
-            If you didn't expect this invite, you can safely ignore it.
-          </td></tr>
-        </table>
-      </td></tr>
-    </table>
-  </div>`;
-
-  return { text, html };
-}
-
-// Invite a brand-new member. Creates a PENDING UserInvite (NOT a User) and
-// emails an accept link. The real User is only created when the link is used.
-export async function createInvite(
-  _prev: CreateInviteState,
+// Create a brand-new member directly: a real User row plus the UserPermission
+// rows copied from the chosen role template, effective immediately. The user
+// can sign in with their email straight away — there is no acceptance step.
+export async function createUser(
+  _prev: CreateUserState,
   formData: FormData,
-): Promise<CreateInviteState> {
+): Promise<CreateUserState> {
   const actorId = await requirePermission(ADMIN);
 
   const email = String(formData.get("email") ?? "")
@@ -108,131 +50,81 @@ export async function createInvite(
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } }))
     return {
       status: "error",
-      message: "Someone with that email is already an active member.",
-    };
-
-  // Don't create a duplicate — surface the existing pending invite instead.
-  const existing = await prisma.userInvite.findFirst({
-    where: { email, status: InviteStatus.PENDING },
-    select: { id: true },
-  });
-  if (existing)
-    return {
-      status: "duplicate",
-      existingInviteId: existing.id,
-      message: `A pending invite for ${email} already exists.`,
+      message: "Someone with that email is already a member.",
     };
 
   const template = await prisma.roleTemplate.findUnique({
     where: { name: roleTemplate },
-    select: { id: true },
+    select: {
+      id: true,
+      permissions: { select: { permission: true } },
+    },
   });
   if (!template)
     return { status: "error", message: "Role template not found." };
 
-  const invite = await prisma.userInvite.create({
+  const user = await prisma.user.create({
     data: {
-      email,
       name,
+      email,
       committee,
       roleTemplateId: template.id,
-      token: randomBytes(32).toString("hex"),
-      invitedBy: actorId,
     },
   });
 
+  if (template.permissions.length > 0) {
+    await prisma.userPermission.createMany({
+      data: template.permissions.map((p: { permission: PermissionKey }) => ({
+        userId: user.id,
+        permission: p.permission,
+        grantedBy: actorId,
+      })),
+    });
+  }
+
   await logActivity({
     actorId,
-    actionType: "USER_INVITE_SENT",
-    targetType: "UserInvite",
-    targetId: invite.id,
+    actionType: "USER_CREATED",
+    targetType: "User",
+    targetId: user.id,
     details: { email, committee, roleTemplate },
   });
 
-  try {
-    const { text, html } = inviteEmail(
-      await acceptUrl(invite.token),
-      name,
-      ROLE_TEMPLATE_LABELS[roleTemplate],
-    );
-    await sendMail({
-      to: email,
-      subject: "You've been invited to GDGC Recruitment Platform",
-      text,
-      html,
-    });
-  } catch {
-    revalidatePath(PATH);
-    return {
-      status: "error",
-      message:
-        "Invite saved, but the email couldn't be sent. Use Resend from the pending list.",
-    };
-  }
-
   revalidatePath(PATH);
-  return { status: "success", message: `Invitation sent to ${email}.` };
+  return { status: "success", message: `${name} was added as a member.` };
 }
 
-// Re-send the invite email for a still-pending invite (same token).
-export async function resendInvite(inviteId: string): Promise<void> {
+// Permanently remove a member. UserPermission, Session, and Account rows are
+// removed automatically by their onDelete: Cascade relations; ActivityLogEntry
+// (actor) and AdminTransferInvite (initiator) reference the user WITHOUT a
+// cascade, so those are cleared in the same transaction or the delete would hit
+// a foreign-key violation. The name/email are captured before deletion for the
+// audit entry, since targetId won't resolve to anything afterwards.
+export async function deleteUser(userId: string): Promise<void> {
   const actorId = await requirePermission(ADMIN);
 
-  const invite = await prisma.userInvite.findUnique({
-    where: { id: inviteId },
-    include: { roleTemplate: { select: { name: true } } },
-  });
-  if (!invite || invite.status !== InviteStatus.PENDING) return;
+  // An admin can never delete their own account from this screen — handing off
+  // the admin role is what Transfer Admin Role is for.
+  if (userId === actorId) return;
 
-  const { text, html } = inviteEmail(
-    await acceptUrl(invite.token),
-    invite.name,
-    ROLE_TEMPLATE_LABELS[invite.roleTemplate.name],
-  );
-  await sendMail({
-    to: invite.email,
-    subject: "You've been invited to GDGC Recruitment Platform",
-    text,
-    html,
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, name: true },
   });
+  if (!user) return;
 
-  await prisma.userInvite.update({
-    where: { id: invite.id },
-    data: { createdAt: new Date() },
-  });
+  await prisma.$transaction([
+    prisma.activityLogEntry.deleteMany({ where: { actorId: userId } }),
+    prisma.adminTransferInvite.deleteMany({ where: { initiatedBy: userId } }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
 
   await logActivity({
     actorId,
-    actionType: "USER_INVITE_SENT",
-    targetType: "UserInvite",
-    targetId: invite.id,
-    details: { email: invite.email, resend: true },
-  });
-
-  revalidatePath(PATH);
-}
-
-// Cancel a pending invite so the link can no longer be accepted.
-export async function cancelInvite(inviteId: string): Promise<void> {
-  const actorId = await requirePermission(ADMIN);
-
-  const invite = await prisma.userInvite.findUnique({
-    where: { id: inviteId },
-    select: { id: true, status: true, email: true },
-  });
-  if (!invite || invite.status !== InviteStatus.PENDING) return;
-
-  await prisma.userInvite.update({
-    where: { id: invite.id },
-    data: { status: InviteStatus.CANCELLED, respondedAt: new Date() },
-  });
-
-  await logActivity({
-    actorId,
-    actionType: "USER_INVITE_CANCELLED",
-    targetType: "UserInvite",
-    targetId: invite.id,
-    details: { email: invite.email },
+    actionType: "USER_DELETED",
+    targetType: "User",
+    targetId: userId,
+    details: { deletedEmail: user.email, deletedName: user.name },
   });
 
   revalidatePath(PATH);

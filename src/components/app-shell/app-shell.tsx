@@ -2,24 +2,17 @@ import Link from "next/link";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Logo } from "@/components/logo";
-import { Icon } from "./material-icon";
+import { Icon } from "./icon";
 import { LogoutButton } from "./logout-button";
 import { NotificationBell } from "./notification-bell";
+import { SidebarNav } from "./sidebar-nav";
+import { ThemeToggle } from "./theme-toggle";
 
-// Presentational app shell (sidebar + top bar) matching the approved Stitch
-// design, rebuilt with our real Tailwind tokens. Nav links are placeholders for
-// routes that don't exist yet; the account controls in the sidebar footer are
-// live (transfer + logout).
-const NAV: { icon: string; label: string; active?: boolean }[] = [
-  { icon: "dashboard", label: "Dashboard" },
-  { icon: "group", label: "Applicants" },
-  { icon: "fact_check", label: "Phase 1 Screening" },
-  { icon: "video_chat", label: "Interviews" },
-  { icon: "emoji_events", label: "Final Decision" },
-  { icon: "bar_chart", label: "Statistics" },
-  { icon: "settings", label: "Admin Settings", active: true },
-];
-
+// Shared authenticated app shell (sidebar + top bar) for every signed-in page —
+// both /admin/* and the member routes (/dashboard, /applicants, …). Rendered by
+// the route-group layouts, which supply the current user's identity. The nav
+// links are live and highlight the active route; the account controls in the
+// sidebar footer (transfer + logout) are gated on MANAGE_ACCOUNTS.
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -28,7 +21,7 @@ function initials(name: string) {
     .join("");
 }
 
-export function AdminShell({
+export function AppShell({
   userName,
   userSubtitle,
   canManageAccounts = false,
@@ -36,7 +29,7 @@ export function AdminShell({
 }: {
   userName: string;
   userSubtitle: string;
-  /** Whether to show the Transfer Admin Role control (holder of MANAGE_ACCOUNTS). */
+  /** Whether to show admin-only controls (Admin Settings + Transfer Admin Role). */
   canManageAccounts?: boolean;
   children: React.ReactNode;
 }) {
@@ -61,28 +54,14 @@ export function AdminShell({
         <div className="flex items-center gap-3 p-6">
           <Logo className="h-9 w-9 rounded-lg" alt="GDGC" />
           <div>
-            <h1 className="text-lg font-bold text-foreground">GDGC Admin</h1>
+            <h1 className="text-lg font-bold text-foreground">GDGC</h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              Recruitment Manager
+              Recruitment Platform
             </p>
           </div>
         </div>
-        <nav className="flex-1 space-y-1 px-3">
-          {NAV.map((n) => (
-            <a
-              key={n.label}
-              href="#"
-              className={
-                n.active
-                  ? "flex items-center gap-3 rounded-lg border-l-4 border-primary bg-primary/10 px-3 py-2.5 text-sm font-bold text-primary"
-                  : "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
-              }
-            >
-              <Icon name={n.icon} className="text-[20px]" />
-              <span>{n.label}</span>
-            </a>
-          ))}
-        </nav>
+
+        <SidebarNav canManageAccounts={canManageAccounts} />
 
         {/* Account section: identity, then Transfer Admin Role (MANAGE_ACCOUNTS
             only), directly above Log Out. */}
@@ -124,7 +103,8 @@ export function AdminShell({
             Recruitment Platform
           </h2>
         </div>
-        <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
+        <div className="flex items-center gap-1 text-neutral-500 dark:text-neutral-400">
+          <ThemeToggle />
           <NotificationBell />
         </div>
       </header>
