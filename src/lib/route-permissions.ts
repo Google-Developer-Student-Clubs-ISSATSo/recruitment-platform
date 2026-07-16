@@ -15,13 +15,30 @@ import { PermissionKey } from "@/generated/prisma/enums";
  */
 export const CAMPAIGN_PAGE_PERMISSIONS = {
   applicants: PermissionKey.VIEW_FULL_POOL,
-  phase1: PermissionKey.SCREEN_PHASE1,
+  // Phase 1 admits EITHER permission — an "any of these grants access" entry.
+  // Full reviewers hold SCREEN_PHASE1; the Technical Scorer holds only
+  // ENTER_TECHNICAL_SCORE yet must reach the page to score Technical Skills
+  // (they get a restricted view). Per-question editability is enforced inside
+  // the page and the save action.
+  phase1: [PermissionKey.SCREEN_PHASE1, PermissionKey.ENTER_TECHNICAL_SCORE],
   interviews: PermissionKey.CLAIM_PANEL_SEAT,
   "final-decision": PermissionKey.ENTER_FINAL_DECISION,
   statistics: PermissionKey.VIEW_STATISTICS,
-} as const satisfies Record<string, PermissionKey>;
+} as const satisfies Record<string, PermissionKey | readonly PermissionKey[]>;
 
 export type CampaignPage = keyof typeof CAMPAIGN_PAGE_PERMISSIONS;
+
+/**
+ * Normalize a page-permission entry to a list. An entry is either a single
+ * PermissionKey or an array meaning "holding any of these grants access". Both
+ * the route guards and the sidebar use this so their access logic can't drift.
+ */
+export function pageAccessKeys(
+  entry: PermissionKey | readonly PermissionKey[],
+): readonly PermissionKey[] {
+  // PermissionKey is a string enum, so a bare entry is a string; an array isn't.
+  return typeof entry === "string" ? [entry] : entry;
+}
 
 /**
  * Platform-wide (non-campaign-scoped) pages and their gating permission. These

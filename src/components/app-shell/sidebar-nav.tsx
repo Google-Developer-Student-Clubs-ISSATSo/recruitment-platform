@@ -8,6 +8,7 @@ import {
   CAMPAIGN_PAGE_PERMISSIONS,
   CONFIGURATION_PERMISSIONS,
   PLATFORM_PAGE_PERMISSIONS,
+  pageAccessKeys,
 } from "@/lib/route-permissions";
 import { Icon } from "./icon";
 
@@ -30,7 +31,8 @@ const CAMPAIGN_NAV: {
   icon: string;
   label: string;
   segment: string;
-  permission: PermissionKey | null;
+  // A single key, or "any of these grants access" (Phase 1 uses the array form).
+  permission: PermissionKey | readonly PermissionKey[] | null;
 }[] = [
   { icon: "dashboard", label: "Dashboard", segment: "dashboard", permission: null },
   {
@@ -103,7 +105,9 @@ export function SidebarNav({ permissions }: { permissions: PermissionKey[] }) {
   // Campaign-scoped links only make sense while inside a campaign.
   if (campaignId) {
     for (const n of CAMPAIGN_NAV) {
-      if (!n.permission || held.has(n.permission)) {
+      const allowed =
+        !n.permission || pageAccessKeys(n.permission).some((k) => held.has(k));
+      if (allowed) {
         items.push({
           icon: n.icon,
           label: n.label,
