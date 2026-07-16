@@ -227,6 +227,99 @@ const ARCHIVED_APPLICANTS: SeedApplicant[] = [
   },
 ];
 
+// --- Phase 1 scoring config ------------------------------------------------
+
+type SeedQuestion = {
+  text: string;
+  coefficient: number;
+  noteScale: number[];
+  requiresTechnicalScorer?: boolean;
+  // Exact CSV/rawFormData header the scored answer is read from. Null for
+  // questions with no single form source (reviewer judgment calls).
+  sourceField: string | null;
+};
+
+// Last year's real Phase 1 rubric (from the product spec). `order` is assigned
+// from array position (1-based) and matches the application form's question
+// order. Coefficients sum to 100. The default note scale is [0, 0.5, 1]; the
+// "Project falling apart scenario" question deliberately uses the wider
+// [0, 0.25, 0.5, 0.75, 1] to exercise the configurable-scale feature. The
+// "Technical Skills" question is gated to ENTER_TECHNICAL_SCORE holders.
+const DEFAULT_NOTE_SCALE = [0, 0.5, 1];
+const PHASE_ONE_QUESTIONS: SeedQuestion[] = [
+  {
+    text: "Why join GDG / intend to learn",
+    coefficient: 19,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField:
+      "Why are you interested in joining GDGC specifically, and what do you intend to learn?",
+  },
+  {
+    text: "Team player/leader experience",
+    coefficient: 12,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField:
+      "Tell us about an experience where you took the position of a team player or a team leader and how did you manage it?",
+  },
+  {
+    text: "What makes you stand out",
+    coefficient: 15,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField: "What makes you stand out from other candidates?",
+  },
+  {
+    text: "Previous club/community experience",
+    coefficient: 5,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField:
+      "Please list any previous experience in clubs and/or communities. (Even little experiences matter)",
+  },
+  {
+    text: "Most significant achievement",
+    coefficient: 8,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField:
+      "Tell us about your most significant achievement that you feel proud of ?",
+  },
+  {
+    text: "Project falling apart scenario",
+    coefficient: 12,
+    noteScale: [0, 0.25, 0.5, 0.75, 1],
+    sourceField:
+      "You and your team have been working on a project for months but at a certain stage everything starts to fall apart and things do not work in the way you wanted, how would you act and what would you do ?",
+  },
+  {
+    text: "Describe yourself in 3 adjectives",
+    coefficient: 3,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField: "Describe yourself in 3 adjectives:",
+  },
+  {
+    text: "Life motto",
+    coefficient: 3,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField: "What is your life motto. Why you chose it specifically?",
+  },
+  {
+    text: "Big Yes / Big No",
+    coefficient: 8,
+    noteScale: DEFAULT_NOTE_SCALE,
+    sourceField: null,
+  },
+  {
+    text: "Technical Skills",
+    coefficient: 15,
+    noteScale: DEFAULT_NOTE_SCALE,
+    requiresTechnicalScorer: true,
+    sourceField: null,
+  },
+];
+
+// Deliberately small numbers so the auto-classification logic can be tested
+// realistically against the 15 seeded applicants later. Real campaigns use
+// larger numbers (e.g. 30–40).
+const PHASE_ONE_CONFIG = { rejectThreshold: 40, targetCount: 8 };
+
 function emailFor(fullName: string): string {
   const slug = fullName
     .toLowerCase()
@@ -352,6 +445,26 @@ async function main() {
     })),
   });
 
+  // 3e. Phase 1 scoring rubric + config for the open dev campaign.
+  await prisma.phaseOneQuestion.createMany({
+    data: PHASE_ONE_QUESTIONS.map((q, i) => ({
+      campaignId: campaign.id,
+      text: q.text,
+      coefficient: q.coefficient,
+      noteScale: q.noteScale,
+      order: i + 1,
+      requiresTechnicalScorer: q.requiresTechnicalScorer ?? false,
+      sourceField: q.sourceField,
+    })),
+  });
+  await prisma.phaseOneConfig.create({
+    data: {
+      campaignId: campaign.id,
+      rejectThreshold: PHASE_ONE_CONFIG.rejectThreshold,
+      targetCount: PHASE_ONE_CONFIG.targetCount,
+    },
+  });
+
   console.log("Seed complete:");
   console.table({
     RoleTemplate: roleTemplateCount,
@@ -360,6 +473,8 @@ async function main() {
     UserPermission: userPermissionCount,
     Campaign: 2,
     Applicant: APPLICANTS.length + ARCHIVED_APPLICANTS.length,
+    PhaseOneQuestion: PHASE_ONE_QUESTIONS.length,
+    PhaseOneConfig: 1,
   });
 }
 

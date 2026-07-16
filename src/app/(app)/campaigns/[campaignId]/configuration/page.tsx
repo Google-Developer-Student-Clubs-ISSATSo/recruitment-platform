@@ -20,7 +20,7 @@ export default async function ConfigurationPage({
 }: {
   params: Promise<{ campaignId: string }>;
 }) {
-  await params;
+  const { campaignId } = await params;
 
   const session = await auth();
   const userId = session?.user?.id;
@@ -52,7 +52,7 @@ export default async function ConfigurationPage({
           </PermissionGate>
 
           <PermissionGate permission={PermissionKey.CONFIGURE_SCREENING}>
-            <ScoringConfigSection />
+            <ScoringConfigSection campaignId={campaignId} />
           </PermissionGate>
         </div>
       ) : (

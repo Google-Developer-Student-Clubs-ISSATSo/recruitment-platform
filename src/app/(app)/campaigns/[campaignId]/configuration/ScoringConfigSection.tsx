@@ -1,28 +1,60 @@
-import { Icon } from "@/components/app-shell/icon";
+import { prisma } from "@/lib/prisma";
+import { ScoringConfigManager } from "./scoring/ScoringConfigManager";
+import { PhaseOneConfigForm } from "./scoring/PhaseOneConfigForm";
+import type { QuestionDTO } from "./scoring/actions";
 
-// Stub — real screening/scoring configuration is a Stage 3 item. This proves
-// the PermissionGate composition pattern and gives CONFIGURE_SCREENING holders
-// a visible landing spot until then.
-export function ScoringConfigSection() {
+// Server data-loader for the Phase 1 screening/scoring configuration. Rendered
+// only for CONFIGURE_SCREENING holders (the <PermissionGate> in page.tsx). All
+// reads here are scoped to the campaignId from the route, so a rubric or config
+// from another campaign can never appear.
+export async function ScoringConfigSection({
+  campaignId,
+}: {
+  campaignId: string;
+}) {
+  const [rows, config] = await Promise.all([
+    prisma.phaseOneQuestion.findMany({
+      where: { campaignId },
+      orderBy: { order: "asc" },
+      select: {
+        id: true,
+        text: true,
+        coefficient: true,
+        noteScale: true,
+        order: true,
+        isActive: true,
+        requiresTechnicalScorer: true,
+        _count: { select: { scores: true } },
+      },
+    }),
+    prisma.phaseOneConfig.findUnique({
+      where: { campaignId },
+      select: { rejectThreshold: true, targetCount: true },
+    }),
+  ]);
+
+  const questions: QuestionDTO[] = rows.map((q) => ({
+    id: q.id,
+    text: q.text,
+    coefficient: q.coefficient,
+    noteScale: q.noteScale,
+    order: q.order,
+    isActive: q.isActive,
+    requiresTechnicalScorer: q.requiresTechnicalScorer,
+    scoreCount: q._count.scores,
+  }));
+
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon name="tune" className="text-[22px]" />
-        </span>
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">
-            Screening &amp; Scoring
-          </h2>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Define the Phase 1 scoring rubric and screening thresholds.
-          </p>
-        </div>
-      </div>
-      <p className="mt-4 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800/50 dark:text-neutral-400">
-        Scoring controls arrive in a later stage. You have access to this
-        section because you hold <strong>Configure Screening</strong>.
-      </p>
-    </section>
+    <div className="space-y-6">
+      <ScoringConfigManager
+        campaignId={campaignId}
+        initialQuestions={questions}
+      />
+      <PhaseOneConfigForm
+        campaignId={campaignId}
+        rejectThreshold={config?.rejectThreshold ?? null}
+        targetCount={config?.targetCount ?? null}
+      />
+    </div>
   );
 }

@@ -27,11 +27,12 @@ model User {
   roleTemplateId String?
   roleTemplate   RoleTemplate? @relation(fields: [roleTemplateId], references: [id])
 
-  accounts     Account[]
-  sessions     Session[]
-  permissions  UserPermission[]
-  activityLogs ActivityLogEntry[]
-  sentInvites  AdminTransferInvite[] @relation("InviteInitiator")
+  accounts            Account[]
+  sessions            Session[]
+  permissions         UserPermission[]
+  activityLogs        ActivityLogEntry[]
+  sentInvites         AdminTransferInvite[] @relation("InviteInitiator")
+  phaseOneScoresGiven PhaseOneScore[]
 }
 
 model Account {
@@ -180,7 +181,9 @@ model Campaign {
   isOpen    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  applicants Applicant[]
+  applicants        Applicant[]
+  phaseOneQuestions PhaseOneQuestion[]
+  phaseOneConfig    PhaseOneConfig?
 }
 
 enum ApplicantStatus {
@@ -207,7 +210,75 @@ model Applicant {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  campaign Campaign @relation(fields: [campaignId], references: [id])
+  campaign        Campaign         @relation(fields: [campaignId], references: [id])
+  phaseOneScores  PhaseOneScore[]
+  phaseOneResult  PhaseOneResult?
 
   @@unique([campaignId, email])
+}
+
+// ============ PHASE 1 SCORING ============
+
+enum PhaseOneClassification {
+  PENDING // scoring not yet complete for this applicant
+  AUTO_ACCEPT
+  AUTO_REJECT
+  TO_DISCUSS
+}
+
+model PhaseOneQuestion {
+  id                      String   @id @default(cuid())
+  campaignId              String
+  text                    String
+  coefficient             Float
+  noteScale               Float[] // e.g. [0, 0.5, 1] or [0, 0.25, 0.5, 0.75, 1]
+  order                   Int
+  isActive                Boolean  @default(true)
+  requiresTechnicalScorer Boolean  @default(false)
+  // true ONLY for the "Technical Skills" question — gates it to
+  // ENTER_TECHNICAL_SCORE holders instead of SCREEN_PHASE1 holders
+  sourceField             String?
+  // Exact CSV/rawFormData key this question reads the applicant's answer
+  // from. Null for questions with no single form source (e.g. "Big Yes /
+  // Big No", a reviewer judgment call, not read from the form).
+
+  campaign Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scores   PhaseOneScore[]
+
+  @@unique([campaignId, order])
+}
+
+model PhaseOneScore {
+  id          String   @id @default(cuid())
+  applicantId String
+  questionId  String
+  value       Float
+  scoredById  String
+  scoredAt    DateTime @default(now())
+
+  applicant Applicant        @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  question  PhaseOneQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  scoredBy  User             @relation(fields: [scoredById], references: [id])
+
+  @@unique([applicantId, questionId])
+}
+
+model PhaseOneResult {
+  id             String                 @id @default(cuid())
+  applicantId    String                 @unique
+  weightedTotal  Float?
+  rank           Int?
+  classification PhaseOneClassification @default(PENDING)
+  updatedAt      DateTime               @updatedAt
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+}
+
+model PhaseOneConfig {
+  id              String @id @default(cuid())
+  campaignId      String @unique
+  rejectThreshold Float?
+  targetCount     Int?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }
