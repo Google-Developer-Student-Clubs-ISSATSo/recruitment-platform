@@ -224,7 +224,10 @@ export function PermissionTable({
                 pending={pending}
                 onToggle={(permission, grant) => toggle(user.id, permission, grant)}
                 onReset={() => reset(user.id)}
-                canDelete={user.id !== currentUserId}
+                // The TM Lead's permissions are fixed: no toggles, no reset, no
+                // delete. The row shows read-only badges instead.
+                readOnly
+                canDelete={false}
                 onDelete={() => remove(user.id)}
               />
             ))}

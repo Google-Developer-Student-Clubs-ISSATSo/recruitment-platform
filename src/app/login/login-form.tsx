@@ -42,9 +42,12 @@ export function LoginForm() {
         <div className="rounded-lg border border-neutral-200 bg-white p-8 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           {/* Brand */}
           <div className="flex flex-col items-center text-center">
-            <Logo className="h-14 w-14 rounded-xl" alt="GDGC Recruitment Platform" />
+            <Logo
+              className="h-14 w-14 rounded-xl"
+              alt="GDGC Recruitment Platform"
+            />
             <h1 className="mt-4 text-lg font-semibold text-foreground">
-              GDGC Recruitment Platform
+              GDGC ISSATSO Recruitment Platform
             </h1>
             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
               {state.status === "sent"
@@ -73,53 +76,54 @@ export function LoginForm() {
           ) : (
             /* Default state — single email field to sign in. */
             <form action={formAction} className="mt-8 space-y-4">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="email"
-                    className="block text-xs font-semibold tracking-wider text-neutral-500 dark:text-neutral-400"
-                  >
-                    EMAIL ADDRESS
-                  </label>
-                  <div className="relative">
-                    <MailIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                    <input
-                      id="email"
-                      type="email"
-                      name="email"
-                      required
-                      autoFocus
-                      defaultValue={state.email}
-                      placeholder="you@gdgc.edu"
-                      autoComplete="email"
-                      className="w-full rounded-lg border border-neutral-300 bg-white py-2.5 pl-10 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-neutral-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
-                    />
-                  </div>
-                </div>
-
-                {state.status === "error" && state.message && (
-                  <p className="text-sm text-status-rejected">{state.message}</p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="email"
+                  className="block text-xs font-semibold tracking-wider text-neutral-500 dark:text-neutral-400"
                 >
-                  {pending ? "Signing in…" : "Sign in with Email"}
-                </button>
+                  EMAIL ADDRESS
+                </label>
+                <div className="relative">
+                  <MailIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    id="email"
+                    type="email"
+                    name="email"
+                    required
+                    autoFocus
+                    defaultValue={state.email}
+                    placeholder="you@gdgc.edu"
+                    autoComplete="email"
+                    className="w-full rounded-lg border border-neutral-300 bg-white py-2.5 pl-10 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-neutral-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
+                  />
+                </div>
+              </div>
+
+              {state.status === "error" && state.message && (
+                <p className="text-sm text-status-rejected">{state.message}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={pending}
+                className="flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {pending ? "Signing in…" : "Sign in with Email"}
+              </button>
             </form>
           )}
 
           {/* Footer */}
           <div className="mt-8 border-t border-neutral-200 pt-4 text-center dark:border-neutral-800">
             <p className="text-xs text-neutral-400 dark:text-neutral-500">
-              Systematic Access Only · Internal GDGC Operations
+              Systematic Access Only · Internal GDGC ISSATSO Operations
             </p>
           </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-neutral-400 dark:text-neutral-600">
-          © <span>{new Date().getFullYear()}</span> GDGC Recruitment Platform
+          © <span>{new Date().getFullYear()}</span> GDGC ISSATSO Recruitment
+          Platform
         </p>
       </div>
     </main>

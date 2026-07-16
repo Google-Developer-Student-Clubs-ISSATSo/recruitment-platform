@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Icon } from "@/components/app-shell/icon";
 import {
   PERMISSION_CATEGORIES,
+  humanizePermission,
   type AdminUserRow,
 } from "./permission-config";
 import { PermissionToggle } from "./permission-toggle";
@@ -42,6 +43,7 @@ export function UserRow({
   pending,
   onToggle,
   onReset,
+  readOnly = false,
   canDelete,
   onDelete,
 }: {
@@ -51,6 +53,11 @@ export function UserRow({
   pending: boolean;
   onToggle: (permission: PermissionKey, grant: boolean) => void;
   onReset: () => void;
+  /**
+   * When true, permissions are fixed: the editor shows read-only badges instead
+   * of toggle chips and hides the reset button. Used for the TM Lead.
+   */
+  readOnly?: boolean;
   /** Whether this row may be deleted (false for the signed-in admin's own row). */
   canDelete: boolean;
   onDelete: () => void;
@@ -138,9 +145,16 @@ export function UserRow({
         </div>
       </div>
 
-      {/* Expanded: permission editor */}
+      {/* Expanded: permission editor (or read-only view for a fixed role) */}
       {expanded && (
         <div className="border-t border-l-4 border-neutral-100 border-l-primary bg-neutral-50/70 px-5 py-5 dark:border-neutral-800/60 dark:border-l-primary dark:bg-neutral-950/40">
+          {readOnly && (
+            <p className="mb-4 flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+              <Icon name="lock" className="text-[16px]" />
+              These permissions are fixed for the TM Lead and can&rsquo;t be
+              changed.
+            </p>
+          )}
           <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
             {PERMISSION_CATEGORIES.map((cat) => (
               <div key={cat.title}>
@@ -148,46 +162,70 @@ export function UserRow({
                   {cat.title}
                 </h4>
                 <div className="space-y-3">
-                  {cat.permissions.map((perm) => (
-                    <PermissionToggle
-                      key={perm}
-                      permission={perm}
-                      on={held.has(perm)}
-                      disabled={pending}
-                      userName={user.name}
-                      onToggle={(grant) => onToggle(perm, grant)}
-                    />
-                  ))}
+                  {cat.permissions.map((perm) =>
+                    readOnly ? (
+                      <div
+                        key={perm}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <span className="text-[13px] text-foreground">
+                          {humanizePermission(perm)}
+                        </span>
+                        {held.has(perm) ? (
+                          <span className="rounded-full bg-status-accepted/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-status-accepted">
+                            Granted
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400">
+                            Off
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <PermissionToggle
+                        key={perm}
+                        permission={perm}
+                        on={held.has(perm)}
+                        disabled={pending}
+                        userName={user.name}
+                        onToggle={(grant) => onToggle(perm, grant)}
+                      />
+                    ),
+                  )}
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-5 flex justify-end border-t border-neutral-200 pt-4 dark:border-neutral-800">
-            <button
-              onClick={() => setResetOpen(true)}
-              disabled={pending}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-status-rejected transition-colors hover:bg-status-rejected/10 disabled:opacity-50"
-            >
-              <Icon name="restart_alt" className="text-[18px]" />
-              Reset to defaults
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="mt-5 flex justify-end border-t border-neutral-200 pt-4 dark:border-neutral-800">
+              <button
+                onClick={() => setResetOpen(true)}
+                disabled={pending}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-status-rejected transition-colors hover:bg-status-rejected/10 disabled:opacity-50"
+              >
+                <Icon name="restart_alt" className="text-[18px]" />
+                Reset to defaults
+              </button>
+            </div>
+          )}
 
-          <ConfirmDialog
-            open={resetOpen}
-            onOpenChange={setResetOpen}
-            title={`Reset ${user.name} to defaults?`}
-            description={
-              <>
-                This wipes all of {user.name}&rsquo;s permission customization
-                and restores the <strong>{user.templateLabel}</strong> template
-                defaults. This can&rsquo;t be undone.
-              </>
-            }
-            confirmLabel="Reset to defaults"
-            destructive
-            onConfirm={onReset}
-          />
+          {!readOnly && (
+            <ConfirmDialog
+              open={resetOpen}
+              onOpenChange={setResetOpen}
+              title={`Reset ${user.name} to defaults?`}
+              description={
+                <>
+                  This wipes all of {user.name}&rsquo;s permission customization
+                  and restores the <strong>{user.templateLabel}</strong>{" "}
+                  template defaults. This can&rsquo;t be undone.
+                </>
+              }
+              confirmLabel="Reset to defaults"
+              destructive
+              onConfirm={onReset}
+            />
+          )}
         </div>
       )}
 

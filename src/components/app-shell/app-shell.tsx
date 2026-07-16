@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import type { PermissionKey } from "@/generated/prisma/enums";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Logo } from "@/components/logo";
 import { Icon } from "./icon";
@@ -25,12 +26,15 @@ export function AppShell({
   userName,
   userSubtitle,
   canManageAccounts = false,
+  permissions,
   children,
 }: {
   userName: string;
   userSubtitle: string;
   /** Whether to show admin-only controls (Admin Settings + Transfer Admin Role). */
   canManageAccounts?: boolean;
+  /** The current user's permissions — the sidebar filters nav links against these. */
+  permissions: PermissionKey[];
   children: React.ReactNode;
 }) {
   return (
@@ -52,16 +56,16 @@ export function AppShell({
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-3 p-6">
-          <Logo className="h-9 w-9 rounded-lg" alt="GDGC" />
+          <Logo className="h-9 w-9 rounded-lg" alt="GDGC ISSATSO" />
           <div>
-            <h1 className="text-lg font-bold text-foreground">GDGC</h1>
+            <h1 className="text-lg font-bold text-foreground">GDGC ISSATSO</h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
               Recruitment Platform
             </p>
           </div>
         </div>
 
-        <SidebarNav canManageAccounts={canManageAccounts} />
+        <SidebarNav permissions={permissions} />
 
         {/* Account section: identity, then Transfer Admin Role (MANAGE_ACCOUNTS
             only), directly above Log Out. */}

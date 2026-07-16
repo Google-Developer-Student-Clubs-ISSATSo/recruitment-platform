@@ -27,13 +27,15 @@ export function NotificationBellMenu({ items }: { items: ActivityItem[] }) {
     <Popover open={open} onOpenChange={(next) => setOpen(next)}>
       <PopoverTrigger
         aria-label="Notifications"
-        className="flex size-9 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-primary dark:text-neutral-400 dark:hover:bg-neutral-800"
+        className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-primary dark:text-neutral-400 dark:hover:bg-neutral-800"
       >
         <Bell className="size-5" aria-hidden />
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-80 gap-0 p-0">
         <div className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-          <p className="text-sm font-semibold text-foreground">Recent activity</p>
+          <p className="text-sm font-semibold text-foreground">
+            Recent activity
+          </p>
         </div>
 
         {items.length === 0 ? (
@@ -59,7 +61,7 @@ export function NotificationBellMenu({ items }: { items: ActivityItem[] }) {
         )}
 
         <Link
-          href="/admin/activity-log"
+          href="/activity-log"
           onClick={() => setOpen(false)}
           className="block border-t border-neutral-200 px-4 py-2.5 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/5 dark:border-neutral-800"
         >

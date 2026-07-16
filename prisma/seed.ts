@@ -207,6 +207,26 @@ const APPLICANTS: SeedApplicant[] = [
   },
 ];
 
+// A distinct, smaller pool for the archived (closed) campaign — different
+// names so scoping to one campaign vs the other is unmistakable.
+const ARCHIVED_APPLICANTS: SeedApplicant[] = [
+  {
+    fullName: "Youssef Trabelsi",
+    preferredCommittee: Committee.MKT,
+    isIssatsoStudent: true,
+  },
+  {
+    fullName: "Amira Slama",
+    preferredCommittee: Committee.TM,
+    isIssatsoStudent: true,
+  },
+  {
+    fullName: "Khalil Rekik",
+    preferredCommittee: Committee.EER,
+    isIssatsoStudent: true,
+  },
+];
+
 function emailFor(fullName: string): string {
   const slug = fullName
     .toLowerCase()
@@ -229,6 +249,23 @@ async function main() {
   // foreign key would block the delete (any user may still point at one).
   await prisma.user.updateMany({ data: { roleTemplateId: null } });
   await prisma.roleTemplate.deleteMany({});
+  // ActivityLogEntry (actor) and AdminTransferInvite (initiator) reference the
+  // seed users WITHOUT a cascade, so clear those references first — scoped to
+  // just the seed users being recreated — or the user delete hits a foreign-key
+  // violation. (Same pattern the deleteUser admin action uses.)
+  const staleUsers = await prisma.user.findMany({
+    where: { email: { in: seedEmails } },
+    select: { id: true },
+  });
+  const staleUserIds = staleUsers.map((u) => u.id);
+  if (staleUserIds.length > 0) {
+    await prisma.activityLogEntry.deleteMany({
+      where: { actorId: { in: staleUserIds } },
+    });
+    await prisma.adminTransferInvite.deleteMany({
+      where: { initiatedBy: { in: staleUserIds } },
+    });
+  }
   await prisma.user.deleteMany({ where: { email: { in: seedEmails } } });
 
   // 3a. Role templates + their permissions.
@@ -275,15 +312,35 @@ async function main() {
     userPermissionCount += perms.length;
   }
 
-  // 3c. Campaign.
+  // 3c. Campaigns — one open (the live dev seed) and one CLOSED/archived, so
+  // the VIEW_CAMPAIGN_HISTORY gating has something real to test against.
   const campaign = await prisma.campaign.create({
     data: { name: "Recruitment 2026 (Dev Seed)", isOpen: true },
   });
+  const archivedCampaign = await prisma.campaign.create({
+    data: { name: "Recruitment 2025 (Archived)", isOpen: false },
+  });
 
-  // 3d. Applicants.
+  // 3d. Applicants for the open campaign.
   await prisma.applicant.createMany({
     data: APPLICANTS.map((a) => ({
       campaignId: campaign.id,
+      fullName: a.fullName,
+      email: emailFor(a.fullName),
+      isIssatsoStudent: a.isIssatsoStudent,
+      preferredCommittee: a.preferredCommittee,
+      rawFormData: {
+        hobbies: faker.word.words({ count: { min: 2, max: 4 } }),
+        motto: faker.company.catchPhrase(),
+      },
+    })),
+  });
+
+  // A smaller, distinct pool for the archived campaign so entering it clearly
+  // shows per-campaign scoping (a different applicant count and roster).
+  await prisma.applicant.createMany({
+    data: ARCHIVED_APPLICANTS.map((a) => ({
+      campaignId: archivedCampaign.id,
       fullName: a.fullName,
       email: emailFor(a.fullName),
       isIssatsoStudent: a.isIssatsoStudent,
@@ -301,8 +358,8 @@ async function main() {
     RoleTemplatePermission: roleTemplatePermissionCount,
     User: userCount,
     UserPermission: userPermissionCount,
-    Campaign: 1,
-    Applicant: APPLICANTS.length,
+    Campaign: 2,
+    Applicant: APPLICANTS.length + ARCHIVED_APPLICANTS.length,
   });
 }
 

@@ -3,19 +3,81 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { PermissionKey } from "@/generated/prisma/enums";
+import {
+  CAMPAIGN_PAGE_PERMISSIONS,
+  CONFIGURATION_PERMISSIONS,
+  PLATFORM_PAGE_PERMISSIONS,
+} from "@/lib/route-permissions";
 import { Icon } from "./icon";
 
-// The main navigation. Each item points at a real route (stub pages exist for
-// all of them) so navigation can be verified end-to-end. Active state is
-// derived from the current pathname, which is why this is a Client Component.
-const NAV: { icon: string; label: string; href: string }[] = [
-  { icon: "dashboard", label: "Dashboard", href: "/dashboard" },
-  { icon: "group", label: "Applicants", href: "/applicants" },
-  { icon: "fact_check", label: "Phase 1 Screening", href: "/phase1" },
-  { icon: "video_chat", label: "Interviews", href: "/interviews" },
-  { icon: "emoji_events", label: "Final Decision", href: "/final-decision" },
-  { icon: "bar_chart", label: "Statistics", href: "/statistics" },
+// The main navigation. Links are rendered only when the current user holds the
+// permission that gates their target, so a link never appears for a page the
+// user would just be bounced off of.
+//
+// The nav has three tiers:
+//   1. Campaigns — always shown, so users can get back to the campaign list.
+//   2. Campaign-scoped items (Dashboard, Applicants, …) — shown only while the
+//      user is INSIDE a campaign (a campaignId is present in the URL), with
+//      hrefs built from that campaignId. Gating comes from
+//      CAMPAIGN_PAGE_PERMISSIONS (the same source the route guards use).
+//   3. Platform-wide items (Activity Log, Admin Settings) — shown regardless of
+//      campaign context, gated by their own permission.
+
+// Campaign-scoped items, keyed by the sub-path under /campaigns/[id]/. A null
+// permission means "always visible once inside a campaign" (the dashboard).
+const CAMPAIGN_NAV: {
+  icon: string;
+  label: string;
+  segment: string;
+  permission: PermissionKey | null;
+}[] = [
+  { icon: "dashboard", label: "Dashboard", segment: "dashboard", permission: null },
+  {
+    icon: "group",
+    label: "Applicants",
+    segment: "applicants",
+    permission: CAMPAIGN_PAGE_PERMISSIONS["applicants"],
+  },
+  {
+    icon: "fact_check",
+    label: "Phase 1 Screening",
+    segment: "phase1",
+    permission: CAMPAIGN_PAGE_PERMISSIONS["phase1"],
+  },
+  {
+    icon: "video_chat",
+    label: "Interviews",
+    segment: "interviews",
+    permission: CAMPAIGN_PAGE_PERMISSIONS["interviews"],
+  },
+  {
+    icon: "emoji_events",
+    label: "Final Decision",
+    segment: "final-decision",
+    permission: CAMPAIGN_PAGE_PERMISSIONS["final-decision"],
+  },
+  {
+    icon: "bar_chart",
+    label: "Statistics",
+    segment: "statistics",
+    permission: CAMPAIGN_PAGE_PERMISSIONS["statistics"],
+  },
 ];
+
+const CAMPAIGNS_ITEM = { icon: "campaign", label: "Campaigns", href: "/campaigns" };
+
+// Configuration is shown to anyone holding at least one configuration-related
+// permission (MANAGE_CAPACITY or CONFIGURE_SCREENING), and only inside a
+// campaign — its sections are per-campaign.
+const CONFIG_SEGMENT = "configuration";
+
+// Activity Log is a platform-wide page gated by VIEW_ACTIVITY_LOG.
+const ACTIVITY_LOG_ITEM = {
+  icon: "receipt_long",
+  label: "Activity Log",
+  href: "/activity-log",
+};
 
 // Admin Settings is only shown to holders of MANAGE_ACCOUNTS.
 const ADMIN_ITEM = {
@@ -24,18 +86,55 @@ const ADMIN_ITEM = {
   href: "/admin/permissions",
 };
 
-export function SidebarNav({
-  canManageAccounts,
-}: {
-  canManageAccounts: boolean;
-}) {
+/** Extract the campaignId from a /campaigns/[id]/… path, else null. */
+function campaignIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/campaigns\/([^/]+)(?:\/|$)/);
+  return match ? match[1] : null;
+}
+
+export function SidebarNav({ permissions }: { permissions: PermissionKey[] }) {
   const pathname = usePathname();
-  const items = canManageAccounts ? [...NAV, ADMIN_ITEM] : NAV;
+  const held = new Set(permissions);
+  const campaignId = campaignIdFromPath(pathname);
+
+  type Item = { icon: string; label: string; href: string };
+  const items: Item[] = [CAMPAIGNS_ITEM];
+
+  // Campaign-scoped links only make sense while inside a campaign.
+  if (campaignId) {
+    for (const n of CAMPAIGN_NAV) {
+      if (!n.permission || held.has(n.permission)) {
+        items.push({
+          icon: n.icon,
+          label: n.label,
+          href: `/campaigns/${campaignId}/${n.segment}`,
+        });
+      }
+    }
+    if (CONFIGURATION_PERMISSIONS.some((p) => held.has(p))) {
+      items.push({
+        icon: "tune",
+        label: "Configuration",
+        href: `/campaigns/${campaignId}/${CONFIG_SEGMENT}`,
+      });
+    }
+  }
+
+  // Platform-wide items — always available (gated by permission), independent
+  // of campaign context.
+  if (held.has(PLATFORM_PAGE_PERMISSIONS["/activity-log"])) {
+    items.push(ACTIVITY_LOG_ITEM);
+  }
+  if (held.has(PermissionKey.MANAGE_ACCOUNTS)) {
+    items.push(ADMIN_ITEM);
+  }
 
   function isActive(href: string) {
-    // Admin Settings stays highlighted across all /admin/* pages; the others
-    // match their own path (and any nested routes they may later gain).
+    // Admin Settings stays highlighted across all /admin/* pages.
     if (href === ADMIN_ITEM.href) return pathname.startsWith("/admin");
+    // The Campaigns list is active only on the list itself, not when inside a
+    // campaign (the campaign-scoped items own that highlight).
+    if (href === CAMPAIGNS_ITEM.href) return pathname === "/campaigns";
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 

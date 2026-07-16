@@ -11,6 +11,11 @@ export type ShellUser = {
   userSubtitle: string;
   /** Holder of MANAGE_ACCOUNTS — gates admin-only shell controls. */
   canManageAccounts: boolean;
+  /**
+   * Every permission this user holds, so the sidebar can render only the nav
+   * links they can actually reach (checked against the route-permission maps).
+   */
+  permissions: PermissionKey[];
 };
 
 // Identity + display data for the app shell, shared by every authenticated
@@ -31,9 +36,8 @@ export async function getShellUser(): Promise<ShellUser> {
     },
   });
 
-  const canManageAccounts =
-    user?.permissions.some((p) => p.permission === PermissionKey.MANAGE_ACCOUNTS) ??
-    false;
+  const permissions = user?.permissions.map((p) => p.permission) ?? [];
+  const canManageAccounts = permissions.includes(PermissionKey.MANAGE_ACCOUNTS);
   const templateLabel = user?.roleTemplate
     ? ROLE_TEMPLATE_LABELS[user.roleTemplate.name]
     : "Member";
@@ -43,5 +47,6 @@ export async function getShellUser(): Promise<ShellUser> {
     userName: user?.name ?? "Member",
     userSubtitle: user ? `${templateLabel} · ${user.committee}` : "Member",
     canManageAccounts,
+    permissions,
   };
 }

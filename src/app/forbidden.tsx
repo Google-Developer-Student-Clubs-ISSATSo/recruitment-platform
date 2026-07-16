@@ -13,10 +13,10 @@ export default function Forbidden() {
           is a mistake, contact a TM Lead.
         </p>
         <Link
-          href="/"
+          href="/campaigns"
           className="mt-6 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
         >
-          Back to dashboard
+          Back to campaigns
         </Link>
       </div>
     </main>

@@ -13,6 +13,7 @@ const ACTION_LABELS: Record<string, string> = {
   PERMISSIONS_RESET: "reset permissions to template defaults",
   ADMIN_TRANSFER_INITIATED: "initiated an admin transfer",
   ADMIN_TRANSFER_CANCELLED: "cancelled an admin transfer",
+  CAMPAIGN_CREATED: "created a campaign",
 };
 
 /** "PERMISSION_GRANTED" -> "granted a permission" (falls back to a humanized form). */
@@ -42,6 +43,7 @@ export type ActivityTone =
 // green, destructive is red, sensitive/reversible is amber, auth is blue.
 const ACTION_TONES: Record<string, ActivityTone> = {
   USER_CREATED: "accepted",
+  CAMPAIGN_CREATED: "accepted",
   PERMISSION_GRANTED: "accepted",
   USER_DELETED: "rejected",
   PERMISSION_REVOKED: "rejected",

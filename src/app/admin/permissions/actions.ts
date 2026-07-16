@@ -16,6 +16,22 @@ const ADMIN = PermissionKey.MANAGE_ACCOUNTS;
 const PATH = "/admin/permissions";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// The TM Lead's permissions are fixed by definition — the full set — and their
+// account is not removable from this screen. Any mutation targeting a TM_LEAD
+// user is rejected server-side, not merely hidden in the UI. Throwing here
+// surfaces as a clear error to a caller that reaches the action directly.
+async function assertNotLead(userId: string): Promise<void> {
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { roleTemplate: { select: { name: true } } },
+  });
+  if (target?.roleTemplate?.name === RoleTemplateName.TM_LEAD) {
+    throw new Error(
+      "The TM Lead's permissions are fixed and cannot be modified.",
+    );
+  }
+}
+
 export type CreateUserState = {
   status: "idle" | "success" | "error";
   message?: string;
@@ -107,6 +123,9 @@ export async function deleteUser(userId: string): Promise<void> {
   // the admin role is what Transfer Admin Role is for.
   if (userId === actorId) return;
 
+  // The TM Lead is not removable from here either.
+  await assertNotLead(userId);
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true, name: true },
@@ -136,6 +155,7 @@ export async function togglePermission(
   grant: boolean,
 ): Promise<void> {
   const actorId = await requirePermission(ADMIN);
+  await assertNotLead(userId);
 
   if (grant) {
     const existing = await prisma.userPermission.findFirst({
@@ -169,6 +189,7 @@ export async function togglePermission(
 // truth — we do not trust a template passed from the client or infer one.
 export async function resetToTemplate(userId: string): Promise<void> {
   const actorId = await requirePermission(ADMIN);
+  await assertNotLead(userId);
 
   const user = await prisma.user.findUnique({
     where: { id: userId },

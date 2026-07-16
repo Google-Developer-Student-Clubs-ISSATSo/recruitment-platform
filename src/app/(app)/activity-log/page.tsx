@@ -19,9 +19,10 @@ type EntryRow = {
   actor: { name: string | null } | null;
 };
 
-// The /admin layout guards MANAGE_ACCOUNTS; this page adds the finer
-// VIEW_ACTIVITY_LOG check so the log itself stays separately gated. The shell
-// is provided by the layout.
+// A top-level, platform-wide route (NOT under /admin). It carries its own
+// VIEW_ACTIVITY_LOG guard, independent of the /admin MANAGE_ACCOUNTS gate — so
+// a user granted only VIEW_ACTIVITY_LOG can reach it. The shell comes from the
+// (app) layout.
 export default async function ActivityLogPage() {
   await requirePermission(PermissionKey.VIEW_ACTIVITY_LOG);
 
