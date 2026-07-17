@@ -181,6 +181,12 @@ model Campaign {
   isOpen    Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  // Set when Phase 1 selection is committed (applicant statuses written to
+  // SHORTLISTED / REJECTED_PHASE1). Null until then. Non-null is what makes the
+  // selection page treat further recalculation/finalization as a risk rather
+  // than a routine action — by that point applicants may already be emailed.
+  phaseOneFinalizedAt DateTime?
+
   applicants        Applicant[]
   phaseOneQuestions PhaseOneQuestion[]
   phaseOneConfig    PhaseOneConfig?
@@ -224,6 +230,8 @@ enum PhaseOneClassification {
   AUTO_ACCEPT
   AUTO_REJECT
   TO_DISCUSS
+  MANUAL_ACCEPT // TM team resolved a TO_DISCUSS case to accept
+  MANUAL_REJECT // TM team resolved a TO_DISCUSS case to reject
 }
 
 model PhaseOneQuestion {

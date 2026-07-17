@@ -48,6 +48,12 @@ const CAMPAIGN_NAV: {
     permission: CAMPAIGN_PAGE_PERMISSIONS["phase1"],
   },
   {
+    icon: "trophy",
+    label: "Phase 1 Selection",
+    segment: "phase1/selection",
+    permission: CAMPAIGN_PAGE_PERMISSIONS["phase1/selection"],
+  },
+  {
     icon: "video_chat",
     label: "Interviews",
     segment: "interviews",
@@ -133,7 +139,7 @@ export function SidebarNav({ permissions }: { permissions: PermissionKey[] }) {
     items.push(ADMIN_ITEM);
   }
 
-  function isActive(href: string) {
+  function matches(href: string) {
     // Admin Settings stays highlighted across all /admin/* pages.
     if (href === ADMIN_ITEM.href) return pathname.startsWith("/admin");
     // The Campaigns list is active only on the list itself, not when inside a
@@ -142,10 +148,18 @@ export function SidebarNav({ permissions }: { permissions: PermissionKey[] }) {
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
+  // Only the most specific matching link highlights. Some hrefs are prefixes of
+  // others (/phase1 vs. /phase1/selection), and a plain prefix test would light
+  // up both, so the longest match wins.
+  const activeHref = items
+    .map((n) => n.href)
+    .filter(matches)
+    .sort((a, b) => b.length - a.length)[0];
+
   return (
     <nav className="flex-1 space-y-1 px-3">
       {items.map((n) => {
-        const active = isActive(n.href);
+        const active = n.href === activeHref;
         return (
           <Link
             key={n.href}

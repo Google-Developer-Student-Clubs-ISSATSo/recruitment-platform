@@ -14,6 +14,11 @@ const ACTION_LABELS: Record<string, string> = {
   ADMIN_TRANSFER_INITIATED: "initiated an admin transfer",
   ADMIN_TRANSFER_CANCELLED: "cancelled an admin transfer",
   CAMPAIGN_CREATED: "created a campaign",
+  PHASE1_SCORE_ENTERED: "entered a Phase 1 score",
+  PHASE1_TECHNICAL_SCORE_ENTERED: "entered a technical score",
+  PHASE1_RANKING_RECALCULATED: "recalculated the Phase 1 ranking",
+  PHASE1_MANUAL_RESOLUTION: "resolved a Phase 1 discussion",
+  PHASE1_FINALIZED: "finalized Phase 1 selection",
 };
 
 /** "PERMISSION_GRANTED" -> "granted a permission" (falls back to a humanized form). */
@@ -53,6 +58,13 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   SIGNED_IN: "primary",
   SIGNED_OUT: "primary",
   MAGIC_LINK_REQUESTED: "primary",
+  PHASE1_SCORE_ENTERED: "primary",
+  PHASE1_TECHNICAL_SCORE_ENTERED: "primary",
+  PHASE1_RANKING_RECALCULATED: "pending",
+  // A human overriding the algorithm, and the irreversible commit — both
+  // sensitive enough to stand out in the log.
+  PHASE1_MANUAL_RESOLUTION: "pending",
+  PHASE1_FINALIZED: "accepted",
 };
 
 export function actionTone(actionType: string): ActivityTone {

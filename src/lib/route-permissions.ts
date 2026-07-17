@@ -21,6 +21,11 @@ export const CAMPAIGN_PAGE_PERMISSIONS = {
   // (they get a restricted view). Per-question editability is enforced inside
   // the page and the save action.
   phase1: [PermissionKey.SCREEN_PHASE1, PermissionKey.ENTER_TECHNICAL_SCORE],
+  // Selection is SCREEN_PHASE1 only — deliberately narrower than the scoring
+  // queue above. The ranked view is built entirely from weighted totals, which
+  // the technical-only viewer is never shown (they score one question and see
+  // no aggregate), so ENTER_TECHNICAL_SCORE must not open this page.
+  "phase1/selection": PermissionKey.SCREEN_PHASE1,
   interviews: PermissionKey.CLAIM_PANEL_SEAT,
   "final-decision": PermissionKey.ENTER_FINAL_DECISION,
   statistics: PermissionKey.VIEW_STATISTICS,
