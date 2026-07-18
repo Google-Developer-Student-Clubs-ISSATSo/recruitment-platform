@@ -18,7 +18,11 @@ const ACTION_LABELS: Record<string, string> = {
   PHASE1_TECHNICAL_SCORE_ENTERED: "entered a technical score",
   PHASE1_RANKING_RECALCULATED: "recalculated the Phase 1 ranking",
   PHASE1_MANUAL_RESOLUTION: "resolved a Phase 1 discussion",
+  PHASE1_MANUAL_OVERRIDE: "manually overrode a Phase 1 classification",
+  PHASE1_OVERRIDE_REVERTED: "reverted a Phase 1 override to automatic",
   PHASE1_FINALIZED: "finalized Phase 1 selection",
+  GDG_DAY_DETAILS_SET: "set the GDG Day details",
+  PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
 };
 
 /** "PERMISSION_GRANTED" -> "granted a permission" (falls back to a humanized form). */
@@ -64,7 +68,13 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // A human overriding the algorithm, and the irreversible commit — both
   // sensitive enough to stand out in the log.
   PHASE1_MANUAL_RESOLUTION: "pending",
+  PHASE1_MANUAL_OVERRIDE: "pending",
+  PHASE1_OVERRIDE_REVERTED: "pending",
   PHASE1_FINALIZED: "accepted",
+  GDG_DAY_DETAILS_SET: "primary",
+  // Emailing applicants their outcome is the outward-facing, hard-to-undo act —
+  // it stands out in the log alongside finalization.
+  PHASE1_EMAILS_SENT: "accepted",
 };
 
 export function actionTone(actionType: string): ActivityTone {

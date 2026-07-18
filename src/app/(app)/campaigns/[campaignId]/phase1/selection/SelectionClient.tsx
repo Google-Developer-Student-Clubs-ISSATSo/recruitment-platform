@@ -8,8 +8,9 @@ import { Icon } from "@/components/app-shell/icon";
 import { PhaseOneClassification } from "@/generated/prisma/enums";
 import {
   finalizePhaseOneAction,
+  manualOverrideAction,
   recalculateRankingAction,
-  resolveToDiscussAction,
+  revertOverrideAction,
 } from "./actions";
 import { ClassificationBadge } from "./classification-badge";
 
@@ -182,11 +183,20 @@ export function SelectionClient({
     });
   }
 
-  function resolve(applicantId: string, outcome: "ACCEPT" | "REJECT") {
+  function override(applicantId: string, outcome: "ACCEPT" | "REJECT") {
     setError(null);
     setNotice(null);
     startTransition(async () => {
-      const res = await resolveToDiscussAction(campaignId, applicantId, outcome);
+      const res = await manualOverrideAction(campaignId, applicantId, outcome);
+      if (!res.ok) setError(res.error);
+    });
+  }
+
+  function revert(applicantId: string) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const res = await revertOverrideAction(campaignId, applicantId);
       if (!res.ok) setError(res.error);
     });
   }
@@ -413,8 +423,8 @@ export function SelectionClient({
                 <th className="w-40 px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
                   Classification
                 </th>
-                <th className="w-48 px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
-                  Resolution
+                <th className="w-64 px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
+                  Manual Override
                 </th>
               </tr>
             </thead>
@@ -423,6 +433,11 @@ export function SelectionClient({
                 const isRejected = REJECTED.includes(row.classification);
                 const isToDiscuss =
                   row.classification === PhaseOneClassification.TO_DISCUSS;
+                const isManualAccept =
+                  row.classification === PhaseOneClassification.MANUAL_ACCEPT;
+                const isManualReject =
+                  row.classification === PhaseOneClassification.MANUAL_REJECT;
+                const isManual = isManualAccept || isManualReject;
                 return (
                   <tr
                     key={row.applicantId}
@@ -449,29 +464,52 @@ export function SelectionClient({
                     <td className="px-4 py-3">
                       <ClassificationBadge value={row.classification} />
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {isToDiscuss ? (
-                        <span className="inline-flex gap-2">
+                    {/* Every row can be manually overridden, regardless of its
+                        current classification. The button matching the current
+                        manual decision is disabled to show it's already set;
+                        Revert (manual rows only) hands the row back to the
+                        algorithm on the next recalculation. */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          disabled={pending || isManualAccept}
+                          className="bg-status-accepted text-white hover:bg-status-accepted/85"
+                          title={
+                            isManualAccept
+                              ? "Already manually accepted"
+                              : "Manually accept this applicant"
+                          }
+                          onClick={() => override(row.applicantId, "ACCEPT")}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={pending || isManualReject}
+                          title={
+                            isManualReject
+                              ? "Already manually rejected"
+                              : "Manually reject this applicant"
+                          }
+                          onClick={() => override(row.applicantId, "REJECT")}
+                        >
+                          Reject
+                        </Button>
+                        {isManual && (
                           <Button
                             size="sm"
+                            variant="ghost"
                             disabled={pending}
-                            className="bg-status-accepted text-white hover:bg-status-accepted/85"
-                            onClick={() => resolve(row.applicantId, "ACCEPT")}
+                            title="Clear the manual override; the next recalculation reclassifies automatically"
+                            onClick={() => revert(row.applicantId)}
                           >
-                            Accept
+                            <Icon name="undo" className="text-[16px]" />
+                            Revert
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={pending}
-                            onClick={() => resolve(row.applicantId, "REJECT")}
-                          >
-                            Reject
-                          </Button>
-                        </span>
-                      ) : (
-                        <span className="text-xs text-neutral-400">—</span>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

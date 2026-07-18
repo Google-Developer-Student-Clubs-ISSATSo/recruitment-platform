@@ -33,6 +33,7 @@ model User {
   activityLogs        ActivityLogEntry[]
   sentInvites         AdminTransferInvite[] @relation("InviteInitiator")
   phaseOneScoresGiven PhaseOneScore[]
+  emailLogsSent       EmailLog[]
 }
 
 model Account {
@@ -187,9 +188,17 @@ model Campaign {
   // than a routine action — by that point applicants may already be emailed.
   phaseOneFinalizedAt DateTime?
 
+  // GDG Day logistics, interpolated into the Phase 1 acceptance email. Kept on
+  // the campaign (not hardcoded in the template like last year's version) so the
+  // date/time/location can differ per recruitment cycle. Null until the TM Lead
+  // sets them on the selection page — required before acceptance emails send.
+  gdgDayDateTime DateTime?
+  gdgDayLocation String?
+
   applicants        Applicant[]
   phaseOneQuestions PhaseOneQuestion[]
   phaseOneConfig    PhaseOneConfig?
+  emailLogs         EmailLog[]
 }
 
 enum ApplicantStatus {
@@ -219,6 +228,7 @@ model Applicant {
   campaign        Campaign         @relation(fields: [campaignId], references: [id])
   phaseOneScores  PhaseOneScore[]
   phaseOneResult  PhaseOneResult?
+  emailLogs       EmailLog[]
 
   @@unique([campaignId, email])
 }
@@ -289,4 +299,25 @@ model PhaseOneConfig {
   targetCount     Int?
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+// ============ EMAIL LOG ============
+
+// One row per outbound templated email send *attempt*. Both SENT and FAILED are
+// recorded so a batch can report a summary and, on a later run, skip anyone
+// already emailed for a given template+campaign (duplicate-send prevention on
+// the Phase 1 Selection page keys off these rows).
+model EmailLog {
+  id           String   @id @default(cuid())
+  applicantId  String
+  campaignId   String
+  templateKey  String // e.g. "PHASE1_REJECTION", "PHASE1_ACCEPTANCE"
+  status       String // "SENT" or "FAILED"
+  errorMessage String?
+  sentAt       DateTime @default(now())
+  sentById     String
+
+  applicant Applicant @relation(fields: [applicantId], references: [id])
+  campaign  Campaign  @relation(fields: [campaignId], references: [id])
+  sentBy    User      @relation(fields: [sentById], references: [id])
 }
