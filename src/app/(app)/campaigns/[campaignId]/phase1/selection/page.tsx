@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requirePermission, hasPermission } from "@/lib/permissions";
 import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
-import { phaseOneCohortWhere, bufferFor } from "@/lib/phase1-ranking";
+import { phaseOneCohortWhere } from "@/lib/phase1-ranking";
 import { PHASE1_TEMPLATE } from "@/lib/phase1-email-templates";
 import { formatGdgDayDateTime } from "@/emails/PhaseOneAcceptanceEmail";
 import {
@@ -50,42 +50,53 @@ export default async function Phase1SelectionPage({
     { redirectTo: `/campaigns/${campaignId}/dashboard?denied=1` },
   );
 
-  const [campaign, config, activeQuestions, applicants, emailLogs, canSendEmails] =
-    await Promise.all([
-      prisma.campaign.findUnique({
-        where: { id: campaignId },
-        select: {
-          phaseOneFinalizedAt: true,
-          gdgDayDateTime: true,
-          gdgDayLocation: true,
+  const [
+    campaign,
+    config,
+    activeQuestions,
+    applicants,
+    emailLogs,
+    canSendEmails,
+  ] = await Promise.all([
+    prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: {
+        phaseOneFinalizedAt: true,
+        gdgDayDateTime: true,
+        gdgDayLocation: true,
+      },
+    }),
+    prisma.phaseOneConfig.findUnique({
+      where: { campaignId },
+      select: { rejectThreshold: true, targetCount: true },
+    }),
+    prisma.phaseOneQuestion.findMany({
+      where: { campaignId, isActive: true },
+      select: { id: true },
+    }),
+    prisma.applicant.findMany({
+      where: phaseOneCohortWhere(campaignId),
+      select: {
+        id: true,
+        fullName: true,
+        status: true,
+        phaseOneScores: { select: { questionId: true } },
+        phaseOneResult: {
+          select: { weightedTotal: true, rank: true, classification: true },
         },
-      }),
-      prisma.phaseOneConfig.findUnique({
-        where: { campaignId },
-        select: { rejectThreshold: true, targetCount: true },
-      }),
-      prisma.phaseOneQuestion.findMany({
-        where: { campaignId, isActive: true },
-        select: { id: true },
-      }),
-      prisma.applicant.findMany({
-        where: phaseOneCohortWhere(campaignId),
-        select: {
-          id: true,
-          fullName: true,
-          status: true,
-          phaseOneScores: { select: { questionId: true } },
-          phaseOneResult: {
-            select: { weightedTotal: true, rank: true, classification: true },
-          },
-        },
-      }),
-      prisma.emailLog.findMany({
-        where: { campaignId },
-        select: { applicantId: true, templateKey: true, status: true, sentAt: true },
-      }),
-      hasPermission(userId, PermissionKey.SEND_EMAILS),
-    ]);
+      },
+    }),
+    prisma.emailLog.findMany({
+      where: { campaignId },
+      select: {
+        applicantId: true,
+        templateKey: true,
+        status: true,
+        sentAt: true,
+      },
+    }),
+    hasPermission(userId, PermissionKey.SEND_EMAILS),
+  ]);
 
   // Completeness is recomputed here rather than read from a column so the
   // "still incomplete" line stays honest between recalculations — someone may
@@ -94,7 +105,9 @@ export default async function Phase1SelectionPage({
   const activeQuestionCount = activeQuestions.length;
 
   const rows: SelectionRow[] = applicants.map((a) => {
-    const scored = a.phaseOneScores.filter((s) => activeIds.has(s.questionId)).length;
+    const scored = a.phaseOneScores.filter((s) =>
+      activeIds.has(s.questionId),
+    ).length;
     return {
       applicantId: a.id,
       fullName: a.fullName,
@@ -151,7 +164,6 @@ export default async function Phase1SelectionPage({
         initialRows={rows}
         targetCount={config?.targetCount ?? null}
         rejectThreshold={config?.rejectThreshold ?? null}
-        buffer={config?.targetCount != null ? bufferFor(config.targetCount) : null}
         finalizedAtISO={campaign?.phaseOneFinalizedAt?.toISOString() ?? null}
       />
 
@@ -160,7 +172,9 @@ export default async function Phase1SelectionPage({
           campaignId={campaignId}
           canSendEmails={canSendEmails}
           gdgDayInputValue={
-            campaign?.gdgDayDateTime ? tunisInputValue(campaign.gdgDayDateTime) : null
+            campaign?.gdgDayDateTime
+              ? tunisInputValue(campaign.gdgDayDateTime)
+              : null
           }
           gdgDayDisplay={
             campaign?.gdgDayDateTime

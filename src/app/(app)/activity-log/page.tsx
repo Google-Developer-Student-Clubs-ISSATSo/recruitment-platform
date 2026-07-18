@@ -23,20 +23,66 @@ type EntryRow = {
 // VIEW_ACTIVITY_LOG guard, independent of the /admin MANAGE_ACCOUNTS gate — so
 // a user granted only VIEW_ACTIVITY_LOG can reach it. The shell comes from the
 // (app) layout.
-export default async function ActivityLogPage() {
+/** Entries per page. The log grows without bound, so it is never fetched whole. */
+const PAGE_SIZE = 10;
+
+/** A calendar date string (yyyy-mm-dd) from an <input type="date">, or null. */
+function parseDate(value: string | undefined, endOfDay: boolean): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(endOfDay ? `${value}T23:59:59.999` : `${value}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export default async function ActivityLogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    page?: string;
+    actor?: string;
+    action?: string;
+    from?: string;
+    to?: string;
+  }>;
+}) {
   await requirePermission(PermissionKey.VIEW_ACTIVITY_LOG);
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
+  const params = await searchParams;
+
+  // Clamped below once the real filtered total is known; parsed defensively here
+  // so a hand-edited ?page=abc or ?page=-3 can't produce a negative skip.
+  const requestedPage = Math.max(1, Number(params.page) || 1);
+
+  const actorId = params.actor?.trim() || null;
+  const actionType = params.action?.trim() || null;
+  const from = parseDate(params.from, false);
+  // Inclusive: filtering "to 2026-07-18" must include everything logged that
+  // day, so the bound is the end of it rather than midnight at its start.
+  const to = parseDate(params.to, true);
+
+  // The one `where` used by BOTH the page query and the count that derives
+  // pageCount. Building it once is what keeps the two from disagreeing — a
+  // filtered list paired with an unfiltered total would page into empty results.
+  const where = {
+    ...(actorId ? { actorId } : {}),
+    ...(actionType ? { actionType } : {}),
+    ...(from || to
+      ? { createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+      : {}),
+  };
+
   const [entries, total, actionsToday, securityEvents, mostActiveGroup] =
     await Promise.all([
       prisma.activityLogEntry.findMany({
+        where,
         orderBy: { createdAt: "desc" },
-        take: 100,
+        skip: (requestedPage - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
         include: { actor: { select: { name: true } } },
       }),
-      prisma.activityLogEntry.count(),
+      prisma.activityLogEntry.count({ where }),
       prisma.activityLogEntry.count({
         where: { createdAt: { gte: startOfToday } },
       }),
@@ -50,6 +96,25 @@ export default async function ActivityLogPage() {
         take: 1,
       }),
     ]);
+
+  // Filter options describe the WHOLE log, not the ten rows on this page and not
+  // the current filter — deriving them from `entries` would make the dropdowns
+  // change contents as you page, and deriving them from the filtered set would
+  // strand you on a selection you couldn't undo.
+  const [distinctActions, actors] = await Promise.all([
+    prisma.activityLogEntry.findMany({
+      distinct: ["actionType"],
+      select: { actionType: true },
+      orderBy: { actionType: "asc" },
+    }),
+    // Filtering is by id, not name: two members can share a display name, and an
+    // id survives a rename.
+    prisma.user.findMany({
+      where: { activityLogs: { some: {} } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const rows: ActivityLogRow[] = entries.map((e: EntryRow) => ({
     id: e.id,
@@ -76,7 +141,25 @@ export default async function ActivityLogPage() {
     mostActiveUser,
   };
 
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(requestedPage, pageCount);
+
   return (
-    <ActivityLogList rows={rows} total={total} summary={summary} />
+    <ActivityLogList
+      rows={rows}
+      total={total}
+      summary={summary}
+      page={page}
+      pageCount={pageCount}
+      pageSize={PAGE_SIZE}
+      actorOptions={actors.map((a) => ({ id: a.id, name: a.name ?? "Unnamed" }))}
+      actionOptions={distinctActions.map((a) => a.actionType)}
+      filters={{
+        actor: actorId ?? "",
+        action: actionType ?? "",
+        from: params.from ?? "",
+        to: params.to ?? "",
+      }}
+    />
   );
 }

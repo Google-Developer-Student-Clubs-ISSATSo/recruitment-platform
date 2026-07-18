@@ -16,6 +16,7 @@ type CampaignRow = {
   name: string;
   isOpen: boolean;
   createdAt: Date;
+  _count: { applicants: number };
 };
 
 // Post-login landing page. Lists every campaign the current user is allowed to
@@ -39,7 +40,12 @@ export default async function CampaignsPage({
       hasAnyPermission(userId, CAMPAIGN_ACCESS_PERMISSIONS),
       hasAnyPermission(userId, CAMPAIGN_HISTORY_PERMISSIONS),
       hasAnyPermission(userId, CAMPAIGN_CREATE_PERMISSIONS),
-      prisma.campaign.findMany({ orderBy: { createdAt: "desc" } }),
+      // The applicant count is shown on each row and, more importantly, spelled
+      // out in the delete confirmation so nobody discards a pool blind.
+      prisma.campaign.findMany({
+        orderBy: { createdAt: "desc" },
+        include: { _count: { select: { applicants: true } } },
+      }),
     ],
   );
 
@@ -50,12 +56,13 @@ export default async function CampaignsPage({
       name: c.name,
       isOpen: c.isOpen,
       createdAtISO: c.createdAt.toISOString(),
+      applicantCount: c._count.applicants,
     }));
 
   return (
     <CampaignList
       campaigns={visible}
-      canCreate={canCreate}
+      canManage={canCreate}
       denied={denied === "1"}
     />
   );

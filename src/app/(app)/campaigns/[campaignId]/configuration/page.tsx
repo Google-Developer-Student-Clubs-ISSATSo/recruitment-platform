@@ -36,7 +36,11 @@ export default async function ConfigurationPage({
   const hasAnyConfigAccess = canCapacity || canScreening;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    // Widened from max-w-3xl to match the activity log and the Stitch reference's
+    // 1440px content area: the scoring section is a two-column bento grid whose
+    // lg: breakpoint never fires inside a 768px container, and whose question rows
+    // carry ~400px of fixed columns before the question text gets any room.
+    <div className="mx-auto max-w-[1440px] space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Configuration</h1>
         <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">

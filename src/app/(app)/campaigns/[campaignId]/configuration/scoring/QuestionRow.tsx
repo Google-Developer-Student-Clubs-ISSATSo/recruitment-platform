@@ -9,11 +9,17 @@ import { Input } from "@/components/ui/input";
 import { NoteScaleEditor } from "./NoteScaleEditor";
 import type { QuestionDTO } from "./actions";
 
-// A single editable question row. Fully controlled by the manager: text and
-// coefficient stream up live (so the running total updates as you type) and
-// persist on blur; the note scale, the two toggles, and reordering persist
-// immediately. Delete is guarded by a ConfirmDialog that explicitly warns when
-// scores already reference the question (they cascade-delete).
+// A single editable question row, laid out as its own card in the columns the
+// Stitch scoring_configuration screen defines: order/reorder, question details,
+// coefficient, grade scale, delete. The column widths here are kept in lockstep
+// with the header strip in ScoringConfigManager — change one and you must change
+// the other or the headings stop lining up.
+//
+// Behaviour is unchanged: fully controlled by the manager, text and coefficient
+// stream up live (so the running total updates as you type) and persist on blur;
+// the note scale, the two toggles, and reordering persist immediately. Delete is
+// guarded by a ConfirmDialog that explicitly warns when scores already reference
+// the question (they cascade-delete).
 export function QuestionRow({
   question,
   index,
@@ -50,115 +56,119 @@ export function QuestionRow({
 
   return (
     <div
-      className={`border-b border-neutral-100 p-4 last:border-0 dark:border-neutral-800/60 ${
-        question.isActive ? "" : "bg-neutral-50/60 dark:bg-neutral-950/30"
+      className={`group flex items-start gap-4 rounded-xl border border-neutral-200 px-6 py-4 transition-all duration-200 hover:shadow-md dark:border-neutral-800 ${
+        question.isActive
+          ? "bg-white dark:bg-neutral-900"
+          : "bg-neutral-50/60 dark:bg-neutral-950/30"
       }`}
     >
-      <div className="flex items-start gap-3">
-        {/* Reorder controls + order badge */}
-        <div className="flex flex-col items-center gap-1 pt-1">
-          <button
-            type="button"
-            onClick={onMoveUp}
-            disabled={disabled || index === 0}
-            aria-label="Move question up"
-            className="text-neutral-400 transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-30"
+      {/* Order + reorder — the reference's drag handle column. Kept as explicit
+          up/down controls because they are real, keyboard-reachable actions
+          rather than the decorative handle in the mockup. */}
+      <div className="flex w-10 shrink-0 flex-col items-center gap-0.5 pt-1">
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={disabled || index === 0}
+          aria-label="Move question up"
+          className="text-neutral-300 transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-30 group-hover:text-neutral-400 dark:text-neutral-600"
+        >
+          <Icon name="keyboard_arrow_up" className="text-[20px]" />
+        </button>
+        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-100 text-xs font-bold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+          {index + 1}
+        </span>
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={disabled || index === count - 1}
+          aria-label="Move question down"
+          className="text-neutral-300 transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-30 group-hover:text-neutral-400 dark:text-neutral-600"
+        >
+          <Icon name="keyboard_arrow_down" className="text-[20px]" />
+        </button>
+      </div>
+
+      {/* Question details: the text itself, then the two toggles as its
+          supporting line — the slot the reference fills with a description. */}
+      <div className="min-w-0 flex-1 space-y-2.5 pt-1">
+        <Input
+          value={question.text}
+          disabled={disabled}
+          onChange={(e) => onTextInput(e.target.value)}
+          onBlur={onCommitText}
+          placeholder="Question text"
+          aria-label="Question text"
+          className="font-medium"
+        />
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <ToggleRow
+            label="Active"
+            hint={question.isActive ? "Counted in the total" : "Excluded from the total"}
+            on={question.isActive}
+            disabled={disabled}
+            onToggle={onToggleActive}
+          />
+          <ToggleRow
+            label="Scored by Technical Scorer instead of TM Reviewers"
+            hint={
+              question.requiresTechnicalScorer
+                ? "Hidden from the Phase 1 Scoring Queue"
+                : undefined
+            }
+            on={question.requiresTechnicalScorer}
+            disabled={disabled}
+            onToggle={onToggleTechnical}
+          />
+        </div>
+      </div>
+
+      {/* Coefficient */}
+      <div className="flex w-32 shrink-0 justify-center pt-1">
+        <div className="relative w-20">
+          <Input
+            type="number"
+            min={0}
+            step="any"
+            value={question.coefficient}
+            disabled={disabled}
+            onChange={(e) => {
+              const n = e.target.valueAsNumber;
+              onCoefficientInput(Number.isNaN(n) ? 0 : n);
+            }}
+            onBlur={onCommitCoefficient}
+            aria-label="Coefficient"
+            className="pr-5 text-center tabular-nums"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400"
           >
-            <Icon name="keyboard_arrow_up" className="text-[20px]" />
-          </button>
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-100 text-xs font-bold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-            {index + 1}
+            ×
           </span>
-          <button
-            type="button"
-            onClick={onMoveDown}
-            disabled={disabled || index === count - 1}
-            aria-label="Move question down"
-            className="text-neutral-400 transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-30"
-          >
-            <Icon name="keyboard_arrow_down" className="text-[20px]" />
-          </button>
         </div>
+      </div>
 
-        {/* Main body */}
-        <div className="min-w-0 flex-1 space-y-3">
-          {/* Text + coefficient + delete */}
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Question
-              </label>
-              <Input
-                value={question.text}
-                disabled={disabled}
-                onChange={(e) => onTextInput(e.target.value)}
-                onBlur={onCommitText}
-                placeholder="Question text"
-              />
-            </div>
-            <div className="w-24 shrink-0">
-              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Coefficient
-              </label>
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                value={question.coefficient}
-                disabled={disabled}
-                onChange={(e) => {
-                  const n = e.target.valueAsNumber;
-                  onCoefficientInput(Number.isNaN(n) ? 0 : n);
-                }}
-                onBlur={onCommitCoefficient}
-                className="tabular-nums"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setDeleteOpen(true)}
-              disabled={disabled}
-              aria-label="Delete question"
-              className="mt-6 text-neutral-400 transition-colors hover:text-status-rejected disabled:opacity-50"
-            >
-              <Trash2 className="size-[18px]" aria-hidden />
-            </button>
-          </div>
+      {/* Grade scale */}
+      <div className="w-56 shrink-0 pl-2 pt-2">
+        <NoteScaleEditor
+          value={question.noteScale}
+          disabled={disabled}
+          onChange={onNoteScaleChange}
+        />
+      </div>
 
-          {/* Note scale */}
-          <div>
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-              Note scale
-            </label>
-            <NoteScaleEditor
-              value={question.noteScale}
-              disabled={disabled}
-              onChange={onNoteScaleChange}
-            />
-          </div>
-
-          {/* Toggles */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-1">
-            <ToggleRow
-              label="Active"
-              hint={question.isActive ? "Counted in the total" : "Excluded from the total"}
-              on={question.isActive}
-              disabled={disabled}
-              onToggle={onToggleActive}
-            />
-            <ToggleRow
-              label="Scored by Technical Scorer instead of TM Reviewers"
-              hint={
-                question.requiresTechnicalScorer
-                  ? "Hidden from the Phase 1 Scoring Queue"
-                  : undefined
-              }
-              on={question.requiresTechnicalScorer}
-              disabled={disabled}
-              onToggle={onToggleTechnical}
-            />
-          </div>
-        </div>
+      {/* Delete */}
+      <div className="flex w-12 shrink-0 justify-end pt-2">
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(true)}
+          disabled={disabled}
+          aria-label="Delete question"
+          className="p-1 text-neutral-400 transition-colors hover:text-status-rejected disabled:opacity-50"
+        >
+          <Trash2 className="size-[18px]" aria-hidden />
+        </button>
       </div>
 
       <ConfirmDialog

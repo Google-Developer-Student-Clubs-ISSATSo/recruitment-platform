@@ -44,17 +44,20 @@ export async function ScoringConfigSection({
     scoreCount: q._count.scores,
   }));
 
+  // The thresholds form is handed to the manager as its sidebar slot rather than
+  // rendered as a sibling: the summary column it sits in is driven by the
+  // manager's live question state, so that component owns the two-column layout.
   return (
-    <div className="space-y-6">
-      <ScoringConfigManager
-        campaignId={campaignId}
-        initialQuestions={questions}
-      />
-      <PhaseOneConfigForm
-        campaignId={campaignId}
-        rejectThreshold={config?.rejectThreshold ?? null}
-        targetCount={config?.targetCount ?? null}
-      />
-    </div>
+    <ScoringConfigManager
+      campaignId={campaignId}
+      initialQuestions={questions}
+      sidebar={
+        <PhaseOneConfigForm
+          campaignId={campaignId}
+          rejectThreshold={config?.rejectThreshold ?? null}
+          targetCount={config?.targetCount ?? null}
+        />
+      }
+    />
   );
 }

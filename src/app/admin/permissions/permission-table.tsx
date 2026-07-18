@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
+import Link from "next/link";
 
 import { Committee, PermissionKey } from "@/generated/prisma/enums";
 import { Icon } from "@/components/app-shell/icon";
@@ -9,6 +10,7 @@ import {
   type TemplateOption,
 } from "./permission-config";
 import {
+  bulkSetPermission,
   createUser,
   deleteUser,
   resetToTemplate,
@@ -16,12 +18,8 @@ import {
   type CreateUserState,
 } from "./actions";
 import { UserRow } from "./user-row";
-import {
-  EMPTY_FILTERS,
-  SearchFilterBar,
-  matchesFilters,
-  type MemberFilters,
-} from "./search-filter-bar";
+import { SearchFilterBar, type MemberFilters } from "./search-filter-bar";
+import { BulkActionBar } from "./bulk-action-bar";
 
 const createInitial: CreateUserState = { status: "idle" };
 
@@ -31,17 +29,38 @@ export function PermissionTable({
   templates,
   committees,
   currentUserId,
+  totalMembers,
+  customizedCount,
+  matchingCount,
+  matchingIds,
+  page,
+  pageCount,
+  pageSize,
+  filters,
 }: {
   leads: AdminUserRow[];
+  /** Just this page's members — already filtered and ordered by the server. */
   members: AdminUserRow[];
   templates: TemplateOption[];
   committees: Committee[];
   /** The signed-in admin — their own row is not deletable from here. */
   currentUserId: string;
+  /** Totals over everyone, independent of filters and paging. */
+  totalMembers: number;
+  customizedCount: number;
+  /** How many members match the current filters, across all pages. */
+  matchingCount: number;
+  /** Their ids — what "select all matching" selects. */
+  matchingIds: string[];
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  filters: MemberFilters;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [filters, setFilters] = useState<MemberFilters>(EMPTY_FILTERS);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [createState, createAction, creating] = useActionState(
     createUser,
@@ -58,18 +77,72 @@ export function PermissionTable({
     if (createState.status === "success") setShowCreate(false);
   }
 
-  const allUsers = [...leads, ...members];
-  const customizedCount = allUsers.filter((u) => u.isCustom).length;
+  const basePath = "/admin/permissions";
+  const anyFilterActive = Boolean(
+    filters.q || filters.committee || filters.template,
+  );
 
-  const visibleLeads = useMemo(
-    () => leads.filter((u) => matchesFilters(u, filters)),
-    [leads, filters],
-  );
-  const visibleMembers = useMemo(
-    () => members.filter((u) => matchesFilters(u, filters)),
-    [members, filters],
-  );
-  const totalVisible = visibleLeads.length + visibleMembers.length;
+  // Page links carry the active filters, or paging would silently clear them.
+  const pageHref = (n: number) => {
+    const params = new URLSearchParams();
+    if (filters.q) params.set("q", filters.q);
+    if (filters.committee) params.set("committee", filters.committee);
+    if (filters.template) params.set("template", filters.template);
+    if (n > 1) params.set("page", String(n));
+    const qs = params.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  };
+
+  const first = matchingCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = (page - 1) * pageSize + members.length;
+
+  // Selection is by id and deliberately survives paging: "select all matching"
+  // spans pages, so the bar must keep counting members who aren't on screen.
+  const pageIds = members.map((m) => m.id);
+  const allOnPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const allMatchingSelected =
+    matchingIds.length > 0 && matchingIds.every((id) => selected.has(id));
+
+  function toggleOne(id: string, on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function togglePage(on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of pageIds) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  function applyBulk(permission: PermissionKey, grant: boolean) {
+    setBulkNotice(null);
+    const ids = [...selected];
+    startTransition(async () => {
+      const res = await bulkSetPermission(ids, permission, grant);
+      // Cleared on success so the bar collapses and nothing is left armed.
+      setSelected(new Set());
+      const verb = grant ? "Granted" : "Revoked";
+      const preposition = grant ? "to" : "from";
+      setBulkNotice(
+        `${verb} ${permission} ${preposition} ${res.affectedCount} member` +
+          `${res.affectedCount === 1 ? "" : "s"}` +
+          (res.unchangedCount > 0
+            ? ` (${res.unchangedCount} already ${grant ? "had" : "didn't have"} it)`
+            : "") +
+          ".",
+      );
+    });
+  }
 
   function toggle(userId: string, permission: PermissionKey, grant: boolean) {
     startTransition(async () => {
@@ -113,7 +186,7 @@ export function PermissionTable({
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        <StatCard label="Total Members" value={allUsers.length} />
+        <StatCard label="Total Members" value={totalMembers} />
         <StatCard label="Role Templates" value={templates.length} tone="primary" />
         <StatCard label="Customized" value={customizedCount} tone="rejected" />
       </div>
@@ -200,20 +273,26 @@ export function PermissionTable({
 
       {/* Search + filter */}
       <SearchFilterBar
+        basePath={basePath}
         filters={filters}
-        onChange={setFilters}
         committees={committees}
         templates={templates}
       />
 
+      {bulkNotice && (
+        <p className="rounded-lg bg-primary/10 px-4 py-2 text-sm text-primary">
+          {bulkNotice}
+        </p>
+      )}
+
       {/* TM Lead — distinct section at the top */}
-      {visibleLeads.length > 0 && (
+      {leads.length > 0 && (
         <section>
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
             Team Lead
           </h3>
           <div className="overflow-hidden rounded-xl border border-l-4 border-neutral-200 border-l-primary bg-white dark:border-neutral-800 dark:border-l-primary dark:bg-neutral-900">
-            {visibleLeads.map((user) => (
+            {leads.map((user) => (
               <UserRow
                 key={user.id}
                 user={user}
@@ -241,7 +320,15 @@ export function PermissionTable({
           Members
         </h3>
         <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="hidden grid-cols-[24px_1fr_190px_110px_170px_110px] items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 sm:grid dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+          <div className="hidden grid-cols-[28px_24px_1fr_190px_110px_170px_110px] items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 sm:grid dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+            <input
+              type="checkbox"
+              aria-label="Select all members on this page"
+              checked={allOnPageSelected}
+              disabled={pending || pageIds.length === 0}
+              onChange={(e) => togglePage(e.target.checked)}
+              className="size-4 rounded border-neutral-300 text-primary focus:ring-primary/30"
+            />
             <span></span>
             <span>Member</span>
             <span>Primary Role</span>
@@ -249,12 +336,51 @@ export function PermissionTable({
             <span>Access Level</span>
             <span className="text-right">Actions</span>
           </div>
-          {visibleMembers.length === 0 ? (
+
+          {/* Reaching beyond the current page: the filter bar doubles as the
+              "pick a group" mechanism, so this selects the whole filtered set
+              rather than introducing a separate group concept. */}
+          {anyFilterActive && matchingCount > members.length && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-primary/5 px-5 py-2 text-sm dark:border-neutral-800">
+              {allMatchingSelected ? (
+                <>
+                  <span className="text-foreground">
+                    All {matchingCount} matching members are selected.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(new Set())}
+                    className="font-semibold text-primary hover:underline"
+                  >
+                    Clear selection
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-neutral-500 dark:text-neutral-400">
+                    {allOnPageSelected
+                      ? `All ${members.length} on this page selected.`
+                      : "Filters are active."}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => setSelected(new Set(matchingIds))}
+                    className="font-semibold text-primary hover:underline disabled:opacity-50"
+                  >
+                    Select all {matchingCount} members matching current filters
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {members.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm italic text-neutral-400">
               No members match your search.
             </div>
           ) : (
-            visibleMembers.map((user) => (
+            members.map((user) => (
               <UserRow
                 key={user.id}
                 user={user}
@@ -267,17 +393,107 @@ export function PermissionTable({
                 onReset={() => reset(user.id)}
                 canDelete={user.id !== currentUserId}
                 onDelete={() => remove(user.id)}
+                selected={selected.has(user.id)}
+                onSelectedChange={(on) => toggleOne(user.id, on)}
               />
             ))
           )}
-          <div className="flex items-center justify-between border-t border-neutral-200 bg-neutral-50 px-5 py-3 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-5 py-3 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
             <span>
-              Showing {totalVisible} of {allUsers.length} member
-              {allUsers.length === 1 ? "" : "s"}
+              Showing {first}–{last} of {matchingCount}
+              {anyFilterActive ? " matching" : ""} member
+              {matchingCount === 1 ? "" : "s"}
             </span>
+            {pageCount > 1 && (
+              <Pagination page={page} pageCount={pageCount} pageHref={pageHref} />
+            )}
           </div>
         </div>
       </section>
+
+      <BulkActionBar
+        selectedCount={selected.size}
+        pending={pending}
+        onApply={applyBulk}
+        onClear={() => setSelected(new Set())}
+      />
+    </div>
+  );
+}
+
+/** At most this many numbered page links, windowed around the current page. */
+const PAGE_WINDOW = 5;
+
+/**
+ * Real links to `?page=N`, so paging re-runs the server query with a new
+ * skip/take. Prev/Next become inert spans at the ends — a disabled <a> is still
+ * followable, so the element type changes, not just its styling.
+ */
+function Pagination({
+  page,
+  pageCount,
+  pageHref,
+}: {
+  page: number;
+  pageCount: number;
+  pageHref: (n: number) => string;
+}) {
+  const windowStart = Math.max(
+    1,
+    Math.min(page - Math.floor(PAGE_WINDOW / 2), pageCount - PAGE_WINDOW + 1),
+  );
+  const windowEnd = Math.min(pageCount, windowStart + PAGE_WINDOW - 1);
+  const pages = Array.from(
+    { length: windowEnd - windowStart + 1 },
+    (_, i) => windowStart + i,
+  );
+
+  const arrowClass =
+    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800";
+  const arrowDisabledClass =
+    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-300 opacity-40 dark:border-neutral-800 dark:text-neutral-600";
+
+  return (
+    <div className="flex items-center gap-1">
+      {page > 1 ? (
+        <Link href={pageHref(page - 1)} aria-label="Previous page" className={arrowClass}>
+          <Icon name="chevron_left" className="text-[20px]" />
+        </Link>
+      ) : (
+        <span aria-hidden className={arrowDisabledClass}>
+          <Icon name="chevron_left" className="text-[20px]" />
+        </span>
+      )}
+      {pages.map((n) =>
+        n === page ? (
+          <span
+            key={n}
+            aria-current="page"
+            className="flex size-8 items-center justify-center rounded bg-primary text-sm font-semibold text-white"
+          >
+            {n}
+          </span>
+        ) : (
+          <Link
+            key={n}
+            href={pageHref(n)}
+            aria-label={`Page ${n}`}
+            className="flex size-8 items-center justify-center rounded border border-neutral-200 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            {n}
+          </Link>
+        ),
+      )}
+      {page < pageCount ? (
+        <Link href={pageHref(page + 1)} aria-label="Next page" className={arrowClass}>
+          <Icon name="chevron_right" className="text-[20px]" />
+        </Link>
+      ) : (
+        <span aria-hidden className={arrowDisabledClass}>
+          <Icon name="chevron_right" className="text-[20px]" />
+        </span>
+      )}
     </div>
   );
 }

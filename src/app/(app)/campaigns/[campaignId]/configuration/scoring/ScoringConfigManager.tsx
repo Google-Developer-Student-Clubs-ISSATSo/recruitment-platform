@@ -3,7 +3,6 @@
 import { useRef, useState, useTransition } from "react";
 
 import { Icon } from "@/components/app-shell/icon";
-import { Button } from "@/components/ui/button";
 import { QuestionRow } from "./QuestionRow";
 import { CoefficientTotalIndicator } from "./CoefficientTotalIndicator";
 import {
@@ -24,9 +23,17 @@ import {
 export function ScoringConfigManager({
   campaignId,
   initialQuestions,
+  sidebar,
 }: {
   campaignId: string;
   initialQuestions: QuestionDTO[];
+  /**
+   * Rendered in the summary column under the Phase Summary card — the
+   * thresholds form. Passed in as a slot rather than rendered as a sibling
+   * because the summary numbers are derived from this component's live local
+   * state, so the whole two-column layout has to be owned here.
+   */
+  sidebar?: React.ReactNode;
 }) {
   const [questions, setQuestions] = useState<QuestionDTO[]>(initialQuestions);
   const [pending, startTransition] = useTransition();
@@ -137,66 +144,100 @@ export function ScoringConfigManager({
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-neutral-200 p-6 dark:border-neutral-800">
+    <div className="space-y-6">
+      {/* Section header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Icon name="tune" className="text-[22px]" />
           </span>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">
-              Phase 1 scoring rubric
+            <h2 className="text-xl font-semibold text-foreground">
+              Questionnaire Scoring Logic
             </h2>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              Questions, coefficients, and note scales for this campaign.
+              Define weights and acceptable grading scales for initial applicant
+              screening.
             </p>
           </div>
         </div>
-        <Button variant="outline" onClick={addQuestion} disabled={pending}>
-          <Icon name="add" className="text-[18px]" />
-          Add Question
-        </Button>
       </div>
 
-      {/* Running total */}
-      <div className="p-6 pb-0">
-        <CoefficientTotalIndicator total={activeTotal} />
-      </div>
+      {/* Bento grid: the question list carries the width, the summary and
+          thresholds sit alongside it rather than stacked underneath. */}
+      <div className="grid grid-cols-12 gap-6">
+        <div className="col-span-12 space-y-4 lg:col-span-8">
+          {/* Column headings. Widths must track QuestionRow's columns. */}
+          <div className="hidden items-center rounded-t-xl border-x border-t border-neutral-200 bg-neutral-50 px-6 py-3 lg:flex dark:border-neutral-800 dark:bg-neutral-950/40">
+            <div className="w-10 shrink-0" />
+            <div className="flex-1 px-4 text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+              Question Details
+            </div>
+            <div className="w-32 shrink-0 text-center text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+              Coefficient
+            </div>
+            <div className="w-56 shrink-0 pl-2 text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+              Grade Scale
+            </div>
+            <div className="w-12 shrink-0" />
+          </div>
 
-      {/* Question list */}
-      <div className="p-6 pt-4">
-        {questions.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-10 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-400">
-            No questions yet. Use <strong>Add Question</strong> to start the
-            rubric.
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
-            {questions.map((q, i) => (
-              <QuestionRow
-                key={q.id}
-                question={q}
-                index={i}
-                count={questions.length}
-                disabled={pending}
-                onTextInput={(value) => patchLocal(q.id, { text: value })}
-                onCommitText={() => commitText(q.id)}
-                onCoefficientInput={(value) =>
-                  patchLocal(q.id, { coefficient: value })
-                }
-                onCommitCoefficient={() => commitCoefficient(q.id)}
-                onNoteScaleChange={(next) => changeNoteScale(q.id, next)}
-                onToggleActive={(next) => toggleActive(q.id, next)}
-                onToggleTechnical={(next) => toggleTechnical(q.id, next)}
-                onMoveUp={() => move(q.id, -1)}
-                onMoveDown={() => move(q.id, 1)}
-                onDelete={() => remove(q.id)}
-              />
-            ))}
-          </div>
-        )}
+          {questions.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-10 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-400">
+              No questions yet. Use <strong>Add New Scored Question</strong> to
+              start the rubric.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {questions.map((q, i) => (
+                <QuestionRow
+                  key={q.id}
+                  question={q}
+                  index={i}
+                  count={questions.length}
+                  disabled={pending}
+                  onTextInput={(value) => patchLocal(q.id, { text: value })}
+                  onCommitText={() => commitText(q.id)}
+                  onCoefficientInput={(value) =>
+                    patchLocal(q.id, { coefficient: value })
+                  }
+                  onCommitCoefficient={() => commitCoefficient(q.id)}
+                  onNoteScaleChange={(next) => changeNoteScale(q.id, next)}
+                  onToggleActive={(next) => toggleActive(q.id, next)}
+                  onToggleTechnical={(next) => toggleTechnical(q.id, next)}
+                  onMoveUp={() => move(q.id, -1)}
+                  onMoveDown={() => move(q.id, 1)}
+                  onDelete={() => remove(q.id)}
+                />
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={addQuestion}
+            disabled={pending}
+            className="group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 py-4 text-neutral-500 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400"
+          >
+            <Icon
+              name="add_circle"
+              className="text-[20px] transition-transform group-hover:scale-110"
+            />
+            <span className="text-[11px] font-semibold uppercase tracking-widest">
+              Add New Scored Question
+            </span>
+          </button>
+        </div>
+
+        <div className="col-span-12 space-y-6 lg:col-span-4">
+          <CoefficientTotalIndicator
+            total={activeTotal}
+            questionCount={questions.length}
+            activeCount={questions.filter((q) => q.isActive).length}
+          />
+          {sidebar}
+        </div>
       </div>
-    </section>
+    </div>
   );
 }

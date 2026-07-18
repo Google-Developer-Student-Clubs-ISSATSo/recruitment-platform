@@ -184,6 +184,109 @@ export async function togglePermission(
   revalidatePath(PATH);
 }
 
+export type BulkPermissionResult = {
+  /** Users actually changed — already-granted (or already-absent) are skipped. */
+  affectedCount: number;
+  /** Selected users skipped because the change was a no-op for them. */
+  unchangedCount: number;
+  /** Selected users dropped because they are the TM Lead. */
+  skippedLeadCount: number;
+};
+
+/**
+ * Grant or revoke ONE permission across many users at once.
+ *
+ * The selection arrives from the client, so nothing about it is trusted: the ids
+ * are re-read from the database, anyone carrying the TM_LEAD template is dropped
+ * (their permissions are fixed — the same rule {@link assertNotLead} enforces for
+ * single toggles), and unknown ids simply don't match. A caller hitting this
+ * action directly with the TM Lead's id therefore changes nothing.
+ *
+ * Idempotent per user: granting skips those who already hold the permission,
+ * revoking skips those who don't, and neither case is an error — which is what
+ * makes "select all matching" safe to use on a mixed group.
+ *
+ * Exactly one activity entry is written for the whole operation, not one per
+ * user: a bulk grant across 40 members would otherwise bury every other event in
+ * the log. The affected ids live in that single entry's details.
+ */
+export async function bulkSetPermission(
+  userIds: string[],
+  permission: PermissionKey,
+  grant: boolean,
+): Promise<BulkPermissionResult> {
+  const actorId = await requirePermission(ADMIN);
+
+  const requested = [...new Set(userIds)].filter(Boolean);
+  if (requested.length === 0) {
+    return { affectedCount: 0, unchangedCount: 0, skippedLeadCount: 0 };
+  }
+  if (!Object.values(PermissionKey).includes(permission)) {
+    throw new Error("Unknown permission.");
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: requested } },
+    select: {
+      id: true,
+      roleTemplate: { select: { name: true } },
+      permissions: { where: { permission }, select: { id: true } },
+    },
+  });
+
+  const eligible = users.filter(
+    (u) => u.roleTemplate?.name !== RoleTemplateName.TM_LEAD,
+  );
+  const skippedLeadCount = users.length - eligible.length;
+
+  // Only the users for whom this is a real change.
+  const targets = eligible.filter((u) =>
+    grant ? u.permissions.length === 0 : u.permissions.length > 0,
+  );
+  const affectedUserIds = targets.map((u) => u.id);
+
+  if (affectedUserIds.length > 0) {
+    if (grant) {
+      await prisma.userPermission.createMany({
+        data: affectedUserIds.map((userId) => ({
+          userId,
+          permission,
+          grantedBy: actorId,
+        })),
+        // Belt and braces alongside the filter above: a concurrent single toggle
+        // between the read and this write would otherwise hit the
+        // @@unique([userId, permission]) constraint and fail the whole batch.
+        skipDuplicates: true,
+      });
+    } else {
+      await prisma.userPermission.deleteMany({
+        where: { userId: { in: affectedUserIds }, permission },
+      });
+    }
+
+    await logActivity({
+      actorId,
+      actionType: grant
+        ? "BULK_PERMISSION_GRANTED"
+        : "BULK_PERMISSION_REVOKED",
+      targetType: "User",
+      // No single target — the affected ids live in details instead.
+      details: {
+        permission,
+        affectedUserIds,
+        affectedCount: affectedUserIds.length,
+      },
+    });
+  }
+
+  revalidatePath(PATH);
+  return {
+    affectedCount: affectedUserIds.length,
+    unchangedCount: eligible.length - affectedUserIds.length,
+    skippedLeadCount,
+  };
+}
+
 // Reset a user's permissions to the defaults of the template they were
 // originally assigned. The user's stored roleTemplateId is the source of
 // truth — we do not trust a template passed from the client or infer one.

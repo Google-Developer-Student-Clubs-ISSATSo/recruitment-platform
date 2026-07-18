@@ -150,11 +150,72 @@ export async function manualOverrideAction(
 }
 
 /**
- * Clear a manual override, returning the applicant to algorithmic control. Only
- * a MANUAL_ACCEPT / MANUAL_REJECT row can be reverted. The classification is set
- * back to PENDING so the next Recalculate pass reclassifies it from its current
- * score/rank (a complete applicant becomes AUTO_ACCEPT / TO_DISCUSS / AUTO_REJECT
- * again; an incomplete one stays PENDING).
+ * Flag ONE applicant as needing discussion, whatever they are now — an
+ * AUTO_ACCEPT the panel wants a second look at, or a MANUAL_REJECT someone wants
+ * reopened. Because TO_DISCUSS is sticky in {@link recalculatePhaseOneRanking},
+ * this survives every later recalculation until the row is resolved or reverted.
+ *
+ * Upserts, so it works even on an applicant with no PhaseOneResult row yet.
+ */
+export async function markToDiscussAction(
+  campaignId: string,
+  applicantId: string,
+): Promise<ActionResult<{ classification: PhaseOneClassification }>> {
+  const gate = await authorize(campaignId);
+  if (!gate.ok) return gate;
+
+  const applicant = await prisma.applicant.findUnique({
+    where: { id: applicantId },
+    select: {
+      campaignId: true,
+      phaseOneResult: { select: { classification: true } },
+    },
+  });
+  if (!applicant || applicant.campaignId !== campaignId) {
+    return { ok: false, error: "That applicant isn't in this campaign." };
+  }
+
+  const previousClassification =
+    applicant.phaseOneResult?.classification ?? PhaseOneClassification.PENDING;
+
+  await prisma.phaseOneResult.upsert({
+    where: { applicantId },
+    create: {
+      applicantId,
+      classification: PhaseOneClassification.TO_DISCUSS,
+    },
+    update: { classification: PhaseOneClassification.TO_DISCUSS },
+  });
+
+  await logActivity({
+    actorId: gate.userId,
+    actionType: "PHASE1_MARKED_TO_DISCUSS",
+    targetType: "Applicant",
+    targetId: applicantId,
+    details: { previousClassification },
+  });
+
+  revalidatePath(`/campaigns/${campaignId}/phase1/selection`);
+  return { ok: true, classification: PhaseOneClassification.TO_DISCUSS };
+}
+
+/**
+ * Hand an applicant back to algorithmic control. Accepts any sticky row —
+ * MANUAL_ACCEPT, MANUAL_REJECT or TO_DISCUSS.
+ *
+ * TO_DISCUSS is included deliberately: now that a recalculation can move someone
+ * INTO that state but never out of it, this is the only route back, and without
+ * it a flagged row could never return to automatic control.
+ *
+ * Clearing to PENDING is only the first half: PENDING means "not yet scored",
+ * and a reverted applicant is fully scored, so leaving them there would both
+ * mislabel them and block finalization. So the override is cleared and
+ * {@link recalculatePhaseOneRanking} is run immediately — with the manual flag
+ * gone, that pass classifies this applicant from their real score and rank
+ * (AUTO_ACCEPT / TO_DISCUSS / AUTO_REJECT, or PENDING only if genuinely
+ * incomplete). Reusing the whole pass rather than reclassifying one row in
+ * isolation is deliberate: rank depends on the entire contested set, and the
+ * pass already leaves every other manual decision untouched.
  */
 export async function revertOverrideAction(
   campaignId: string,
@@ -177,17 +238,29 @@ export async function revertOverrideAction(
   }
 
   const result = applicant.phaseOneResult;
-  const isManual =
+  const isSticky =
     result?.classification === PhaseOneClassification.MANUAL_ACCEPT ||
-    result?.classification === PhaseOneClassification.MANUAL_REJECT;
-  if (!result || !isManual) {
-    return { ok: false, error: "That applicant has no manual override to revert." };
+    result?.classification === PhaseOneClassification.MANUAL_REJECT ||
+    result?.classification === PhaseOneClassification.TO_DISCUSS;
+  if (!result || !isSticky) {
+    return {
+      ok: false,
+      error: "That applicant is already under automatic classification.",
+    };
   }
 
   await prisma.phaseOneResult.update({
     where: { applicantId },
     data: { classification: PhaseOneClassification.PENDING },
   });
+
+  // Now that nothing marks this row as a human decision, the standard pass will
+  // classify it from its score/rank like any other applicant.
+  const recalculated = await recalculatePhaseOneRanking(campaignId);
+  if (!recalculated.ok) return recalculated;
+
+  const reverted = recalculated.rows.find((r) => r.applicantId === applicantId);
+  const classification = reverted?.classification ?? PhaseOneClassification.PENDING;
 
   await logActivity({
     actorId: gate.userId,
@@ -196,14 +269,14 @@ export async function revertOverrideAction(
     targetId: applicantId,
     details: {
       previousClassification: result.classification,
-      newClassification: PhaseOneClassification.PENDING,
-      weightedTotal: result.weightedTotal,
-      rank: result.rank,
+      newClassification: classification,
+      weightedTotal: reverted?.weightedTotal ?? result.weightedTotal,
+      rank: reverted?.rank ?? result.rank,
     },
   });
 
   revalidatePath(`/campaigns/${campaignId}/phase1/selection`);
-  return { ok: true, classification: PhaseOneClassification.PENDING };
+  return { ok: true, classification };
 }
 
 /**

@@ -3,12 +3,20 @@
 import { useMemo, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Icon } from "@/components/app-shell/icon";
 import { PhaseOneClassification } from "@/generated/prisma/enums";
 import {
   finalizePhaseOneAction,
   manualOverrideAction,
+  markToDiscussAction,
   recalculateRankingAction,
   revertOverrideAction,
 } from "./actions";
@@ -77,14 +85,12 @@ export function SelectionClient({
   initialRows,
   targetCount,
   rejectThreshold,
-  buffer,
   finalizedAtISO,
 }: {
   campaignId: string;
   initialRows: SelectionRow[];
   targetCount: number | null;
   rejectThreshold: number | null;
-  buffer: number | null;
   finalizedAtISO: string | null;
 }) {
   // Rows come straight from the server on every render: each action calls
@@ -112,8 +118,12 @@ export function SelectionClient({
   };
 
   const counts = useMemo(() => {
-    const accepted = rows.filter((r) => ACCEPTED.includes(r.classification)).length;
-    const rejected = rows.filter((r) => REJECTED.includes(r.classification)).length;
+    const accepted = rows.filter((r) =>
+      ACCEPTED.includes(r.classification),
+    ).length;
+    const rejected = rows.filter((r) =>
+      REJECTED.includes(r.classification),
+    ).length;
     const toDiscuss = rows.filter(
       (r) => r.classification === PhaseOneClassification.TO_DISCUSS,
     ).length;
@@ -192,6 +202,15 @@ export function SelectionClient({
     });
   }
 
+  function markToDiscuss(applicantId: string) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const res = await markToDiscussAction(campaignId, applicantId);
+      if (!res.ok) setError(res.error);
+    });
+  }
+
   function revert(applicantId: string) {
     setError(null);
     setNotice(null);
@@ -235,11 +254,11 @@ export function SelectionClient({
             Phase 1 Selection &amp; Ranking
           </h1>
           <p className="max-w-xl text-sm text-neutral-500 dark:text-neutral-400">
-            Rank fully-scored applicants, resolve the borderline cases the buffer
-            flags for discussion, then commit the shortlist.
+            Rank fully-scored applicants, resolve the borderline cases the
+            buffer flags for discussion, then commit the shortlist.
           </p>
         </div>
-        {targetCount !== null && rejectThreshold !== null && buffer !== null && (
+        {targetCount !== null && rejectThreshold !== null && (
           <dl className="flex gap-6 text-sm">
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
@@ -251,13 +270,9 @@ export function SelectionClient({
               <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
                 Reject below
               </dt>
-              <dd className="font-semibold text-foreground">{rejectThreshold}</dd>
-            </div>
-            <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
-                Buffer
-              </dt>
-              <dd className="font-semibold text-foreground">±{buffer}</dd>
+              <dd className="font-semibold text-foreground">
+                {rejectThreshold}
+              </dd>
             </div>
           </dl>
         )}
@@ -272,8 +287,9 @@ export function SelectionClient({
               Phase 1 was finalized on {formatFinalizedAt(finalizedAtISO)}
             </p>
             <p className="mt-0.5 text-neutral-600 dark:text-neutral-400">
-              Applicant statuses are committed and may already have been emailed.
-              Recalculating or re-finalizing now asks for an extra confirmation.
+              Applicant statuses are committed and may already have been
+              emailed. Recalculating or re-finalizing now asks for an extra
+              confirmation.
             </p>
           </div>
         </div>
@@ -283,7 +299,9 @@ export function SelectionClient({
       <p className="text-sm text-neutral-500 dark:text-neutral-400">
         <span className="font-semibold text-foreground">{counts.complete}</span>{" "}
         applicant{counts.complete === 1 ? "" : "s"} fully scored,{" "}
-        <span className="font-semibold text-foreground">{counts.incomplete}</span>{" "}
+        <span className="font-semibold text-foreground">
+          {counts.incomplete}
+        </span>{" "}
         still incomplete (excluded from ranking).
       </p>
 
@@ -333,7 +351,9 @@ export function SelectionClient({
             variant="outline"
             size="lg"
             disabled={pending}
-            onClick={() => (finalized ? setDialog("recalc-confirm") : doRecalculate())}
+            onClick={() =>
+              finalized ? setDialog("recalc-confirm") : doRecalculate()
+            }
           >
             <Icon name="refresh" className="text-[18px]" />
             Recalculate Ranking
@@ -359,7 +379,9 @@ export function SelectionClient({
             }
           >
             <Icon name="verified" className="text-[18px]" />
-            {finalized ? "Re-finalize Phase 1 Selection" : "Finalize Phase 1 Selection"}
+            {finalized
+              ? "Re-finalize Phase 1 Selection"
+              : "Finalize Phase 1 Selection"}
           </Button>
           {blockedReason && (
             <span className="text-xs text-[color:var(--status-pending)]">
@@ -372,10 +394,16 @@ export function SelectionClient({
       {/* Filters + sort */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
+          <FilterChip
+            active={filter === "ALL"}
+            onClick={() => setFilter("ALL")}
+          >
             All ({rows.length})
           </FilterChip>
-          <FilterChip active={filter === "ACCEPT"} onClick={() => setFilter("ACCEPT")}>
+          <FilterChip
+            active={filter === "ACCEPT"}
+            onClick={() => setFilter("ACCEPT")}
+          >
             Accept ({counts.accepted})
           </FilterChip>
           <FilterChip
@@ -384,10 +412,16 @@ export function SelectionClient({
           >
             To Discuss ({counts.toDiscuss})
           </FilterChip>
-          <FilterChip active={filter === "REJECT"} onClick={() => setFilter("REJECT")}>
+          <FilterChip
+            active={filter === "REJECT"}
+            onClick={() => setFilter("REJECT")}
+          >
             Reject ({counts.rejected})
           </FilterChip>
-          <FilterChip active={filter === "PENDING"} onClick={() => setFilter("PENDING")}>
+          <FilterChip
+            active={filter === "PENDING"}
+            onClick={() => setFilter("PENDING")}
+          >
             Pending ({counts.pending})
           </FilterChip>
         </div>
@@ -399,7 +433,7 @@ export function SelectionClient({
             className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs text-foreground dark:border-neutral-700 dark:bg-neutral-900"
           >
             <option value="rank">Rank</option>
-            <option value="total">Weighted total</option>
+            <option value="total">Form score</option>
             <option value="name">Name</option>
           </select>
         </label>
@@ -418,13 +452,13 @@ export function SelectionClient({
                   Applicant
                 </th>
                 <th className="w-32 px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
-                  Weighted total
+                  Form Score
                 </th>
                 <th className="w-40 px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
                   Classification
                 </th>
-                <th className="w-64 px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
-                  Manual Override
+                <th className="w-24 px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -438,6 +472,9 @@ export function SelectionClient({
                 const isManualReject =
                   row.classification === PhaseOneClassification.MANUAL_REJECT;
                 const isManual = isManualAccept || isManualReject;
+                // Sticky rows are the ones a recalculation won't touch, so they
+                // are exactly the ones that need an explicit way back.
+                const isSticky = isManual || isToDiscuss;
                 return (
                   <tr
                     key={row.applicantId}
@@ -464,51 +501,77 @@ export function SelectionClient({
                     <td className="px-4 py-3">
                       <ClassificationBadge value={row.classification} />
                     </td>
-                    {/* Every row can be manually overridden, regardless of its
-                        current classification. The button matching the current
-                        manual decision is disabled to show it's already set;
-                        Revert (manual rows only) hands the row back to the
-                        algorithm on the next recalculation. */}
+                    {/* Row actions collapse into one menu: three buttons per row
+                        across a 15+ row table is a lot of chrome for controls
+                        that are used occasionally. Only the actions that mean
+                        something for this row's current state are listed — an
+                        already-manually-accepted row offers no "Accept", and a
+                        row that was never overridden offers no "Revert". */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          size="sm"
-                          disabled={pending || isManualAccept}
-                          className="bg-status-accepted text-white hover:bg-status-accepted/85"
-                          title={
-                            isManualAccept
-                              ? "Already manually accepted"
-                              : "Manually accept this applicant"
-                          }
-                          onClick={() => override(row.applicantId, "ACCEPT")}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={pending || isManualReject}
-                          title={
-                            isManualReject
-                              ? "Already manually rejected"
-                              : "Manually reject this applicant"
-                          }
-                          onClick={() => override(row.applicantId, "REJECT")}
-                        >
-                          Reject
-                        </Button>
-                        {isManual && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                      <div className="flex justify-end">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
                             disabled={pending}
-                            title="Clear the manual override; the next recalculation reclassifies automatically"
-                            onClick={() => revert(row.applicantId)}
+                            aria-label={`Actions for ${row.fullName}`}
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="px-2"
+                              />
+                            }
                           >
-                            <Icon name="undo" className="text-[16px]" />
-                            Revert
-                          </Button>
-                        )}
+                            <Icon name="more_vert" className="text-[18px]" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-44">
+                            {!isManualAccept && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  override(row.applicantId, "ACCEPT")
+                                }
+                              >
+                                <Icon
+                                  name="how_to_reg"
+                                  className="text-[16px]"
+                                />
+                                Accept
+                              </DropdownMenuItem>
+                            )}
+                            {!isManualReject && (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() =>
+                                  override(row.applicantId, "REJECT")
+                                }
+                              >
+                                <Icon
+                                  name="do_not_disturb_on"
+                                  className="text-[16px]"
+                                />
+                                Reject
+                              </DropdownMenuItem>
+                            )}
+                            {!isToDiscuss && (
+                              <DropdownMenuItem
+                                onClick={() => markToDiscuss(row.applicantId)}
+                              >
+                                <Icon name="forum" className="text-[16px]" />
+                                Mark as To Discuss
+                              </DropdownMenuItem>
+                            )}
+                            {isSticky && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => revert(row.applicantId)}
+                                >
+                                  <Icon name="undo" className="text-[16px]" />
+                                  Revert to automatic
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
@@ -537,8 +600,10 @@ export function SelectionClient({
         description={
           <>
             Phase 1 was finalized on{" "}
-            <strong>{finalizedAtISO ? formatFinalizedAt(finalizedAtISO) : ""}</strong>.
-            Recalculating can move applicants between accept and reject after
+            <strong>
+              {finalizedAtISO ? formatFinalizedAt(finalizedAtISO) : ""}
+            </strong>
+            . Recalculating can move applicants between accept and reject after
             they may already have been told their outcome. Auto classifications
             will be recomputed; manual resolutions are kept.
           </>
@@ -556,9 +621,11 @@ export function SelectionClient({
         description={
           <>
             Phase 1 was already finalized on{" "}
-            <strong>{finalizedAtISO ? formatFinalizedAt(finalizedAtISO) : ""}</strong>.
-            Applicants may already have been emailed their outcome. Re-finalizing
-            will overwrite their statuses again.
+            <strong>
+              {finalizedAtISO ? formatFinalizedAt(finalizedAtISO) : ""}
+            </strong>
+            . Applicants may already have been emailed their outcome.
+            Re-finalizing will overwrite their statuses again.
           </>
         }
         confirmLabel="I understand — continue"
@@ -580,8 +647,8 @@ export function SelectionClient({
               <>
                 {" "}
                 <strong>{counts.incomplete}</strong> applicant
-                {counts.incomplete === 1 ? "" : "s"} are not fully scored and will
-                be left at their current status.
+                {counts.incomplete === 1 ? "" : "s"} are not fully scored and
+                will be left at their current status.
               </>
             )}{" "}
             This cannot be easily undone. Continue?
@@ -624,7 +691,9 @@ function StatCard({
         <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
           {label}
         </p>
-        <p className="truncate text-sm font-semibold text-foreground">{value}</p>
+        <p className="truncate text-sm font-semibold text-foreground">
+          {value}
+        </p>
       </div>
     </div>
   );

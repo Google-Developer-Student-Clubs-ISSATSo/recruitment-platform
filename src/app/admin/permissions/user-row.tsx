@@ -46,6 +46,8 @@ export function UserRow({
   readOnly = false,
   canDelete,
   onDelete,
+  selected,
+  onSelectedChange,
 }: {
   user: AdminUserRow;
   expanded: boolean;
@@ -61,6 +63,14 @@ export function UserRow({
   /** Whether this row may be deleted (false for the signed-in admin's own row). */
   canDelete: boolean;
   onDelete: () => void;
+  /**
+   * Bulk-selection state. Both omitted for the TM Lead's row, which renders no
+   * checkbox at all — the same exclusion that already applies to its toggles,
+   * reset and delete. A row with no checkbox cannot enter a bulk action, and the
+   * server drops any TM_LEAD id regardless.
+   */
+  selected?: boolean;
+  onSelectedChange?: (next: boolean) => void;
 }) {
   const [resetOpen, setResetOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -70,7 +80,19 @@ export function UserRow({
   return (
     <div className="border-b border-neutral-100 last:border-0 dark:border-neutral-800/60">
       {/* Row */}
-      <div className="grid grid-cols-1 items-center gap-3 px-5 py-3.5 sm:grid-cols-[24px_1fr_190px_110px_170px_110px] sm:gap-4">
+      <div className="grid grid-cols-1 items-center gap-3 px-5 py-3.5 sm:grid-cols-[28px_24px_1fr_190px_110px_170px_110px] sm:gap-4">
+        {onSelectedChange ? (
+          <input
+            type="checkbox"
+            aria-label={`Select ${user.name}`}
+            checked={selected ?? false}
+            disabled={pending}
+            onChange={(e) => onSelectedChange(e.target.checked)}
+            className="size-4 rounded border-neutral-300 text-primary focus:ring-primary/30"
+          />
+        ) : (
+          <span className="hidden sm:block" />
+        )}
         <button
           onClick={onToggleExpand}
           className="hidden text-neutral-400 sm:block"

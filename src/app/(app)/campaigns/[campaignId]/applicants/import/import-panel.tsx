@@ -98,8 +98,12 @@ export function ImportPanel({ campaignId }: { campaignId: string }) {
       </Button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
-          <div className="w-full max-w-4xl rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
+        // A multi-step wizard rather than a confirm dialog, so it keeps its own
+        // wide scrollable shell instead of AlertDialogContent's narrow centred
+        // popup — but the overlay and surface tokens are the baseline ones, so
+        // it reads as the same family of modal as the rest of the app.
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/10 p-4 supports-backdrop-filter:backdrop-blur-xs sm:p-8">
+          <div className="w-full max-w-4xl rounded-xl bg-popover text-popover-foreground ring-1 ring-foreground/10">
             {/* Header */}
             <div className="flex items-center justify-between gap-3 border-b border-neutral-200 p-5 dark:border-neutral-800">
               <div>

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Icon } from "@/components/app-shell/icon";
 import {
   actionTone,
@@ -9,6 +11,11 @@ import {
 } from "@/lib/activity-descriptions";
 
 import { RefreshButton } from "./refresh-button";
+import {
+  ActivityLogFilters,
+  type ActivityFilters,
+  type ActorOption,
+} from "./activity-log-filters";
 
 // Pill colour per action tone, mapped onto the app's status/brand tokens.
 const TONE_CLASS: Record<ActivityTone, string> = {
@@ -28,26 +35,57 @@ function initials(name: string) {
     .join("");
 }
 
-const FIELD_CLASS =
-  "rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950";
 const LABEL_CLASS =
   "text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400";
 
 // Full activity-log screen rebuilt from the Stitch "activity_log" reference on
 // the app's real Tailwind tokens. The Export CSV control from that reference is
-// intentionally omitted. The filter bar and pager are presentational for now
-// (data is fetched server-side, most-recent-first); Refresh re-fetches.
+// intentionally omitted. Both the filter bar and the pager are real: they drive
+// the server query through the URL (?actor/?action/?from/?to/?page), so what you
+// see is always a filtered, paginated database result rather than a client-side
+// slice. Refresh re-fetches.
 export function ActivityLogList({
   rows,
   total,
   summary,
+  page,
+  pageCount,
+  pageSize,
+  actorOptions,
+  actionOptions,
+  filters,
 }: {
   rows: ActivityLogRow[];
   total: number;
   summary: ActivitySummary;
+  /** 1-based, already clamped to [1, pageCount] by the page. */
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  /** Derived from the whole log server-side, not from the current page. */
+  actorOptions: ActorOption[];
+  actionOptions: string[];
+  /** Current filter values, echoed back from the URL. */
+  filters: ActivityFilters;
 }) {
-  const actorOptions = [...new Set(rows.map((r) => r.actorName))].sort();
-  const actionOptions = [...new Set(rows.map((r) => r.actionType))].sort();
+  // Pagination links must carry the active filters, or paging would silently
+  // drop them and jump back to the unfiltered log.
+  const anyFilterActive =
+    Boolean(filters.actor) ||
+    Boolean(filters.action) ||
+    Boolean(filters.from) ||
+    Boolean(filters.to);
+
+  const pageHref = (n: number) => {
+    const params = new URLSearchParams();
+    if (filters.actor) params.set("actor", filters.actor);
+    if (filters.action) params.set("action", filters.action);
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    if (n > 1) params.set("page", String(n));
+    const qs = params.toString();
+    return qs ? `/activity-log?${qs}` : "/activity-log";
+  };
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-6">
@@ -65,50 +103,41 @@ export function ActivityLogList({
         </div>
       </section>
 
-      {/* Filters */}
-      <section className="grid grid-cols-1 gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-4 dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-member" className={LABEL_CLASS}>
-            Member
-          </label>
-          <select id="filter-member" defaultValue="" className={FIELD_CLASS}>
-            <option value="">All Members</option>
-            {actorOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="filter-action" className={LABEL_CLASS}>
-            Action Type
-          </label>
-          <select id="filter-action" defaultValue="" className={FIELD_CLASS}>
-            <option value="">All Actions</option>
-            {actionOptions.map((a) => (
-              <option key={a} value={a}>
-                {actionTypeLabel(a)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1.5 md:col-span-2">
-          <label className={LABEL_CLASS}>Date Range</label>
-          <div className="flex items-center gap-2">
-            <input type="date" aria-label="From date" className={`${FIELD_CLASS} flex-1`} />
-            <span className="text-sm text-neutral-500 dark:text-neutral-400">to</span>
-            <input type="date" aria-label="To date" className={`${FIELD_CLASS} flex-1`} />
-          </div>
-        </div>
+      {/* Analytics summary — above the filters and table, so the headline
+          numbers are the first thing read rather than a footnote. */}
+      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <SummaryCard
+          icon="trending_up"
+          tint="bg-primary/10 text-primary"
+          label="Actions Today"
+          value={summary.actionsToday}
+        />
+        <SummaryCard
+          icon="shield"
+          tint="bg-status-rejected/10 text-status-rejected"
+          label="Security Events"
+          value={summary.securityEvents}
+        />
+        <SummaryCard
+          icon="group"
+          tint="bg-status-accepted/10 text-status-accepted"
+          label="Most Active User"
+          value={summary.mostActiveUser}
+        />
       </section>
+
+      <ActivityLogFilters
+        filters={filters}
+        actorOptions={actorOptions}
+        actionOptions={actionOptions}
+      />
 
       {/* Log table */}
       <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-4 dark:border-neutral-800 dark:bg-neutral-950/40">
-          <span className={LABEL_CLASS}>Showing {total} activities</span>
+          <span className={LABEL_CLASS}>
+            Showing {total} {anyFilterActive ? "matching " : ""}activit{total === 1 ? "y" : "ies"}
+          </span>
           <div className="flex items-center gap-1 text-neutral-400">
             <button
               type="button"
@@ -150,7 +179,9 @@ export function ActivityLogList({
                     colSpan={5}
                     className="px-6 py-10 text-center text-sm italic text-neutral-400"
                   >
-                    No activity recorded yet.
+                    {anyFilterActive
+                      ? "No activity matches these filters."
+                      : "No activity recorded yet."}
                   </td>
                 </tr>
               ) : (
@@ -198,60 +229,116 @@ export function ActivityLogList({
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between border-t border-neutral-200 bg-neutral-50 px-6 py-4 dark:border-neutral-800 dark:bg-neutral-950/40">
-          <span className="text-sm text-neutral-500 dark:text-neutral-400">
-            Showing {rows.length === 0 ? 0 : 1} to {rows.length} of {total} results
+        <Pagination
+          pageHref={pageHref}
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          total={total}
+          rowCount={rows.length}
+        />
+      </section>
+    </div>
+  );
+}
+
+/** At most this many numbered page links, windowed around the current page. */
+const PAGE_WINDOW = 5;
+
+/**
+ * Server-rendered pager: every control is a real link to `?page=N`, so paging
+ * re-runs the server query with a new skip/take rather than filtering rows in
+ * the browser. Prev/Next become inert spans at the ends — a disabled <a> is
+ * still followable, so the element type changes rather than just its styling.
+ */
+function Pagination({
+  pageHref,
+  page,
+  pageCount,
+  pageSize,
+  total,
+  rowCount,
+}: {
+  /** Builds a link to page n, carrying the active filters. */
+  pageHref: (n: number) => string;
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  total: number;
+  rowCount: number;
+}) {
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = (page - 1) * pageSize + rowCount;
+
+  // Slide the window so the current page stays inside it, then clamp to the
+  // real range — near either end the window shortens rather than running off.
+  const windowStart = Math.max(1, Math.min(page - Math.floor(PAGE_WINDOW / 2), pageCount - PAGE_WINDOW + 1));
+  const windowEnd = Math.min(pageCount, windowStart + PAGE_WINDOW - 1);
+  const pages = Array.from(
+    { length: windowEnd - windowStart + 1 },
+    (_, i) => windowStart + i,
+  );
+
+  const arrowClass =
+    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800";
+  const arrowDisabledClass =
+    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-300 opacity-40 dark:border-neutral-800 dark:text-neutral-600";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-6 py-4 dark:border-neutral-800 dark:bg-neutral-950/40">
+      <span className="text-sm text-neutral-500 dark:text-neutral-400">
+        Showing {first} to {last} of {total} results
+      </span>
+      <div className="flex items-center gap-1">
+        {page > 1 ? (
+          <Link
+            href={pageHref(page - 1)}
+            aria-label="Previous page"
+            className={arrowClass}
+          >
+            <Icon name="chevron_left" className="text-[20px]" />
+          </Link>
+        ) : (
+          <span aria-hidden className={arrowDisabledClass}>
+            <Icon name="chevron_left" className="text-[20px]" />
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled
-              aria-label="Previous page"
-              className="flex size-8 items-center justify-center rounded text-neutral-400 disabled:opacity-40"
-            >
-              <Icon name="chevron_left" className="text-[20px]" />
-            </button>
-            <button
-              type="button"
+        )}
+
+        {pages.map((n) =>
+          n === page ? (
+            <span
+              key={n}
               aria-current="page"
               className="flex size-8 items-center justify-center rounded bg-primary text-sm font-semibold text-white"
             >
-              1
-            </button>
-            <button
-              type="button"
-              disabled={rows.length >= total}
-              aria-label="Next page"
-              className="flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              {n}
+            </span>
+          ) : (
+            <Link
+              key={n}
+              href={pageHref(n)}
+              aria-label={`Page ${n}`}
+              className="flex size-8 items-center justify-center rounded border border-neutral-200 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
             >
-              <Icon name="chevron_right" className="text-[20px]" />
-            </button>
-          </div>
-        </div>
-      </section>
+              {n}
+            </Link>
+          ),
+        )}
 
-      {/* Analytics summary */}
-      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <SummaryCard
-          icon="trending_up"
-          tint="bg-primary/10 text-primary"
-          label="Actions Today"
-          value={summary.actionsToday}
-        />
-        <SummaryCard
-          icon="shield"
-          tint="bg-status-rejected/10 text-status-rejected"
-          label="Security Events"
-          value={summary.securityEvents}
-        />
-        <SummaryCard
-          icon="group"
-          tint="bg-status-accepted/10 text-status-accepted"
-          label="Most Active User"
-          value={summary.mostActiveUser}
-        />
-      </section>
+        {page < pageCount ? (
+          <Link
+            href={pageHref(page + 1)}
+            aria-label="Next page"
+            className={arrowClass}
+          >
+            <Icon name="chevron_right" className="text-[20px]" />
+          </Link>
+        ) : (
+          <span aria-hidden className={arrowDisabledClass}>
+            <Icon name="chevron_right" className="text-[20px]" />
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -31,8 +31,12 @@ export function NoteScaleEditor({
     onChange([0, ...midpoints, 1].sort((a, b) => a - b));
   }
 
+  // Pill-shaped chips, per the Stitch scoring_configuration "Grade Scale"
+  // column. The reference shows the scale as read-only pills plus a dashed "+";
+  // here the midpoints stay toggleable, so an enabled midpoint reads as a filled
+  // pill and a disabled one as a dashed outline you can click to add.
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1">
       <FixedChip label={fmt(0)} />
       {MIDPOINTS.map((mid) => {
         const on = enabled.has(mid);
@@ -42,11 +46,12 @@ export function NoteScaleEditor({
             type="button"
             disabled={disabled}
             aria-pressed={on}
+            title={on ? `Remove ${fmt(mid)} from the scale` : `Add ${fmt(mid)} to the scale`}
             onClick={() => toggle(mid)}
-            className={`rounded-md border px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+            className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 ${
               on
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-neutral-300 bg-transparent text-neutral-400 hover:border-neutral-400 hover:text-neutral-600 dark:border-neutral-700 dark:hover:border-neutral-500 dark:hover:text-neutral-300"
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-dashed border-neutral-300 bg-transparent text-neutral-400 hover:border-primary hover:text-primary dark:border-neutral-700"
             }`}
           >
             {fmt(mid)}
@@ -64,7 +69,7 @@ function FixedChip({ label }: { label: string }) {
   return (
     <span
       title="Always present"
-      className="rounded-md border border-neutral-200 bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400"
+      className="rounded-full border border-neutral-200 bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400"
     >
       {label}
     </span>

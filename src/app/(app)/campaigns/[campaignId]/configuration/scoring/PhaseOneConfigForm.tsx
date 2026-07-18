@@ -49,23 +49,26 @@ export function PhaseOneConfigForm({
     });
   }
 
+  // Styled as a sibling of the Phase Summary card in the configuration
+  // sidebar: same 2xl radius, same tinted surface, same internal rhythm. The
+  // fields stack in one column because the column is narrow.
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon name="rule" className="text-[22px]" />
+    <section className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6 dark:border-neutral-800 dark:bg-neutral-950/40">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon name="rule" className="text-[18px]" />
         </span>
         <div>
-          <h2 className="text-lg font-semibold text-foreground">
-            Auto-classification thresholds
-          </h2>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Drive how weighted totals map to accept / reject / discuss.
+          <h3 className="text-base font-semibold text-foreground">
+            Auto-classification
+          </h3>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            How weighted totals map to accept / reject / discuss.
           </p>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <div className="mt-4 space-y-4">
         <div>
           <label
             htmlFor="rejectThreshold"
@@ -118,12 +121,14 @@ export function PhaseOneConfigForm({
         </div>
       </div>
 
-      <div className="mt-5 flex items-center gap-3">
-        <Button onClick={save} disabled={pending}>
+      {/* Stacked, not inline: the button spans the narrow sidebar column, so a
+          sibling on the same row would squeeze both. */}
+      <div className="mt-5 space-y-2">
+        <Button onClick={save} disabled={pending} className="w-full">
           {pending ? "Saving…" : "Save thresholds"}
         </Button>
         {saved && !pending && (
-          <span className="flex items-center gap-1 text-sm text-status-accepted">
+          <span className="flex items-center justify-center gap-1 text-sm text-status-accepted">
             <Icon name="check" className="text-[16px]" />
             Saved
           </span>

@@ -10,16 +10,23 @@ const ACTION_LABELS: Record<string, string> = {
   USER_DELETED: "deleted a member",
   PERMISSION_GRANTED: "granted a permission",
   PERMISSION_REVOKED: "revoked a permission",
+  BULK_PERMISSION_GRANTED: "granted a permission to several members",
+  BULK_PERMISSION_REVOKED: "revoked a permission from several members",
   PERMISSIONS_RESET: "reset permissions to template defaults",
   ADMIN_TRANSFER_INITIATED: "initiated an admin transfer",
   ADMIN_TRANSFER_CANCELLED: "cancelled an admin transfer",
   CAMPAIGN_CREATED: "created a campaign",
+  CAMPAIGN_DELETED: "deleted a campaign",
   PHASE1_SCORE_ENTERED: "entered a Phase 1 score",
   PHASE1_TECHNICAL_SCORE_ENTERED: "entered a technical score",
   PHASE1_RANKING_RECALCULATED: "recalculated the Phase 1 ranking",
   PHASE1_MANUAL_RESOLUTION: "resolved a Phase 1 discussion",
-  PHASE1_MANUAL_OVERRIDE: "manually overrode a Phase 1 classification",
-  PHASE1_OVERRIDE_REVERTED: "reverted a Phase 1 override to automatic",
+  // Reads "overrode", not "manually overrode": the UI dropped the word from the
+  // Accept/Reject actions and the badges, so the log should match what the user
+  // actually clicked. The stored actionType string is unchanged.
+  PHASE1_MANUAL_OVERRIDE: "overrode a Phase 1 classification",
+  PHASE1_OVERRIDE_REVERTED: "reverted a Phase 1 classification to automatic",
+  PHASE1_MARKED_TO_DISCUSS: "marked a Phase 1 applicant to discuss",
   PHASE1_FINALIZED: "finalized Phase 1 selection",
   GDG_DAY_DETAILS_SET: "set the GDG Day details",
   PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
@@ -53,9 +60,14 @@ export type ActivityTone =
 const ACTION_TONES: Record<string, ActivityTone> = {
   USER_CREATED: "accepted",
   CAMPAIGN_CREATED: "accepted",
+  // Irreversible and takes the whole applicant pool with it — the loudest tone
+  // in the log.
+  CAMPAIGN_DELETED: "rejected",
   PERMISSION_GRANTED: "accepted",
   USER_DELETED: "rejected",
   PERMISSION_REVOKED: "rejected",
+  BULK_PERMISSION_GRANTED: "accepted",
+  BULK_PERMISSION_REVOKED: "rejected",
   PERMISSIONS_RESET: "pending",
   ADMIN_TRANSFER_INITIATED: "pending",
   ADMIN_TRANSFER_CANCELLED: "pending",
@@ -70,6 +82,7 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   PHASE1_MANUAL_RESOLUTION: "pending",
   PHASE1_MANUAL_OVERRIDE: "pending",
   PHASE1_OVERRIDE_REVERTED: "pending",
+  PHASE1_MARKED_TO_DISCUSS: "pending",
   PHASE1_FINALIZED: "accepted",
   GDG_DAY_DETAILS_SET: "primary",
   // Emailing applicants their outcome is the outward-facing, hard-to-undo act —
@@ -85,15 +98,26 @@ export function actionTone(actionType: string): ActivityTone {
 export const SECURITY_ACTION_TYPES = [
   "USER_DELETED",
   "PERMISSION_REVOKED",
+  "BULK_PERMISSION_REVOKED",
   "ADMIN_TRANSFER_INITIATED",
   "ADMIN_TRANSFER_CANCELLED",
 ];
 
-/** Compact one-line rendering of a log entry's `details` JSON, or "" if none. */
+/**
+ * Compact one-line rendering of a log entry's `details` JSON, or "" if none.
+ *
+ * Array values are dropped rather than stringified: a bulk permission change
+ * records every affected user id, and `String(["cmr…","cmr…"])` would fill the
+ * Details column with an unreadable comma-run. The ids stay in the stored JSON
+ * for auditing — this is only the summary line, and the sibling count field
+ * already carries the magnitude.
+ */
 export function formatDetails(details: unknown): string {
   if (!details || typeof details !== "object") return "";
   return Object.values(details as Record<string, unknown>)
-    .filter((v) => v !== null && v !== undefined && v !== "")
+    .filter(
+      (v) => v !== null && v !== undefined && v !== "" && !Array.isArray(v),
+    )
     .map((v) => String(v))
     .join(" · ");
 }

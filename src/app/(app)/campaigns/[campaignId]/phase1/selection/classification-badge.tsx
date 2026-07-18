@@ -6,7 +6,12 @@ import { PhaseOneClassification } from "@/generated/prisma/enums";
 // never a raw orange. Presentational and hook-free, so server or client.
 //
 // Auto vs. manual share a colour on purpose: green means "this person is in"
-// however that was decided. The label carries who decided it.
+// however that was decided.
+//
+// Only the AUTO_* labels name their origin. A human decision just reads
+// "Accepted" / "Rejected" — from the reviewer's side that is simply the outcome,
+// and calling it "Manual Accept" restated a distinction the Auto labels already
+// draw by contrast. The enum values are untouched; this is display text only.
 const CLASSIFICATION_STYLES: Record<
   PhaseOneClassification,
   { label: string; className: string }
@@ -17,19 +22,19 @@ const CLASSIFICATION_STYLES: Record<
       "bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300",
   },
   [PhaseOneClassification.AUTO_ACCEPT]: {
-    label: "Auto Accept",
+    label: "Auto Accepted",
     className: "bg-status-accepted/10 text-status-accepted",
   },
   [PhaseOneClassification.MANUAL_ACCEPT]: {
-    label: "Manual Accept",
+    label: "Accepted",
     className: "bg-status-accepted/10 text-status-accepted",
   },
   [PhaseOneClassification.AUTO_REJECT]: {
-    label: "Auto Reject",
+    label: "Auto Rejected",
     className: "bg-status-rejected/10 text-status-rejected",
   },
   [PhaseOneClassification.MANUAL_REJECT]: {
-    label: "Manual Reject",
+    label: "Rejected",
     className: "bg-status-rejected/10 text-status-rejected",
   },
   [PhaseOneClassification.TO_DISCUSS]: {

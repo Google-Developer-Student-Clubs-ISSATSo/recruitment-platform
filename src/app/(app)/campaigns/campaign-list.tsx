@@ -1,12 +1,23 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 
 import { Icon } from "@/components/app-shell/icon";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { splitTimestamp } from "@/lib/activity-descriptions";
 import {
   createCampaign,
+  deleteCampaign,
   type CreateCampaignState,
 } from "./actions";
 
@@ -15,18 +26,23 @@ export type CampaignCard = {
   name: string;
   isOpen: boolean;
   createdAtISO: string;
+  applicantCount: number;
 };
 
 const createInitial: CreateCampaignState = { status: "idle" };
 
 export function CampaignList({
   campaigns,
-  canCreate,
+  canManage,
   denied,
 }: {
   campaigns: CampaignCard[];
-  /** Whether to show the Create Campaign control (MANAGE_CAMPAIGNS/ACCOUNTS). */
-  canCreate: boolean;
+  /**
+   * MANAGE_CAMPAIGNS/ACCOUNTS — gates both creating and deleting campaigns, which
+   * sit behind the same permission set. Server-enforced in actions.ts too; this
+   * only decides whether the controls are rendered.
+   */
+  canManage: boolean;
   /** Show the access-denied banner (bounced here from a page they can't reach). */
   denied: boolean;
 }) {
@@ -49,7 +65,7 @@ export function CampaignList({
             pick.
           </p>
         </div>
-        {canCreate && (
+        {canManage && (
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
@@ -72,7 +88,7 @@ export function CampaignList({
       ) : (
         <ul className="space-y-3">
           {campaigns.map((c) => (
-            <CampaignRow key={c.id} campaign={c} />
+            <CampaignRow key={c.id} campaign={c} canManage={canManage} />
           ))}
         </ul>
       )}
@@ -82,8 +98,16 @@ export function CampaignList({
   );
 }
 
-function CampaignRow({ campaign }: { campaign: CampaignCard }) {
+function CampaignRow({
+  campaign,
+  canManage,
+}: {
+  campaign: CampaignCard;
+  canManage: boolean;
+}) {
   const { date } = splitTimestamp(campaign.createdAtISO);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   return (
     <li className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="min-w-0">
@@ -94,17 +118,144 @@ function CampaignRow({ campaign }: { campaign: CampaignCard }) {
           <StatusBadge isOpen={campaign.isOpen} />
         </div>
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-          Created {date}
+          Created {date} · {campaign.applicantCount} applicant
+          {campaign.applicantCount === 1 ? "" : "s"}
         </p>
       </div>
-      <Link
-        href={`/campaigns/${campaign.id}/dashboard`}
-        className="flex items-center gap-2 rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
-      >
-        Enter
-        <Icon name="arrow_forward" className="text-[18px]" />
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          href={`/campaigns/${campaign.id}/dashboard`}
+          className="flex items-center gap-2 rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          Enter
+          <Icon name="arrow_forward" className="text-[18px]" />
+        </Link>
+        {canManage && (
+          <button
+            onClick={() => setConfirmingDelete(true)}
+            aria-label={`Delete ${campaign.name}`}
+            title="Delete campaign"
+            className="flex items-center rounded-lg border border-neutral-200 p-2 text-neutral-400 transition-colors hover:border-status-rejected/40 hover:bg-status-rejected/10 hover:text-status-rejected dark:border-neutral-800"
+          >
+            <Icon name="delete" className="text-[18px]" />
+          </button>
+        )}
+      </div>
+
+      {canManage && (
+        <DeleteCampaignDialog
+          campaign={campaign}
+          open={confirmingDelete}
+          onOpenChange={setConfirmingDelete}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * Type-to-confirm delete, in the GitHub repo-deletion mould: the destructive
+ * button stays disabled until the typed text matches the campaign name exactly.
+ * Deleting a campaign discards the entire applicant pool and every score,
+ * result and email log attached to it — potentially weeks of a recruitment
+ * cycle — so a single "Are you sure?" click is too weak a gate. The same name
+ * check is repeated server-side in {@link deleteCampaign}.
+ */
+function DeleteCampaignDialog({
+  campaign,
+  open,
+  onOpenChange,
+}: {
+  campaign: CampaignCard;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  // Every close routes through here — Cancel, Escape, backdrop, and a completed
+  // delete — so a half-typed name or stale error can never survive into the next
+  // opening. Done on the transition rather than in an effect keyed on `open`,
+  // which would set state during render.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
+      setTyped("");
+      setError(null);
+    }
+    onOpenChange(next);
+  }
+
+  const matches = typed === campaign.name;
+
+  function confirmDelete() {
+    if (!matches) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await deleteCampaign(campaign.id, typed);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      handleOpenChange(false);
+    });
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{campaign.name}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes the campaign and everything in it. It cannot
+            be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-3 text-left">
+          <ul className="space-y-1 rounded-lg border border-status-rejected/30 bg-status-rejected/10 p-3 text-sm text-status-rejected">
+            <li>
+              <strong>{campaign.applicantCount}</strong> applicant
+              {campaign.applicantCount === 1 ? "" : "s"} and all their
+              application data
+            </li>
+            <li>Every Phase 1 score, ranking and result</li>
+            <li>The scoring questions and configuration</li>
+            <li>The record of which result emails were sent</li>
+          </ul>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor={`confirm-${campaign.id}`}
+              className="block text-sm text-muted-foreground"
+            >
+              Type <strong className="text-foreground">{campaign.name}</strong>{" "}
+              to confirm:
+            </label>
+            <input
+              id={`confirm-${campaign.id}`}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-status-rejected focus:ring-2 focus:ring-status-rejected/20 dark:border-neutral-700 dark:bg-neutral-950"
+            />
+          </div>
+
+          {error && <p className="text-sm text-status-rejected">{error}</p>}
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <Button
+            variant="destructive"
+            disabled={!matches || pending}
+            onClick={confirmDelete}
+          >
+            {pending ? "Deleting…" : "Delete campaign"}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -131,29 +282,22 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
     if (state.status === "success") onClose();
   }, [state.status, onClose]);
 
+  // Built on the same AlertDialog primitives as every other modal in the app,
+  // rather than a hand-rolled overlay: that keeps the radius, surface, overlay
+  // treatment, footer rhythm and button tokens identical to the confirm dialogs
+  // without restating any of them here.
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-6 shadow-xl dark:border-neutral-800 dark:bg-neutral-900"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <h2 className="text-lg font-semibold text-foreground">
-            Create Campaign
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="text-neutral-400 transition-colors hover:text-foreground"
-          >
-            <Icon name="close" className="text-[20px]" />
-          </button>
-        </div>
+    <AlertDialog open onOpenChange={(next) => !next && onClose()}>
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Create Campaign</AlertDialogTitle>
+          <AlertDialogDescription>
+            Everything — applicants, screening, interviews — is scoped to the
+            campaign you create here.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
 
-        <form action={action} className="mt-4 space-y-4">
+        <form action={action} className="space-y-4 text-left">
           <div className="space-y-1.5">
             <label
               htmlFor="campaign-name"
@@ -186,24 +330,16 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
             <p className="text-sm text-status-rejected">{state.message}</p>
           )}
 
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
-            >
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button" disabled={pending}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={pending}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
-            >
+            </AlertDialogCancel>
+            <Button type="submit" disabled={pending}>
               {pending ? "Creating…" : "Create Campaign"}
-            </button>
-          </div>
+            </Button>
+          </AlertDialogFooter>
         </form>
-      </div>
-    </div>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

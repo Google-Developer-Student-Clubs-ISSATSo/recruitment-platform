@@ -1,12 +1,13 @@
-"use client";
-
-import { useMemo, useState } from "react";
+import Link from "next/link";
 
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import { Icon } from "@/components/app-shell/icon";
-import { Input } from "@/components/ui/input";
 import { StatusBadge } from "./status-badge";
 import { ImportPanel } from "./import/import-panel";
+import {
+  ApplicantsFilters,
+  type ApplicantFilters,
+} from "./applicants-filters";
 
 export type ApplicantRow = {
   id: string;
@@ -17,58 +18,60 @@ export type ApplicantRow = {
   status: ApplicantStatus;
 };
 
-const ALL = "ALL";
+/** At most this many numbered page links, windowed around the current page. */
+const PAGE_WINDOW = 5;
 
-// The applicants list: header + import action, stat cards, a filter bar, and a
-// table with token-colored status badges. Data is real and campaign-scoped
-// (fetched by the server page); this component only filters what it's given.
+// The applicants list: header + import action, stat cards, filter bar, and a
+// paginated table with token-coloured status badges. Everything shown is decided
+// server-side — this renders one page of an already-filtered query rather than
+// filtering anything itself, so it is a plain server component.
 export function ApplicantsView({
   campaignId,
   applicants,
   canImport,
+  targetCount,
+  counts,
+  matching,
+  page,
+  pageCount,
+  pageSize,
+  presentStatuses,
+  filters,
 }: {
   campaignId: string;
+  /** Just this page's rows. */
   applicants: ApplicantRow[];
   canImport: boolean;
+  /** PhaseOneConfig.targetCount — null until Configuration sets one. */
+  targetCount: number | null;
+  /** Campaign-wide aggregates, independent of filters and paging. */
+  counts: { total: number; shortlisted: number; rejected: number };
+  /** How many rows match the current filters, across all pages. */
+  matching: number;
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  presentStatuses: ApplicantStatus[];
+  filters: ApplicantFilters;
 }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<string>(ALL);
-  const [committee, setCommittee] = useState<string>(ALL);
-
-  // Only offer statuses that actually appear, so the filter never lists empty
-  // buckets.
-  const presentStatuses = useMemo(
-    () => [...new Set(applicants.map((a) => a.status))],
-    [applicants],
+  const basePath = `/campaigns/${campaignId}/applicants`;
+  const anyFilterActive = Boolean(
+    filters.q || filters.status || filters.committee,
   );
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return applicants.filter((a) => {
-      if (status !== ALL && a.status !== status) return false;
-      if (committee !== ALL && a.preferredCommittee !== committee) return false;
-      if (
-        q &&
-        !a.fullName.toLowerCase().includes(q) &&
-        !a.email.toLowerCase().includes(q)
-      )
-        return false;
-      return true;
-    });
-  }, [applicants, query, status, committee]);
+  // Page links carry the active filters, or paging would silently clear them.
+  const pageHref = (n: number) => {
+    const params = new URLSearchParams();
+    if (filters.q) params.set("q", filters.q);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.committee) params.set("committee", filters.committee);
+    if (n > 1) params.set("page", String(n));
+    const qs = params.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  };
 
-  const counts = useMemo(
-    () => ({
-      total: applicants.length,
-      submitted: applicants.filter((a) => a.status === ApplicantStatus.SUBMITTED)
-        .length,
-      rejected: applicants.filter(
-        (a) => a.status === ApplicantStatus.REJECTED_PHASE1,
-      ).length,
-      issatso: applicants.filter((a) => a.isIssatsoStudent).length,
-    }),
-    [applicants],
-  );
+  const first = matching === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = (page - 1) * pageSize + applicants.length;
 
   return (
     <div className="space-y-6">
@@ -84,57 +87,26 @@ export function ApplicantsView({
         {canImport && <ImportPanel campaignId={campaignId} />}
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — campaign-wide totals from their own count queries, so they
+          read the same on every page and under every filter. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Total" value={counts.total} />
-        <StatCard label="Submitted" value={counts.submitted} tone="primary" />
+        <StatCard label="Shortlisted" value={counts.shortlisted} tone="primary" />
         <StatCard
           label="Rejected (Phase 1)"
           value={counts.rejected}
           tone="rejected"
         />
-        <StatCard label="ISSATSO students" value={counts.issatso} />
+        {/* The plan, not a headcount: how many the club intends to accept,
+            straight from PhaseOneConfig. "—" until Configuration sets it. */}
+        <StatCard label="Target Quota" value={targetCount ?? "—"} />
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="relative min-w-[220px] flex-1">
-          <Icon
-            name="search"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-neutral-400"
-          />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or email…"
-            className="pl-9"
-          />
-        </div>
-        <FilterSelect
-          value={status}
-          onChange={setStatus}
-          ariaLabel="Filter by status"
-        >
-          <option value={ALL}>All statuses</option>
-          {presentStatuses.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect
-          value={committee}
-          onChange={setCommittee}
-          ariaLabel="Filter by committee"
-        >
-          <option value={ALL}>All committees</option>
-          {Object.values(Committee).map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </FilterSelect>
-      </div>
+      <ApplicantsFilters
+        basePath={basePath}
+        filters={filters}
+        presentStatuses={presentStatuses}
+      />
 
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
@@ -149,19 +121,19 @@ export function ApplicantsView({
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
-            {filtered.length === 0 ? (
+            {applicants.length === 0 ? (
               <tr>
                 <td
                   colSpan={5}
                   className="px-5 py-10 text-center text-sm italic text-neutral-400"
                 >
-                  {applicants.length === 0
+                  {counts.total === 0
                     ? "No applicants in this campaign yet."
                     : "No applicants match your filters."}
                 </td>
               </tr>
             ) : (
-              filtered.map((a) => (
+              applicants.map((a) => (
                 <tr
                   key={a.id}
                   className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/40"
@@ -188,35 +160,96 @@ export function ApplicantsView({
             )}
           </tbody>
         </table>
-        <div className="border-t border-neutral-200 bg-neutral-50 px-5 py-3 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-          Showing {filtered.length} of {counts.total} applicant
-          {counts.total === 1 ? "" : "s"}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-5 py-3 dark:border-neutral-800 dark:bg-neutral-950/40">
+          <span className="text-sm text-neutral-500 dark:text-neutral-400">
+            Showing {first}–{last} of {matching}
+            {anyFilterActive ? " matching" : ""} applicant
+            {matching === 1 ? "" : "s"}
+          </span>
+          {pageCount > 1 && (
+            <Pagination page={page} pageCount={pageCount} pageHref={pageHref} />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function FilterSelect({
-  value,
-  onChange,
-  ariaLabel,
-  children,
+/**
+ * Every control is a real link to `?page=N`, so paging re-runs the server query
+ * with a new skip/take. Prev/Next become inert spans at the ends — a disabled
+ * <a> is still followable, so the element type changes, not just its styling.
+ */
+function Pagination({
+  page,
+  pageCount,
+  pageHref,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  ariaLabel: string;
-  children: React.ReactNode;
+  page: number;
+  pageCount: number;
+  pageHref: (n: number) => string;
 }) {
+  // Slide the window so the current page stays inside it, then clamp — near
+  // either end the window shortens rather than running off.
+  const windowStart = Math.max(
+    1,
+    Math.min(page - Math.floor(PAGE_WINDOW / 2), pageCount - PAGE_WINDOW + 1),
+  );
+  const windowEnd = Math.min(pageCount, windowStart + PAGE_WINDOW - 1);
+  const pages = Array.from(
+    { length: windowEnd - windowStart + 1 },
+    (_, i) => windowStart + i,
+  );
+
+  const arrowClass =
+    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800";
+  const arrowDisabledClass =
+    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-300 opacity-40 dark:border-neutral-800 dark:text-neutral-600";
+
   return (
-    <select
-      aria-label={ariaLabel}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-    >
-      {children}
-    </select>
+    <div className="flex items-center gap-1">
+      {page > 1 ? (
+        <Link href={pageHref(page - 1)} aria-label="Previous page" className={arrowClass}>
+          <Icon name="chevron_left" className="text-[20px]" />
+        </Link>
+      ) : (
+        <span aria-hidden className={arrowDisabledClass}>
+          <Icon name="chevron_left" className="text-[20px]" />
+        </span>
+      )}
+
+      {pages.map((n) =>
+        n === page ? (
+          <span
+            key={n}
+            aria-current="page"
+            className="flex size-8 items-center justify-center rounded bg-primary text-sm font-semibold text-white"
+          >
+            {n}
+          </span>
+        ) : (
+          <Link
+            key={n}
+            href={pageHref(n)}
+            aria-label={`Page ${n}`}
+            className="flex size-8 items-center justify-center rounded border border-neutral-200 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            {n}
+          </Link>
+        ),
+      )}
+
+      {page < pageCount ? (
+        <Link href={pageHref(page + 1)} aria-label="Next page" className={arrowClass}>
+          <Icon name="chevron_right" className="text-[20px]" />
+        </Link>
+      ) : (
+        <span aria-hidden className={arrowDisabledClass}>
+          <Icon name="chevron_right" className="text-[20px]" />
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -226,7 +259,8 @@ function StatCard({
   tone,
 }: {
   label: string;
-  value: number;
+  /** A string lets an unconfigured value render as "—" rather than 0. */
+  value: number | string;
   tone?: "primary" | "rejected";
 }) {
   const valueColor =

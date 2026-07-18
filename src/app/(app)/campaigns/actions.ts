@@ -54,3 +54,64 @@ export async function createCampaign(
   revalidatePath("/campaigns");
   return { status: "success", message: `Campaign "${name}" was created.` };
 }
+
+/**
+ * Permanently delete a campaign and everything scoped to it. Same permission bar
+ * as creating one (MANAGE_CAMPAIGNS / MANAGE_ACCOUNTS), enforced here rather than
+ * only hiding the control.
+ *
+ * The caller must echo back the campaign's exact name — the UI gates the button
+ * on it, and it is re-checked server-side so the action can't be driven directly
+ * with the wrong id.
+ *
+ * Deletion order is explicit and NOT left to the database: only PhaseOneQuestion
+ * and PhaseOneConfig cascade from Campaign, and only PhaseOneScore/PhaseOneResult
+ * cascade from Applicant. Applicant→Campaign and both EmailLog relations have no
+ * onDelete rule, so they default to Restrict and a bare campaign.delete() fails
+ * with a foreign-key error the moment a campaign has any applicant. Email logs go
+ * first (they reference both applicant and campaign), then applicants (taking
+ * their scores and results with them), then the campaign itself (taking questions
+ * and config). One transaction, so a half-deleted campaign is never observable.
+ */
+export async function deleteCampaign(
+  campaignId: string,
+  confirmationName: string,
+): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { ok: false, error: "You are signed out." };
+
+  if (!(await hasAnyPermission(userId, CAMPAIGN_CREATE_PERMISSIONS))) {
+    return { ok: false, error: "You don't have permission to delete campaigns." };
+  }
+
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true, name: true, _count: { select: { applicants: true } } },
+  });
+  if (!campaign) return { ok: false, error: "That campaign doesn't exist." };
+
+  if (confirmationName.trim() !== campaign.name) {
+    return { ok: false, error: "The name you typed doesn't match this campaign." };
+  }
+
+  // Counted before the delete — afterwards there is nothing left to count.
+  const applicantCount = campaign._count.applicants;
+
+  await prisma.$transaction([
+    prisma.emailLog.deleteMany({ where: { campaignId } }),
+    prisma.applicant.deleteMany({ where: { campaignId } }),
+    prisma.campaign.delete({ where: { id: campaignId } }),
+  ]);
+
+  await logActivity({
+    actorId: userId,
+    actionType: "CAMPAIGN_DELETED",
+    targetType: "Campaign",
+    targetId: campaignId,
+    details: { name: campaign.name, applicantCount },
+  });
+
+  revalidatePath("/campaigns");
+  return { ok: true, name: campaign.name };
+}

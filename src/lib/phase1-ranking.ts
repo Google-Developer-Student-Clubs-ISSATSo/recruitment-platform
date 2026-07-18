@@ -36,14 +36,23 @@ export function phaseOneCohortWhere(campaignId: string) {
   };
 }
 
-/** Classifications that represent a human decision, never overwritten below. */
-const MANUAL_CLASSIFICATIONS: readonly PhaseOneClassification[] = [
+/**
+ * Classifications a recalculation must never overwrite.
+ *
+ * MANUAL_ACCEPT / MANUAL_REJECT are decisions a human already made. TO_DISCUSS
+ * is the flag that a human still *needs* to decide — it only ever gets there by
+ * landing in the buffer band or by someone marking it explicitly, and either way
+ * clearing it automatically would lose the fact that the row was flagged. It
+ * persists until a human resolves it (Accept/Reject) or explicitly reverts it.
+ */
+const STICKY_CLASSIFICATIONS: readonly PhaseOneClassification[] = [
   PhaseOneClassification.MANUAL_ACCEPT,
   PhaseOneClassification.MANUAL_REJECT,
+  PhaseOneClassification.TO_DISCUSS,
 ];
 
-function isManual(c: PhaseOneClassification): boolean {
-  return MANUAL_CLASSIFICATIONS.includes(c);
+function isSticky(c: PhaseOneClassification): boolean {
+  return STICKY_CLASSIFICATIONS.includes(c);
 }
 
 /** The buffer band half-width around targetCount, in ranks. */
@@ -88,12 +97,17 @@ export type RecalculateResult =
  *       target - buffer < rank <= target + buffer  → TO_DISCUSS
  *       rank > target + buffer                     → AUTO_REJECT
  *
- * MANUAL_ACCEPT / MANUAL_REJECT are human decisions and survive every
- * recalculation, even when the band would now say otherwise. They do still
- * consume a rank: rank reflects where a score placed, which stays true whoever
- * decided the outcome. Dropping them from the ordering instead would pull the
- * applicants below them up into the buffer band, so recalculating after a few
- * resolutions would resurrect already-rejected candidates into TO_DISCUSS.
+ * MANUAL_ACCEPT / MANUAL_REJECT / TO_DISCUSS survive every recalculation, even
+ * when the band would now say otherwise — the first two because a human already
+ * decided, TO_DISCUSS because a human still has to. They do still consume a
+ * rank: rank reflects where a score placed, which stays true whoever decided the
+ * outcome. Dropping them from the ordering instead would pull the applicants
+ * below them up into the buffer band, so recalculating after a few resolutions
+ * would resurrect already-rejected candidates into TO_DISCUSS.
+ *
+ * Note the asymmetry this creates: a recalculation can move someone INTO
+ * TO_DISCUSS (by banding) but never out of it. Only resolving the row, or
+ * `revertOverrideAction`, clears the flag.
  *
  * Ties on weightedTotal are broken by name, then id — arbitrary, but stable
  * across runs, so a tie straddling a band boundary can't flip classification on
@@ -172,8 +186,8 @@ export async function recalculatePhaseOneRanking(
   const rows: RankedApplicant[] = derived.map((d) => {
     const rank = rankByApplicant.get(d.applicantId) ?? null;
 
-    // A human decision outranks anything the bands would say.
-    if (isManual(d.existing)) {
+    // A human decision — or a pending one — outranks anything the bands say.
+    if (isSticky(d.existing)) {
       return {
         applicantId: d.applicantId,
         fullName: d.fullName,

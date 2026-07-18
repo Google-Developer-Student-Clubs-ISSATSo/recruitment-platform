@@ -1,43 +1,82 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
-import { Committee, RoleTemplateName } from "@/generated/prisma/enums";
+import { Committee } from "@/generated/prisma/enums";
 import { Input } from "@/components/ui/input";
 import type { TemplateOption } from "./permission-config";
 
 export type MemberFilters = {
-  query: string;
-  committee: Committee | "ALL";
-  template: RoleTemplateName | "ALL";
-};
-
-export const EMPTY_FILTERS: MemberFilters = {
-  query: "",
-  committee: "ALL",
-  template: "ALL",
+  q: string;
+  /** Raw Committee value, or "" for all. */
+  committee: string;
+  /** Raw RoleTemplateName value, or "" for all. */
+  template: string;
 };
 
 const SELECT_CLASS =
   "rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950";
 
 /**
- * Reusable live search + filter controls for the member list. Purely
- * controlled: it renders the inputs and reports changes; the parent owns the
- * filter state and applies it. Text search combines with the committee and
- * role-template dropdowns.
+ * Search + committee + role-template filters, held in the URL so the server
+ * query does the filtering. The member table is a paginated slice, so filtering
+ * it in the browser would only ever filter the current page — and "select all
+ * matching" needs a set the server can also see.
+ *
+ * Every change drops `page`, resetting to 1: narrowing to three results while
+ * still on page 4 would show an empty table and read as a broken filter.
+ *
+ * The selects navigate immediately; the search box keeps local state and pushes
+ * on a short debounce, so typing isn't a server round-trip per character.
  */
 export function SearchFilterBar({
+  basePath,
   filters,
-  onChange,
   committees,
   templates,
 }: {
+  basePath: string;
   filters: MemberFilters;
-  onChange: (next: MemberFilters) => void;
   committees: Committee[];
   templates: TemplateOption[];
 }) {
+  const router = useRouter();
+  const [q, setQ] = useState(filters.q);
+
+  // What the URL currently holds — comparing against it stops the debounce
+  // firing a redundant push on mount or re-pushing an unchanged value.
+  const committed = useRef(filters.q);
+
+  function hrefFor(next: MemberFilters) {
+    const params = new URLSearchParams();
+    if (next.q) params.set("q", next.q);
+    if (next.committee) params.set("committee", next.committee);
+    if (next.template) params.set("template", next.template);
+    const qs = params.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  }
+
+  useEffect(() => {
+    if (q === committed.current) return;
+    const t = setTimeout(() => {
+      committed.current = q;
+      router.push(hrefFor({ ...filters, q }));
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  function applySelect(patch: Partial<MemberFilters>) {
+    // Carry the box's current text, so a half-typed search isn't thrown away by
+    // touching a dropdown.
+    committed.current = q;
+    router.push(hrefFor({ ...filters, q, ...patch }));
+  }
+
+  const anyActive = Boolean(q || filters.committee || filters.template);
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="relative min-w-56 flex-1">
@@ -47,8 +86,8 @@ export function SearchFilterBar({
         />
         <Input
           type="search"
-          value={filters.query}
-          onChange={(e) => onChange({ ...filters, query: e.target.value })}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
           placeholder="Search by name or email…"
           aria-label="Search members by name or email"
           className="h-10 pl-9"
@@ -58,15 +97,10 @@ export function SearchFilterBar({
       <select
         aria-label="Filter by committee"
         value={filters.committee}
-        onChange={(e) =>
-          onChange({
-            ...filters,
-            committee: e.target.value as MemberFilters["committee"],
-          })
-        }
+        onChange={(e) => applySelect({ committee: e.target.value })}
         className={SELECT_CLASS}
       >
-        <option value="ALL">All committees</option>
+        <option value="">All committees</option>
         {committees.map((c) => (
           <option key={c} value={c}>
             {c}
@@ -77,36 +111,30 @@ export function SearchFilterBar({
       <select
         aria-label="Filter by role template"
         value={filters.template}
-        onChange={(e) =>
-          onChange({
-            ...filters,
-            template: e.target.value as MemberFilters["template"],
-          })
-        }
+        onChange={(e) => applySelect({ template: e.target.value })}
         className={SELECT_CLASS}
       >
-        <option value="ALL">All role templates</option>
+        <option value="">All role templates</option>
         {templates.map((t) => (
           <option key={t.name} value={t.name}>
             {t.label}
           </option>
         ))}
       </select>
+
+      {anyActive && (
+        <button
+          type="button"
+          onClick={() => {
+            setQ("");
+            committed.current = "";
+            router.push(basePath);
+          }}
+          className="text-[11px] font-semibold uppercase tracking-wider text-primary transition-colors hover:text-primary/80"
+        >
+          Clear
+        </button>
+      )}
     </div>
   );
-}
-
-/** Whether a row matches the active filters. Shared by the parent list. */
-export function matchesFilters(
-  row: { name: string; email: string; committee: Committee; templateName: RoleTemplateName },
-  filters: MemberFilters,
-): boolean {
-  const q = filters.query.trim().toLowerCase();
-  if (q && !row.name.toLowerCase().includes(q) && !row.email.toLowerCase().includes(q))
-    return false;
-  if (filters.committee !== "ALL" && row.committee !== filters.committee)
-    return false;
-  if (filters.template !== "ALL" && row.templateName !== filters.template)
-    return false;
-  return true;
 }
