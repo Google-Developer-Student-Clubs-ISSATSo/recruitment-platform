@@ -207,6 +207,18 @@ export const signOff: React.CSSProperties = {
   margin: "0 0 4px",
 };
 
+/**
+ * An italic subheading inside the body copy — currently the acceptance email's
+ * "What do you need to do next?". Bold as well as italic so it separates the
+ * instructions below it from the prose above at a glance.
+ */
+export const subheading: React.CSSProperties = {
+  ...paragraph,
+  fontStyle: "italic",
+  fontWeight: 700,
+  margin: "20px 0 12px",
+};
+
 /** The team name: the one body line that stays centred, and is bold. */
 export const teamName: React.CSSProperties = {
   ...paragraph,
@@ -217,39 +229,54 @@ export const teamName: React.CSSProperties = {
 };
 
 /**
- * Shared shell for every outbound applicant email — the Phase 1 results and the
- * interview booking invite/reminder: a white page holding a centred 600px
- * #F3F3F2 card, left-aligned black body copy, then a footer in a fixed order —
- * the GDGC banner, a two-column social
- * links row (Facebook/LinkedIn | Youtube/Twitter), and the logo-kamel graphic
- * at the very bottom. Both images are hosted URLs, not attachments. Templates supply
- * the body via `children`; `preview` sets the inbox snippet.
+ * Shared shell for every outbound applicant email — the Phase 1 results, the
+ * interview booking invite/reminder, and the final acceptance/rejection: a
+ * white page holding a centred 600px #F3F3F2 card, left-aligned black body
+ * copy, the GDGC banner, a two-column social links row (Facebook/LinkedIn |
+ * Youtube/Twitter), and the logo-kamel graphic at the very bottom. Both images
+ * are hosted URLs, not attachments. Templates supply the body via `children`;
+ * `preview` sets the inbox snippet.
+ *
+ * `bannerPosition` moves ONLY the banner: "bottom" (the default, so the Phase 1
+ * and interview templates keep rendering exactly as they always have) puts it
+ * under the body copy; "top" puts it above, which is what the final-decision
+ * emails use. The social links and the logo stay below the content either way —
+ * the footer order never changes.
  */
 export function BaseEmailLayout({
   preview,
+  bannerPosition = "bottom",
   children,
 }: {
   preview: string;
+  bannerPosition?: "top" | "bottom";
   children: React.ReactNode;
 }) {
+  // One element, rendered in one of two places — so the two positions can never
+  // drift into using different markup or alt text.
+  const banner = (
+    <Section style={bannerSection}>
+      <Img
+        src={BANNER_SRC}
+        alt="Google Developer Groups On Campus - ISSATSo"
+        style={bannerImg}
+      />
+    </Section>
+  );
+
   return (
     <Html lang="en">
       <Head />
       <Preview>{preview}</Preview>
       <Body style={main}>
         <Container style={container}>
+          {bannerPosition === "top" && banner}
+
           <Section style={contentSection}>{children}</Section>
 
-          {/* 1. Banner: the blue-patterned GDGC graphic */}
-          <Section style={bannerSection}>
-            <Img
-              src={BANNER_SRC}
-              alt="Google Developer Groups On Campus - ISSATSo"
-              style={bannerImg}
-            />
-          </Section>
+          {bannerPosition === "bottom" && banner}
 
-          {/* 2. Social links — two columns: Facebook/LinkedIn | Youtube/Twitter.
+          {/* Social links — two columns: Facebook/LinkedIn | Youtube/Twitter.
               Each line: bold "Label :" + normal-weight underlined blue link. */}
           <Section style={socialSection}>
             <Row>
@@ -276,7 +303,7 @@ export function BaseEmailLayout({
             </Row>
           </Section>
 
-          {/* 3. logo-kamel.png at the very bottom */}
+          {/* logo-kamel.png at the very bottom */}
           <Section style={footerLogoSection}>
             <Img
               src={FOOTER_LOGO_SRC}

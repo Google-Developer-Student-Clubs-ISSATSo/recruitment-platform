@@ -1,4 +1,5 @@
 import { Committee } from "@/generated/prisma/enums";
+import { COMMITTEE_LABEL } from "@/lib/committee";
 
 // Pure CSV parsing + row classification for the applicant import. No database
 // access and no "use server" — the server actions call these, passing in the
@@ -16,11 +17,14 @@ export const HEADER = {
 } as const;
 
 // Committee answer → enum. Anything not listed is an error row, never guessed.
-const COMMITTEE_MAP: Record<string, Committee> = {
-  "Marketing (MKT)": Committee.MKT,
-  "Team Management (TM)": Committee.TM,
-  "Events & External Relations (EER)": Committee.EER,
-};
+// Derived from COMMITTEE_LABEL rather than restated, so the answers accepted
+// here and the committee names the outbound emails print stay one and the same.
+const COMMITTEE_MAP: Record<string, Committee> = Object.fromEntries(
+  Object.entries(COMMITTEE_LABEL).map(([value, label]) => [
+    label,
+    value as Committee,
+  ]),
+);
 
 export type RowStatus = "import" | "auto_reject" | "duplicate" | "error";
 

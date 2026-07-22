@@ -60,6 +60,9 @@ export const PLATFORM_PAGE_PERMISSIONS = {
 export const CONFIGURATION_PERMISSIONS: readonly PermissionKey[] = [
   PermissionKey.MANAGE_CAPACITY,
   PermissionKey.CONFIGURE_SCREENING,
+  // SEND_EMAILS holders own the Final Decision Email Links section, so the page
+  // has something for them even when the other two sections stay hidden.
+  PermissionKey.SEND_EMAILS,
 ];
 
 /**

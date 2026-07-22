@@ -203,10 +203,48 @@ model Campaign {
   // sets it on the Interviews page; required before either booking email sends.
   interviewCalendarLink String?
 
-  applicants        Applicant[]
-  phaseOneQuestions PhaseOneQuestion[]
-  phaseOneConfig    PhaseOneConfig?
-  emailLogs         EmailLog[]
+  // Set when the final decision meeting is signed off — every applicant has been
+  // Accepted or Rejected and nobody is left SHORTLISTED/PENDING. Null until then.
+  // Non-null is what makes the dashboard treat further decision changes as a
+  // deliberate re-opening rather than routine, the same way phaseOneFinalizedAt
+  // guards the Phase 1 selection page.
+  finalDecisionCompletedAt DateTime?
+
+  // External destinations interpolated into the two final-result emails. Kept
+  // per-campaign, like interviewCalendarLink and for the same reason: the
+  // acceptance form and the Discord invite are regenerated every cycle, and a
+  // hardcoded constant would silently mail last year's links. All four are null
+  // until set on the Configuration page; the batch refuses to send without them.
+  acceptanceFormLink String?
+  gdgcProgramLink    String?
+  gdgcPlatformLink   String?
+  discordInviteLink  String?
+
+  applicants          Applicant[]
+  phaseOneQuestions   PhaseOneQuestion[]
+  phaseOneConfig      PhaseOneConfig?
+  emailLogs           EmailLog[]
+  committeeCapacities CommitteeCapacity[]
+}
+
+// How many seats a committee is recruiting for on one campaign. One row per
+// (campaign, committee); the @@unique is what the Configuration form upserts
+// against.
+//
+// Only the TARGET lives here. The running accepted count is deliberately not
+// stored — it is counted live off Applicant (campaignId + assignedCommittee +
+// status ACCEPTED) wherever it's shown, the same reasoning as InterviewNote's
+// AVG: a stored counter drifts the moment a status changes by any path that
+// forgets to update it, and a live count cannot.
+model CommitteeCapacity {
+  id         String    @id @default(cuid())
+  campaignId String
+  committee  Committee
+  target     Int
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, committee])
 }
 
 enum ApplicantStatus {

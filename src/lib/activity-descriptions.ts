@@ -30,6 +30,11 @@ const ACTION_LABELS: Record<string, string> = {
   PHASE1_FINALIZED: "finalized Phase 1 selection",
   GDG_DAY_DETAILS_SET: "set the GDG Day details",
   PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
+  CAPACITY_UPDATED: "updated the committee capacity",
+  FINAL_DECISION_RECORDED: "recorded a final decision",
+  FINAL_DECISIONS_COMPLETED: "completed the final decisions",
+  FINAL_EMAIL_LINKS_UPDATED: "updated the final decision email links",
+  FINAL_EMAILS_SENT: "sent the final result emails",
 };
 
 /** "PERMISSION_GRANTED" -> "granted a permission" (falls back to a humanized form). */
@@ -85,6 +90,16 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   PHASE1_MARKED_TO_DISCUSS: "pending",
   PHASE1_FINALIZED: "accepted",
   GDG_DAY_DETAILS_SET: "primary",
+  // Configuration, not a decision about anyone — the quiet end of the log, same
+  // as the other settings changes.
+  CAPACITY_UPDATED: "primary",
+  // A decision about a person, and the sign-off that closes the campaign —
+  // weighted like the Phase 1 equivalents.
+  FINAL_DECISION_RECORDED: "pending",
+  FINAL_DECISIONS_COMPLETED: "accepted",
+  FINAL_EMAIL_LINKS_UPDATED: "primary",
+  // Outward-facing and unrecallable, like the Phase 1 send.
+  FINAL_EMAILS_SENT: "accepted",
   // Emailing applicants their outcome is the outward-facing, hard-to-undo act —
   // it stands out in the log alongside finalization.
   PHASE1_EMAILS_SENT: "accepted",

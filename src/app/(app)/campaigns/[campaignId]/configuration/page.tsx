@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { PermissionGate } from "@/components/permission-gate";
 import { CapacityConfigSection } from "./CapacityConfigSection";
+import { FinalEmailLinksSection } from "./FinalEmailLinksSection";
 import { ScoringConfigSection } from "./ScoringConfigSection";
 
 // Per-campaign Configuration. Composes independent sections, each gated by its
@@ -29,11 +30,12 @@ export default async function ConfigurationPage({
   // Used only to decide whether to show the empty state. The sections
   // themselves re-check via PermissionGate; hasPermission is request-cached, so
   // this adds no extra queries.
-  const [canCapacity, canScreening] = await Promise.all([
+  const [canCapacity, canScreening, canSendEmails] = await Promise.all([
     hasPermission(userId, PermissionKey.MANAGE_CAPACITY),
     hasPermission(userId, PermissionKey.CONFIGURE_SCREENING),
+    hasPermission(userId, PermissionKey.SEND_EMAILS),
   ]);
-  const hasAnyConfigAccess = canCapacity || canScreening;
+  const hasAnyConfigAccess = canCapacity || canScreening || canSendEmails;
 
   return (
     // Widened from max-w-3xl to match the activity log and the Stitch reference's
@@ -52,7 +54,11 @@ export default async function ConfigurationPage({
       {hasAnyConfigAccess ? (
         <div className="space-y-6">
           <PermissionGate permission={PermissionKey.MANAGE_CAPACITY}>
-            <CapacityConfigSection />
+            <CapacityConfigSection campaignId={campaignId} />
+          </PermissionGate>
+
+          <PermissionGate permission={PermissionKey.SEND_EMAILS}>
+            <FinalEmailLinksSection campaignId={campaignId} />
           </PermissionGate>
 
           <PermissionGate permission={PermissionKey.CONFIGURE_SCREENING}>
