@@ -3,6 +3,7 @@ import { requirePermission, hasPermission } from "@/lib/permissions";
 import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
 import { phaseOneCohortWhere } from "@/lib/phase1-ranking";
 import { PHASE1_TEMPLATE } from "@/lib/phase1-email-templates";
+import { tunisInputValue } from "@/lib/tunis-time";
 import { formatGdgDayDateTime } from "@/emails/PhaseOneAcceptanceEmail";
 import {
   ApplicantStatus,
@@ -11,25 +12,6 @@ import {
 } from "@/generated/prisma/enums";
 import { SelectionClient, type SelectionRow } from "./SelectionClient";
 import { EmailPanel } from "./EmailPanel";
-
-// Render a stored instant as the "YYYY-MM-DDTHH:MM" a datetime-local input wants,
-// expressed in Tunis time so the field shows the same wall-clock the TM Lead
-// originally typed (see parseTunisLocal in actions.ts for the inverse).
-function tunisInputValue(d: Date): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Africa/Tunis",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
-  const get = (t: Intl.DateTimeFormatPartTypes) =>
-    parts.find((p) => p.type === t)?.value ?? "";
-  const hour = get("hour") === "24" ? "00" : get("hour");
-  return `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}`;
-}
 
 // Phase 1 Selection & Ranking. Reads the *persisted* PhaseOneResult rows — it
 // never recalculates on load. Ranking is an explicit, logged act by the TM

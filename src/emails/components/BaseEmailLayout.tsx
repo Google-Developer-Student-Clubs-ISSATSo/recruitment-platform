@@ -187,6 +187,20 @@ export const paragraph: React.CSSProperties = {
   margin: "0 0 16px",
 };
 
+/**
+ * An inline link inside body copy — bold, underlined, standard link blue, the
+ * same blue the footer's social links use so every link in a message reads the
+ * same way. As with `socialLinkStyle`, `Link` emits its own
+ * `text-decoration-line:none`, so the longhand has to be overridden by name;
+ * relying on the shorthand winning on source order is not safe across clients.
+ */
+export const bodyLink: React.CSSProperties = {
+  fontWeight: 700,
+  color: "#1155cc",
+  textDecorationLine: "underline",
+  textDecoration: "underline",
+};
+
 /** "Sincerely," — same left-aligned body copy, just with no bottom gap. */
 export const signOff: React.CSSProperties = {
   ...paragraph,
@@ -203,7 +217,8 @@ export const teamName: React.CSSProperties = {
 };
 
 /**
- * Shared shell for every Phase 1 email: a white page holding a centred 600px
+ * Shared shell for every outbound applicant email — the Phase 1 results and the
+ * interview booking invite/reminder: a white page holding a centred 600px
  * #F3F3F2 card, left-aligned black body copy, then a footer in a fixed order —
  * the GDGC banner, a two-column social
  * links row (Facebook/LinkedIn | Youtube/Twitter), and the logo-kamel graphic

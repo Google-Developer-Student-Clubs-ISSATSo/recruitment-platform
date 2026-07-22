@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { logActivity } from "@/lib/activity-log";
+import { parseTunisLocal } from "@/lib/tunis-time";
 import {
   runPhaseOneEmailBatch,
   type SendFailure,
@@ -378,18 +379,6 @@ async function authorizeEmails(
   if (!campaign) return { ok: false, error: "That campaign doesn't exist." };
 
   return { ok: true, userId };
-}
-
-// datetime-local gives wall-clock minutes with no zone ("2026-11-01T15:00").
-// The club is in Sousse, so that wall time is always meant as Tunisian local
-// time (UTC+1, no DST). Pin the offset explicitly instead of trusting the
-// server's TZ, so the stored instant matches what the TM Lead typed.
-const LOCAL_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-
-function parseTunisLocal(value: string): Date | null {
-  if (!LOCAL_DATETIME_RE.test(value)) return null;
-  const date = new Date(`${value}:00+01:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 /**

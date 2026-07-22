@@ -27,13 +27,15 @@ model User {
   roleTemplateId String?
   roleTemplate   RoleTemplate? @relation(fields: [roleTemplateId], references: [id])
 
-  accounts            Account[]
-  sessions            Session[]
-  permissions         UserPermission[]
-  activityLogs        ActivityLogEntry[]
-  sentInvites         AdminTransferInvite[] @relation("InviteInitiator")
-  phaseOneScoresGiven PhaseOneScore[]
-  emailLogsSent       EmailLog[]
+  accounts              Account[]
+  sessions              Session[]
+  permissions           UserPermission[]
+  activityLogs          ActivityLogEntry[]
+  sentInvites           AdminTransferInvite[] @relation("InviteInitiator")
+  phaseOneScoresGiven   PhaseOneScore[]
+  emailLogsSent         EmailLog[]
+  interviewSlotsEntered InterviewSlot[]
+  panelSeatsClaimed     PanelSeat[]
 }
 
 model Account {
@@ -107,8 +109,8 @@ enum RoleTemplateName {
 }
 
 model RoleTemplate {
-  id          String                    @id @default(cuid())
-  name        RoleTemplateName          @unique
+  id          String                   @id @default(cuid())
+  name        RoleTemplateName         @unique
   description String?
   permissions RoleTemplatePermission[]
   users       User[]
@@ -195,6 +197,12 @@ model Campaign {
   gdgDayDateTime DateTime?
   gdgDayLocation String?
 
+  // Where applicants book their interview slot — the link both booking emails
+  // send them to. Per-campaign rather than hardcoded in the templates, since the
+  // club regenerates the short link each recruitment cycle. Null until someone
+  // sets it on the Interviews page; required before either booking email sends.
+  interviewCalendarLink String?
+
   applicants        Applicant[]
   phaseOneQuestions PhaseOneQuestion[]
   phaseOneConfig    PhaseOneConfig?
@@ -221,14 +229,17 @@ model Applicant {
   preferredCommittee Committee
   assignedCommittee  Committee?
   status             ApplicantStatus @default(SUBMITTED)
-  rawFormData         Json?
+  rawFormData        Json?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  campaign        Campaign         @relation(fields: [campaignId], references: [id])
-  phaseOneScores  PhaseOneScore[]
-  phaseOneResult  PhaseOneResult?
-  emailLogs       EmailLog[]
+  campaign       Campaign        @relation(fields: [campaignId], references: [id])
+  phaseOneScores PhaseOneScore[]
+  phaseOneResult PhaseOneResult?
+  emailLogs      EmailLog[]
+  interviewSlot  InterviewSlot?
+  interviewPanel InterviewPanel?
+  interviewNote  InterviewNote?
 
   @@unique([campaignId, email])
 }
@@ -245,14 +256,14 @@ enum PhaseOneClassification {
 }
 
 model PhaseOneQuestion {
-  id                      String   @id @default(cuid())
+  id                      String  @id @default(cuid())
   campaignId              String
   text                    String
   coefficient             Float
   noteScale               Float[] // e.g. [0, 0.5, 1] or [0, 0.25, 0.5, 0.75, 1]
   order                   Int
-  isActive                Boolean  @default(true)
-  requiresTechnicalScorer Boolean  @default(false)
+  isActive                Boolean @default(true)
+  requiresTechnicalScorer Boolean @default(false)
   // true ONLY for the "Technical Skills" question — gates it to
   // ENTER_TECHNICAL_SCORE holders instead of SCREEN_PHASE1 holders
   sourceField             String?
@@ -320,4 +331,70 @@ model EmailLog {
   applicant Applicant @relation(fields: [applicantId], references: [id])
   campaign  Campaign  @relation(fields: [campaignId], references: [id])
   sentBy    User      @relation(fields: [sentById], references: [id])
+}
+
+// ============ INTERVIEW SCHEDULING ============
+
+// One row per shortlisted applicant invited to book an interview. Created empty
+// (scheduledTime null) at booking-invite send time, then filled in by hand from
+// the external booking calendar — the club books through a bit.ly calendar link,
+// so nothing writes scheduledTime automatically. A null scheduledTime therefore
+// means "hasn't booked yet", which is exactly who the reminder email targets.
+model InterviewSlot {
+  id            String    @id @default(cuid())
+  applicantId   String    @unique
+  scheduledTime DateTime?
+  room          String?
+  enteredById   String?
+  enteredAt     DateTime?
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  enteredBy User?     @relation(fields: [enteredById], references: [id])
+}
+
+// The interview panel for one applicant. Holds no fields of its own beyond the
+// applicant link — "who is on the panel" is entirely the set of claimed seats.
+model InterviewPanel {
+  id          String @id @default(cuid())
+  applicantId String @unique
+
+  applicant Applicant   @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  seats     PanelSeat[]
+}
+
+// One seat per committee on a panel, claimed by at most one user. The
+// @@unique([panelId, committee]) is what enforces "one seat per committee per
+// panel"; an unclaimed seat is a row with claimedById still null.
+model PanelSeat {
+  id          String    @id @default(cuid())
+  panelId     String
+  committee   Committee
+  claimedById String?
+  claimedAt   DateTime?
+
+  panel     InterviewPanel @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  claimedBy User?          @relation(fields: [claimedById], references: [id])
+
+  @@unique([panelId, committee])
+}
+
+// The panel's scoring sheet for one applicant. "Jury" (who sat on the panel) is
+// already represented by InterviewPanel/PanelSeat's claimedBy, so there is no
+// separate field for it here. The AVG shown in the UI is computed on read as the
+// mean of the 7 non-null scores — deliberately not stored, so it can never drift
+// out of sync with the scores it summarizes.
+model InterviewNote {
+  id               String   @id @default(cuid())
+  applicantId      String   @unique
+  personality      Float?
+  communication    Float?
+  motivation       Float?
+  creativity       Float?
+  problemSolving   Float?
+  stressManagement Float?
+  teamWork         Float?
+  remarks          String?
+  updatedAt        DateTime @updatedAt
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 }

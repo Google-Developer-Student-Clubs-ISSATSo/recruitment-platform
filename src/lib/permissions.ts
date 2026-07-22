@@ -5,6 +5,9 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { UserPermission } from "@/generated/prisma/client";
 import type { PermissionKey } from "@/generated/prisma/enums";
+// Value import (not just the type) — the interview-note helpers below compare
+// against specific permission keys at runtime.
+import { PermissionKey as PermissionKeyEnum } from "@/generated/prisma/enums";
 
 export const hasPermission = cache(async function hasPermission(
   userId: string,
@@ -24,6 +27,52 @@ export const getUserPermissions = cache(async function getUserPermissions(
     where: { userId },
     orderBy: { permission: "asc" },
   });
+});
+
+/**
+ * May this user write the interview note for this applicant?
+ *
+ * Two routes in:
+ *   - MANAGE_ACCOUNTS — the TM Lead can always edit any note, panel or not.
+ *   - EDIT_OWN_INTERVIEW_NOTES *and* actually sitting on this applicant's panel,
+ *     i.e. holding one of its PanelSeats.
+ *
+ * The second half is the important one: the permission alone is not enough. It
+ * is held by every interviewer in the club, so without the seat check anyone
+ * could write into any candidate's note. "Own" in the permission name means the
+ * interviews you are on, and the seat is what establishes that.
+ */
+export const canEditInterviewNote = cache(async function canEditInterviewNote(
+  userId: string,
+  applicantId: string,
+): Promise<boolean> {
+  if (await hasPermission(userId, PermissionKeyEnum.MANAGE_ACCOUNTS)) return true;
+
+  if (!(await hasPermission(userId, PermissionKeyEnum.EDIT_OWN_INTERVIEW_NOTES))) {
+    return false;
+  }
+
+  const seat = await prisma.panelSeat.findFirst({
+    where: { claimedById: userId, panel: { applicantId } },
+    select: { id: true },
+  });
+  return seat !== null;
+});
+
+/**
+ * May this user read the interview note for this applicant?
+ *
+ * Anyone who can edit it, plus VIEW_COMMITTEE_DASHBOARD holders — Committee
+ * Reps review interviews they did not personally sit on, but strictly
+ * read-only; the page renders static text for them, and the save action still
+ * checks {@link canEditInterviewNote}.
+ */
+export const canViewInterviewNote = cache(async function canViewInterviewNote(
+  userId: string,
+  applicantId: string,
+): Promise<boolean> {
+  if (await canEditInterviewNote(userId, applicantId)) return true;
+  return hasPermission(userId, PermissionKeyEnum.VIEW_COMMITTEE_DASHBOARD);
 });
 
 /** True if the user holds at least one of the given permissions. */
