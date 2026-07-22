@@ -1,9 +1,18 @@
 import { Icon } from "@/components/app-shell/icon";
+import { getCapacityTargets } from "@/lib/committee-capacity-store";
+import { CapacityForm } from "./capacity/CapacityForm";
 
-// Stub — real capacity configuration (per-committee intake caps) is a Stage 5
-// item. This proves the PermissionGate composition pattern and gives
-// MANAGE_CAPACITY holders a visible landing spot until then.
-export function CapacityConfigSection() {
+// Server data-loader for per-committee intake capacity. Rendered only for
+// MANAGE_CAPACITY holders (the <PermissionGate> in page.tsx); the save action
+// re-checks that permission itself. The targets read here are the numbers the
+// Final Decision dashboard compares its live accepted counts against.
+export async function CapacityConfigSection({
+  campaignId,
+}: {
+  campaignId: string;
+}) {
+  const targets = await getCapacityTargets(campaignId);
+
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-center gap-3">
@@ -19,10 +28,8 @@ export function CapacityConfigSection() {
           </p>
         </div>
       </div>
-      <p className="mt-4 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800/50 dark:text-neutral-400">
-        Capacity controls arrive in a later stage. You have access to this
-        section because you hold <strong>Manage Capacity</strong>.
-      </p>
+
+      <CapacityForm campaignId={campaignId} initialTargets={targets} />
     </section>
   );
 }
