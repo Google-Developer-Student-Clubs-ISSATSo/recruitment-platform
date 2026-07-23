@@ -1,101 +1,21 @@
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
-import { ApplicantStatus } from "@/generated/prisma/enums";
-import { NOTE_FIELDS } from "@/lib/interview-note";
 import { PANEL_COMMITTEES } from "@/lib/interview-slot";
+import {
+  countInterviewed,
+  getCampaignCounts,
+} from "@/lib/campaign-statistics";
 import { tunisDateKey } from "@/lib/tunis-time";
 
-// Everything the campaign dashboard counts. Every figure here is COUNTED on
-// read from the applicant / interview rows themselves — nothing is stored and
-// re-read, for the same reason CommitteeCapacity keeps no accepted counter and
-// InterviewNote keeps no average: a stored figure drifts the moment a status
-// changes by a path that forgot to update it, and a live count cannot.
+// The dashboard's view-model layer: the shapes its widgets render.
 //
-// Each loader is wrapped in React's `cache`, so a page that renders the stat
-// cards *and* the funnel from the same numbers pays for one query, not two —
-// and the two can never disagree within a render.
-
-/**
- * Every status that means "passed Phase 1". Deliberately spelled out rather
- * than "not SUBMITTED and not REJECTED_PHASE1" as a *set*, because the counts
- * below derive the shortlisted figure by subtraction — see
- * {@link getCampaignCounts} — so a status added to the enum later lands in the
- * passed bucket automatically instead of silently vanishing from the totals.
- */
-export const PHASE_ONE_PASSED_STATUSES: readonly ApplicantStatus[] = [
-  ApplicantStatus.SHORTLISTED,
-  ApplicantStatus.INVITED_GDG_DAY,
-  ApplicantStatus.INTERVIEW_SCHEDULED,
-  ApplicantStatus.ACCEPTED,
-  ApplicantStatus.PENDING,
-  ApplicantStatus.REJECTED_FINAL,
-];
-
-export type CampaignCounts = {
-  /** Every applicant in the campaign. */
-  total: number;
-  /** Still awaiting a Phase 1 verdict. */
-  submitted: number;
-  /**
-   * Passed Phase 1 — cumulative, so an applicant who has since been
-   * interviewed, accepted or rejected at the final stage still counts here.
-   * `submitted + shortlisted + rejectedPhaseOne === total`, always.
-   */
-  shortlisted: number;
-  /** Rejected at Phase 1. */
-  rejectedPhaseOne: number;
-  /** Accepted into a committee. */
-  accepted: number;
-};
-
-/** Per-status applicant counts for one campaign, in a single grouped query. */
-export const getCampaignCounts = cache(async function getCampaignCounts(
-  campaignId: string,
-): Promise<CampaignCounts> {
-  const grouped = await prisma.applicant.groupBy({
-    by: ["status"],
-    where: { campaignId },
-    _count: { _all: true },
-  });
-
-  const byStatus = new Map(grouped.map((g) => [g.status, g._count._all]));
-  const count = (status: ApplicantStatus) => byStatus.get(status) ?? 0;
-
-  const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
-  const submitted = count(ApplicantStatus.SUBMITTED);
-  const rejectedPhaseOne = count(ApplicantStatus.REJECTED_PHASE1);
-
-  return {
-    total,
-    submitted,
-    // By subtraction, so the three buckets always add up to the pool size even
-    // if a new downstream status appears in the enum.
-    shortlisted: total - submitted - rejectedPhaseOne,
-    rejectedPhaseOne,
-    accepted: count(ApplicantStatus.ACCEPTED),
-  };
-});
-
-/**
- * How many applicants have actually been interviewed.
- *
- * "Interviewed" means an InterviewNote carrying at least one of the seven
- * ratings — the same test {@link interviewAverage} uses to decide whether an
- * applicant has an interview score at all. A note row created but never filled
- * in is not an interview, and neither definition should be able to drift from
- * the other, so both read off NOTE_FIELDS.
- */
-export const countInterviewed = cache(async function countInterviewed(
-  campaignId: string,
-): Promise<number> {
-  return prisma.interviewNote.count({
-    where: {
-      applicant: { campaignId },
-      OR: NOTE_FIELDS.map((f) => ({ [f.key]: { not: null } })),
-    },
-  });
-});
+// The applicant counts themselves are NOT defined here — they live in
+// campaign-statistics.ts, which the Statistics page reads from too. This module
+// only arranges them into funnel stages, so the funnel and the Statistics page
+// can never quote different totals for the same campaign.
+//
+// The interview snapshot below is dashboard-only and stays here.
 
 /** One bar of the pipeline funnel. */
 export type FunnelStage = {

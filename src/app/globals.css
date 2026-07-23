@@ -44,6 +44,18 @@
   --ring: var(--primary);
   --radius: 0.625rem;
 
+  /*
+   * Rejection-stage ramp — an ORDINAL scale, not a categorical one: the three
+   * rejection reasons are exit points in pipeline order (never eligible →
+   * screened out → turned down at the end), so they take one hue in monotone
+   * lightness steps rather than three unrelated colours. Stepped off the
+   * --status-rejected hue (OKLCH h 29.1) and validated for monotone lightness,
+   * adjacent ΔL and light-end contrast against each mode's card surface.
+   */
+  --chart-reject-1: #eb8374;
+  --chart-reject-2: #da4336;
+  --chart-reject-3: #a1271e;
+
   --chart-1: #4285f4;
   --chart-2: #34a853;
   --chart-3: #fbbc05;
@@ -69,6 +81,11 @@
   --status-accepted: #4ade80;
   --status-rejected: #f87171;
   --status-pending: #fde047;
+
+  /* Re-stepped for the dark card surface; same hue, same order. */
+  --chart-reject-1: #da6d5f;
+  --chart-reject-2: #ce4033;
+  --chart-reject-3: #a82e24;
 
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -115,6 +132,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-chart-reject-1: var(--chart-reject-1);
+  --color-chart-reject-2: var(--chart-reject-2);
+  --color-chart-reject-3: var(--chart-reject-3);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
