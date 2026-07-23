@@ -79,6 +79,16 @@ export function formatTunisTimeOfDay(d: Date): string {
   }).format(d);
 }
 
+/** e.g. "November 1, 2026" — the calendar date alone, for milestone lines. */
+export function formatTunisDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Tunis",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+}
+
 /** e.g. "Sat, Nov 1, 2026, 3:00 PM" — Tunis time, for read-only display. */
 export function formatTunisDateTime(d: Date): string {
   return new Intl.DateTimeFormat("en-US", {

@@ -1,0 +1,104 @@
+import { Icon } from "@/components/app-shell/icon";
+import { getPipelineFunnel } from "@/lib/campaign-dashboard";
+
+// The recruitment pipeline as four horizontal bars. Rendered only for
+// VIEW_STATISTICS holders (the <PermissionGate> in page.tsx) — this is its
+// first widget outside the /statistics route itself.
+//
+// Loads its own data rather than taking counts as props, so a viewer without
+// the permission never triggers the queries: the gate decides whether this
+// async component is ever invoked.
+//
+// Every figure is computed live from Applicant / InterviewNote rows — see
+// getPipelineFunnel. Nothing here is stored.
+
+// One colour per stage, warm-to-cool left to right so the funnel reads as a
+// progression rather than four unrelated bars. Shared status tokens only.
+const STAGE_FILL = [
+  "bg-neutral-400 dark:bg-neutral-500",
+  "bg-primary",
+  "bg-status-pending",
+  "bg-status-accepted",
+] as const;
+
+/**
+ * Share of the previous stage that made it to this one.
+ *
+ * A stage can legitimately come out *larger* than the one before it, because
+ * the stages measure different kinds of record: an applicant accepted at the
+ * decision meeting whose panel never filled in an interview note counts as
+ * Accepted but not as Interviewed. Reporting that as "250% of previous stage"
+ * would be nonsense, so the overflow is named for what it actually is — people
+ * missing a record at the earlier stage.
+ */
+function conversion(count: number, previous: number | null): string | null {
+  if (previous === null || previous === 0) return null;
+  if (count > previous) {
+    const gap = count - previous;
+    return `${gap} with no record at the previous stage`;
+  }
+  return `${Math.round((count / previous) * 100)}% of previous stage`;
+}
+
+export async function PipelineFunnel({ campaignId }: { campaignId: string }) {
+  const stages = await getPipelineFunnel(campaignId);
+  // Bars are scaled against the widest stage rather than the sum, so each one
+  // reads as a fraction of the whole pool at a glance. Taking the max (not
+  // simply the first stage) keeps every bar inside the track even when a later
+  // stage overshoots an earlier one — see `conversion` for how that happens.
+  const widest = Math.max(...stages.map((s) => s.count), 1);
+
+  return (
+    <section className="flex flex-col rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Icon name="filter_alt" className="text-[20px]" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">
+              Pipeline Funnel
+            </h2>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              Cumulative — each stage counts everyone who reached it.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-5 p-6">
+        {stages.map((stage, i) => {
+          const rate = conversion(stage.count, i === 0 ? null : stages[i - 1].count);
+          return (
+            <div
+              key={stage.key}
+              role="group"
+              aria-label={`${stage.label}: ${stage.count} applicants — ${stage.hint}`}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-semibold text-foreground">
+                  {stage.label}
+                </span>
+                <span className="text-xl font-bold tabular-nums text-foreground">
+                  {stage.count}
+                </span>
+              </div>
+
+              <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                <div
+                  className={`h-full rounded-full transition-all ${STAGE_FILL[i]}`}
+                  style={{ width: `${(stage.count / widest) * 100}%` }}
+                />
+              </div>
+
+              <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                {stage.hint}
+                {rate && ` · ${rate}`}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
