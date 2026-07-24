@@ -9,12 +9,21 @@ const GITHUB_FIELD = "GitHub link";
 const LINKEDIN_FIELD = "LinkedIn link";
 
 // Reading pane. One component, two modes (STEP 5 — a variant, not a duplicate):
-//   - "full": for each ACTIVE question with a non-null sourceField, show the
-//     question text and the answer from rawFormData[sourceField]; a missing key
-//     renders a clear "No answer found" state.
+//   - "full": for each ACTIVE NON-TECHNICAL question, show the question text and
+//     the applicant's answer, falling back to a clear "No answer found" state
+//     when the key isn't in the submitted row.
 //   - "technical-only": show ONLY name + GitHub + LinkedIn as clickable links.
-//     The other 8 questions' text/answers aren't rendered here because the
-//     server never sends them to this viewer (rawFormData is pre-stripped).
+//     The other questions' text/answers aren't rendered here because the server
+//     never sends them to this viewer (rawFormData is pre-stripped).
+//
+// The answer key is the question's sourceField when it has one, else the
+// question text. Filtering the panel on `sourceField !== null` was the old bug:
+// a campaign whose questions were configured WITHOUT a sourceField mapping (all
+// null) filtered down to nothing and rendered a blank panel — not even the
+// per-question fallback, which only exists inside the map. Iterating the
+// non-technical questions instead guarantees the panel is never blank, and the
+// `sourceField ?? text` lookup still surfaces real answers for form-derived
+// questions whose text is the column header.
 export function ApplicantAnswerPanel({
   viewMode,
   fullName,
@@ -47,11 +56,11 @@ export function ApplicantAnswerPanel({
     );
   }
 
-  const answered = questions.filter((q) => q.sourceField !== null);
+  const answered = questions.filter((q) => !q.requiresTechnicalScorer);
   return (
     <div className="space-y-4">
       {answered.map((q) => {
-        const answer = readString(rawFormData, q.sourceField as string);
+        const answer = readString(rawFormData, q.sourceField ?? q.text);
         return (
           <div
             key={q.id}

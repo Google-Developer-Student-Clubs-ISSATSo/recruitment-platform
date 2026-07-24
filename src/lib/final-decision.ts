@@ -74,10 +74,20 @@ export type CommitteeUsage = {
 };
 
 /**
+ * One panel seat as the Final Decision drill-in shows it: the committee and who
+ * claimed it, or null for an unclaimed ("Open") seat.
+ */
+export type JurySeat = { committee: Committee; name: string | null };
+
+/**
  * The dashboard's per-applicant row. Interview scores arrive as the raw 7
  * fields rather than a pre-computed average so the client can reuse
  * computeAverage — the single definition of that mean, shared with the
  * interview note UI.
+ *
+ * The jury / remarks / closed fields feed the collapsible "View Full Interview
+ * Notes" section. This page is MANAGE_ACCOUNTS/ENTER_FINAL_DECISION-gated, so it
+ * always carries the full note regardless of the note's open/closed state.
  */
 export type DecisionRow = {
   id: string;
@@ -89,6 +99,14 @@ export type DecisionRow = {
   formScore: number | null;
   /** Null when the applicant has no InterviewNote row at all. */
   noteScores: NoteScores | null;
+  /** The three panel seats in MKT → TM → EER order; name null = unclaimed. */
+  jury: JurySeat[];
+  /** Free-text panel remarks, or null. */
+  remarks: string | null;
+  /** Whether the interview note has been closed. */
+  noteClosed: boolean;
+  /** Who closed it, if closed. */
+  closedByName: string | null;
 };
 
 /**

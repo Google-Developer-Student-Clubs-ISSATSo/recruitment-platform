@@ -56,6 +56,54 @@ export async function createCampaign(
 }
 
 /**
+ * Open or close a campaign. Same permission bar as creating one
+ * (MANAGE_CAMPAIGNS / MANAGE_ACCOUNTS), enforced here rather than only hiding the
+ * toggle. Closing matters: per the campaign-scoping rules a closed campaign is
+ * only enterable by VIEW_CAMPAIGN_HISTORY / MANAGE_ACCOUNTS holders (see the
+ * campaign layout guard), so flipping this changes who can reach the campaign.
+ */
+export async function setCampaignStatus(
+  campaignId: string,
+  isOpen: boolean,
+): Promise<{ ok: true; isOpen: boolean } | { ok: false; error: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { ok: false, error: "You are signed out." };
+
+  if (!(await hasAnyPermission(userId, CAMPAIGN_CREATE_PERMISSIONS))) {
+    return { ok: false, error: "You don't have permission to change a campaign's status." };
+  }
+
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true, name: true, isOpen: true },
+  });
+  if (!campaign) return { ok: false, error: "That campaign doesn't exist." };
+
+  // No-op if it's already in the requested state — don't log a status change
+  // that didn't happen.
+  if (campaign.isOpen === isOpen) {
+    return { ok: true, isOpen };
+  }
+
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: { isOpen },
+  });
+
+  await logActivity({
+    actorId: userId,
+    actionType: "CAMPAIGN_STATUS_CHANGED",
+    targetType: "Campaign",
+    targetId: campaignId,
+    details: { name: campaign.name, newStatus: isOpen ? "OPEN" : "CLOSED" },
+  });
+
+  revalidatePath("/campaigns");
+  return { ok: true, isOpen };
+}
+
+/**
  * Permanently delete a campaign and everything scoped to it. Same permission bar
  * as creating one (MANAGE_CAMPAIGNS / MANAGE_ACCOUNTS), enforced here rather than
  * only hiding the control.

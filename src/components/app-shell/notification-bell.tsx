@@ -25,11 +25,17 @@ export async function NotificationBell() {
     return null;
   }
 
-  const entries = await prisma.activityLogEntry.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 10,
-    include: { actor: { select: { name: true } } },
-  });
+  const [entries, viewer] = await Promise.all([
+    prisma.activityLogEntry.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      include: { actor: { select: { name: true } } },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { lastViewedActivityAt: true },
+    }),
+  ]);
 
   const items: ActivityItem[] = entries.map((e: EntryRow) => ({
     id: e.id,
@@ -38,5 +44,13 @@ export async function NotificationBell() {
     createdAtISO: e.createdAt.toISOString(),
   }));
 
-  return <NotificationBellMenu items={items} />;
+  // entries is ordered newest-first, so entries[0] is the most recent activity
+  // overall. Unread if that beats the last time this user opened the feed — or,
+  // when they've never opened it, if there's any activity at all.
+  const lastViewed = viewer?.lastViewedActivityAt ?? null;
+  const newest = entries[0]?.createdAt ?? null;
+  const hasUnread =
+    newest !== null && (lastViewed === null || newest > lastViewed);
+
+  return <NotificationBellMenu items={items} hasUnread={hasUnread} />;
 }

@@ -68,3 +68,52 @@ export async function saveNoteRemarks(
 
   return { ok: true };
 }
+
+/**
+ * Close an interview note — locks it to MANAGE_ACCOUNTS only from here on (see
+ * canEditInterviewNote / canViewInterviewNote). Upserts, so it works even before
+ * any rating has been entered: closing is allowed at any time. Authorization is
+ * the caller's job.
+ */
+export async function closeInterviewNote(
+  applicantId: string,
+  userId: string,
+): Promise<SaveNoteResult> {
+  await prisma.interviewNote.upsert({
+    where: { applicantId },
+    create: { applicantId, closedAt: new Date(), closedById: userId },
+    update: { closedAt: new Date(), closedById: userId },
+  });
+
+  await logActivity({
+    actorId: userId,
+    actionType: "INTERVIEW_NOTE_CLOSED",
+    targetType: "Applicant",
+    targetId: applicantId,
+  });
+
+  return { ok: true };
+}
+
+/**
+ * Reopen a closed interview note — clears closedAt/closedById, restoring normal
+ * panel-member access. MANAGE_ACCOUNTS only; enforced by the caller.
+ */
+export async function reopenInterviewNote(
+  applicantId: string,
+  userId: string,
+): Promise<SaveNoteResult> {
+  await prisma.interviewNote.update({
+    where: { applicantId },
+    data: { closedAt: null, closedById: null },
+  });
+
+  await logActivity({
+    actorId: userId,
+    actionType: "INTERVIEW_NOTE_REOPENED",
+    targetType: "Applicant",
+    targetId: applicantId,
+  });
+
+  return { ok: true };
+}

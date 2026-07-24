@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Pager } from "@/components/ui/pager";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,6 +73,26 @@ function matchesFilter(row: SelectionRow, filter: Filter): boolean {
 
 function formatTotal(total: number | null): string {
   return total === null ? "—" : (Math.round(total * 100) / 100).toFixed(2);
+}
+
+/**
+ * Smooth-scroll to the result-email panel once it exists. It's rendered by the
+ * server only after finalize, so on the first finalize it may not be mounted for
+ * a beat while the revalidated tree streams in — poll for it a few times before
+ * giving up rather than assuming it's already there.
+ */
+function scrollToEmailPanel() {
+  if (typeof document === "undefined") return;
+  let tries = 0;
+  const tick = () => {
+    const el = document.getElementById("phase1-email-panel");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (tries++ < 20) setTimeout(tick, 100);
+  };
+  setTimeout(tick, 100);
 }
 
 /** UTC-derived date so server and client agree — no hydration mismatch. */
@@ -162,6 +183,27 @@ export function SelectionClient({
     return sorted;
   }, [rows, filter, sortKey]);
 
+  // Client-side pagination (10/row), matching Applicants / Activity Log. The
+  // whole pool already lives here for the filter/sort, so we slice rather than
+  // re-query. Reset to page 1 whenever the filtered set changes underneath (a
+  // filter/sort switch, or fresh server rows after an action) — done as a
+  // render-time adjustment rather than an effect, so it can't point past the end
+  // for even one paint. A pager click leaves all three unchanged, so it sticks.
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
+  const [pageBasis, setPageBasis] = useState({ filter, sortKey, rows });
+  if (
+    pageBasis.filter !== filter ||
+    pageBasis.sortKey !== sortKey ||
+    pageBasis.rows !== rows
+  ) {
+    setPageBasis({ filter, sortKey, rows });
+    setPage(1);
+  }
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const paged = visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   function doRecalculate() {
     setError(null);
     setNotice(null);
@@ -188,8 +230,15 @@ export function SelectionClient({
       }
       setNotice(
         `Phase 1 finalized — ${res.shortlisted} shortlisted, ${res.rejected} rejected` +
-          (res.stillPending > 0 ? `, ${res.stillPending} left pending.` : "."),
+          (res.stillPending > 0 ? `, ${res.stillPending} left pending. ` : ". ") +
+          "The result-email section is now open below — scroll down to send.",
       );
+      // The email panel is only rendered by the server once the phase is
+      // finalized, so it isn't in the DOM until this transition's revalidated
+      // tree commits. Poll briefly for it, then bring it into view so sending
+      // isn't something the user has to notice on their own (it lives well below
+      // the fold on a long ranking table).
+      scrollToEmailPanel();
     });
   }
 
@@ -254,8 +303,8 @@ export function SelectionClient({
             Phase 1 Selection &amp; Ranking
           </h1>
           <p className="max-w-xl text-sm text-neutral-500 dark:text-neutral-400">
-            Rank fully-scored applicants, resolve the borderline cases the
-            buffer flags for discussion, then commit the shortlist.
+            Rank fully-scored applicants, review the ones awaiting a decision
+            below the top {targetCount ?? "N"}, then commit the shortlist.
           </p>
         </div>
         {targetCount !== null && rejectThreshold !== null && (
@@ -463,7 +512,7 @@ export function SelectionClient({
               </tr>
             </thead>
             <tbody>
-              {visible.map((row) => {
+              {paged.map((row) => {
                 const isRejected = REJECTED.includes(row.classification);
                 const isToDiscuss =
                   row.classification === PhaseOneClassification.TO_DISCUSS;
@@ -499,7 +548,10 @@ export function SelectionClient({
                       {formatTotal(row.weightedTotal)}
                     </td>
                     <td className="px-4 py-3">
-                      <ClassificationBadge value={row.classification} />
+                      <ClassificationBadge
+                        value={row.classification}
+                        complete={row.complete}
+                      />
                     </td>
                     {/* Row actions collapse into one menu: three buttons per row
                         across a 15+ row table is a lot of chrome for controls
@@ -590,6 +642,17 @@ export function SelectionClient({
             </tbody>
           </table>
         </div>
+        {visible.length > PAGE_SIZE && (
+          <Pager
+            page={safePage}
+            pageCount={pageCount}
+            total={visible.length}
+            pageSize={PAGE_SIZE}
+            rowCount={paged.length}
+            unit="applicant"
+            onPageChange={setPage}
+          />
+        )}
       </div>
 
       {/* Extra gate: recalculating an already-finalized phase */}

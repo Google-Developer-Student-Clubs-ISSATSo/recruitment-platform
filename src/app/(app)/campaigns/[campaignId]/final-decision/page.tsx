@@ -8,6 +8,7 @@ import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
 import { FINAL_TEMPLATE } from "@/lib/final-email-templates";
 import { missingLinkLabels } from "@/lib/final-email-links";
 import { getCapacityUsage } from "@/lib/committee-capacity-store";
+import { PANEL_COMMITTEES } from "@/lib/interview-slot";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
 import { DASHBOARD_STATUSES, type DecisionRow } from "@/lib/final-decision";
 import { FinalDecisionClient } from "./FinalDecisionClient";
@@ -69,6 +70,19 @@ export default async function FinalDecisionPage({
             problemSolving: true,
             stressManagement: true,
             teamWork: true,
+            remarks: true,
+            closedAt: true,
+            closedBy: { select: { name: true, email: true } },
+          },
+        },
+        interviewPanel: {
+          select: {
+            seats: {
+              select: {
+                committee: true,
+                claimedBy: { select: { name: true, email: true } },
+              },
+            },
           },
         },
       },
@@ -102,19 +116,47 @@ export default async function FinalDecisionPage({
       : Promise.resolve(0),
   ]);
 
-  const rows: DecisionRow[] = applicants.map((a) => ({
-    id: a.id,
-    fullName: a.fullName,
-    yearOfStudy: readYearOfStudy(a.rawFormData),
-    preferredCommittee: a.preferredCommittee,
-    assignedCommittee: a.assignedCommittee,
-    status: a.status,
-    formScore: a.phaseOneResult?.weightedTotal ?? null,
-    // The 7 raw ratings travel to the client, which averages them with the same
-    // computeAverage the interview note UI uses. Sending a pre-computed number
-    // would fork that definition in two.
-    noteScores: a.interviewNote ?? null,
-  }));
+  const rows: DecisionRow[] = applicants.map((a) => {
+    const note = a.interviewNote;
+    // Jury in the board's fixed MKT → TM → EER order; an unclaimed seat is null.
+    const seatByCommittee = new Map(
+      (a.interviewPanel?.seats ?? []).map((s) => [s.committee, s]),
+    );
+    const jury = PANEL_COMMITTEES.map((committee) => {
+      const holder = seatByCommittee.get(committee)?.claimedBy;
+      return {
+        committee,
+        name: holder ? (holder.name ?? holder.email) : null,
+      };
+    });
+    return {
+      id: a.id,
+      fullName: a.fullName,
+      yearOfStudy: readYearOfStudy(a.rawFormData),
+      preferredCommittee: a.preferredCommittee,
+      assignedCommittee: a.assignedCommittee,
+      status: a.status,
+      formScore: a.phaseOneResult?.weightedTotal ?? null,
+      // The 7 raw ratings travel to the client, which averages them with the same
+      // computeAverage the interview note UI uses. Sending a pre-computed number
+      // would fork that definition in two.
+      noteScores: note
+        ? {
+            personality: note.personality,
+            communication: note.communication,
+            motivation: note.motivation,
+            creativity: note.creativity,
+            problemSolving: note.problemSolving,
+            stressManagement: note.stressManagement,
+            teamWork: note.teamWork,
+          }
+        : null,
+      jury,
+      remarks: note?.remarks ?? null,
+      noteClosed: note?.closedAt != null,
+      closedByName: note?.closedBy?.name ?? note?.closedBy?.email ?? null,
+    };
+  });
 
   return (
     <FinalDecisionClient

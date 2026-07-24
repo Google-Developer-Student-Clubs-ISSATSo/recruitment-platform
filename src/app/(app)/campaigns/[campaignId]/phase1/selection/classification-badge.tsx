@@ -47,8 +47,29 @@ export function classificationLabel(c: PhaseOneClassification): string {
   return CLASSIFICATION_STYLES[c].label;
 }
 
-export function ClassificationBadge({ value }: { value: PhaseOneClassification }) {
-  const { label, className } = CLASSIFICATION_STYLES[value];
+// A PENDING row means two different things depending on completeness, and they
+// must not look identical:
+//   - incomplete applicant → "Pending" (neutral grey): scoring isn't finished.
+//   - fully-scored applicant → "Awaiting Review" (primary): the algorithm has
+//     ranked them but they fell outside the top N, so a human still has to place
+//     them. This is a normal resting state, not an error or an unscored row.
+const AWAITING_REVIEW = {
+  label: "Awaiting Review",
+  className: "bg-primary/10 text-primary",
+} as const;
+
+export function ClassificationBadge({
+  value,
+  complete = false,
+}: {
+  value: PhaseOneClassification;
+  /** Whether the applicant is fully scored — only changes the PENDING label. */
+  complete?: boolean;
+}) {
+  const { label, className } =
+    value === PhaseOneClassification.PENDING && complete
+      ? AWAITING_REVIEW
+      : CLASSIFICATION_STYLES[value];
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${className}`}

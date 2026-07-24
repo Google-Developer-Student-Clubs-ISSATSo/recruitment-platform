@@ -150,9 +150,10 @@ export default async function Phase1SelectionPage({
       />
 
       {finalized && (
-        <EmailPanel
-          campaignId={campaignId}
-          canSendEmails={canSendEmails}
+        <div id="phase1-email-panel" className="scroll-mt-6">
+          <EmailPanel
+            campaignId={campaignId}
+            canSendEmails={canSendEmails}
           gdgDayInputValue={
             campaign?.gdgDayDateTime
               ? tunisInputValue(campaign.gdgDayDateTime)
@@ -164,10 +165,11 @@ export default async function Phase1SelectionPage({
               : null
           }
           gdgDayLocation={campaign?.gdgDayLocation ?? null}
-          acceptance={acceptance}
-          rejection={rejection}
-          lastSentAtISO={lastSentAt?.toISOString() ?? null}
-        />
+            acceptance={acceptance}
+            rejection={rejection}
+            lastSentAtISO={lastSentAt?.toISOString() ?? null}
+          />
+        </div>
       )}
     </div>
   );

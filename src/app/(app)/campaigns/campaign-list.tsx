@@ -14,10 +14,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { splitTimestamp } from "@/lib/activity-descriptions";
 import {
   createCampaign,
   deleteCampaign,
+  setCampaignStatus,
   type CreateCampaignState,
 } from "./actions";
 
@@ -107,6 +109,19 @@ function CampaignRow({
 }) {
   const { date } = splitTimestamp(campaign.createdAtISO);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingStatus, setConfirmingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const willOpen = !campaign.isOpen;
+
+  function toggleStatus() {
+    setStatusError(null);
+    startTransition(async () => {
+      const res = await setCampaignStatus(campaign.id, willOpen);
+      if (!res.ok) setStatusError(res.error);
+    });
+  }
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
@@ -121,8 +136,26 @@ function CampaignRow({
           Created {date} · {campaign.applicantCount} applicant
           {campaign.applicantCount === 1 ? "" : "s"}
         </p>
+        {statusError && (
+          <p className="mt-1 text-xs text-status-rejected">{statusError}</p>
+        )}
       </div>
       <div className="flex items-center gap-2">
+        {canManage && (
+          <button
+            onClick={() => setConfirmingStatus(true)}
+            disabled={pending}
+            aria-label={`${willOpen ? "Open" : "Close"} ${campaign.name}`}
+            title={willOpen ? "Re-open campaign" : "Close campaign"}
+            className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-foreground disabled:opacity-50 dark:border-neutral-800 dark:hover:bg-neutral-800"
+          >
+            <Icon
+              name={willOpen ? "lock_open" : "lock"}
+              className="text-[18px]"
+            />
+            {willOpen ? "Open" : "Close"}
+          </button>
+        )}
         <Link
           href={`/campaigns/${campaign.id}/dashboard`}
           className="flex items-center gap-2 rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
@@ -143,11 +176,35 @@ function CampaignRow({
       </div>
 
       {canManage && (
-        <DeleteCampaignDialog
-          campaign={campaign}
-          open={confirmingDelete}
-          onOpenChange={setConfirmingDelete}
-        />
+        <>
+          <ConfirmDialog
+            open={confirmingStatus}
+            onOpenChange={setConfirmingStatus}
+            title={willOpen ? `Re-open “${campaign.name}”?` : `Close “${campaign.name}”?`}
+            description={
+              willOpen ? (
+                <>
+                  This re-opens the campaign so anyone with a campaign-scoped
+                  permission can enter and work in it again.
+                </>
+              ) : (
+                <>
+                  Closing archives the campaign. After this, only members with{" "}
+                  <strong>View Campaign History</strong> (or Manage Accounts) can
+                  enter it — everyone else loses access. You can re-open it later.
+                </>
+              )
+            }
+            confirmLabel={willOpen ? "Re-open campaign" : "Close campaign"}
+            destructive={!willOpen}
+            onConfirm={toggleStatus}
+          />
+          <DeleteCampaignDialog
+            campaign={campaign}
+            open={confirmingDelete}
+            onOpenChange={setConfirmingDelete}
+          />
+        </>
       )}
     </li>
   );

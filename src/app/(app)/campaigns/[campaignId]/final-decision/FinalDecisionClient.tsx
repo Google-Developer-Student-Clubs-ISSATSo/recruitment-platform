@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import { CAPACITY_COMMITTEES } from "@/lib/committee-capacity";
+import { NOTE_FIELDS } from "@/lib/interview-note";
 import {
   capacityLevel,
   compareByFormScore,
@@ -499,6 +500,11 @@ export function FinalDecisionClient({
                     emptyLabel="Not yet interviewed"
                   />
                 </div>
+
+                {/* Drill-in: jury, all 7 ratings, remarks, closed status.
+                    Collapsed by default so the AVG-first view stays primary;
+                    keyed by applicant so switching resets it to collapsed. */}
+                <FullInterviewNotes key={selected.id} row={selected} />
               </div>
 
               {/* STEP 6 — three large decision buttons */}
@@ -655,6 +661,131 @@ function ScoreTile({
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
         {hint}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Collapsible drill-in below the lean AVG summary. The Final Decision page is
+ * MANAGE_ACCOUNTS/ENTER_FINAL_DECISION-gated, so Part B's closed-note lockout
+ * does NOT apply here — the full jury, every rating, remarks and the note's
+ * open/closed status are always shown. Collapsed by default (remounted per
+ * applicant via a key on the caller) so the live call keeps the AVG-first view.
+ */
+function FullInterviewNotes({ row }: { row: DecisionRow }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-6 rounded-xl border border-neutral-200 dark:border-neutral-800">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Icon name="description" className="text-[18px] text-neutral-400" />
+          View Full Interview Notes
+        </span>
+        <Icon
+          name={open ? "expand_less" : "expand_more"}
+          className="text-[20px] text-neutral-400"
+        />
+      </button>
+
+      {open && (
+        <div className="space-y-5 border-t border-neutral-200 px-4 py-4 dark:border-neutral-800">
+          {/* Jury — the 3 panel seats, "Open" for any unclaimed one */}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
+              Jury
+            </p>
+            <ul className="grid gap-2 sm:grid-cols-3">
+              {row.jury.map((j) => (
+                <li
+                  key={j.committee}
+                  className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-800"
+                >
+                  <span className="inline-flex min-w-10 justify-center rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                    {j.committee}
+                  </span>
+                  {j.name ? (
+                    <span className="truncate text-sm text-foreground">
+                      {j.name}
+                    </span>
+                  ) : (
+                    <span className="text-sm italic text-neutral-400">Open</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Every one of the 7 ratings individually, not just the average */}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
+              Panel Ratings
+            </p>
+            {row.noteScores === null ? (
+              <p className="text-sm italic text-neutral-400">
+                No interview note recorded yet.
+              </p>
+            ) : (
+              <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                {NOTE_FIELDS.map((f) => {
+                  const v = row.noteScores?.[f.key];
+                  return (
+                    <li
+                      key={f.key}
+                      className="flex items-center justify-between gap-3 border-b border-neutral-100 pb-1.5 dark:border-neutral-800/60"
+                    >
+                      <span className="text-sm text-neutral-600 dark:text-neutral-300">
+                        {f.label}
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums text-foreground">
+                        {typeof v === "number" ? v.toFixed(2) : "—"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Remarks */}
+          <div>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
+              Remarks
+            </p>
+            {row.remarks ? (
+              <p className="whitespace-pre-wrap text-sm text-neutral-600 dark:text-neutral-300">
+                {row.remarks}
+              </p>
+            ) : (
+              <p className="text-sm italic text-neutral-400">No remarks.</p>
+            )}
+          </div>
+
+          {/* Open / closed status */}
+          <p className="flex items-center gap-1.5 text-xs">
+            <Icon
+              name={row.noteClosed ? "lock" : "lock_open"}
+              className={`text-[14px] ${
+                row.noteClosed ? "text-status-rejected" : "text-status-accepted"
+              }`}
+            />
+            {row.noteClosed ? (
+              <span className="text-neutral-600 dark:text-neutral-300">
+                Note closed{row.closedByName ? ` by ${row.closedByName}` : ""}.
+              </span>
+            ) : (
+              <span className="text-neutral-600 dark:text-neutral-300">
+                Note open.
+              </span>
+            )}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

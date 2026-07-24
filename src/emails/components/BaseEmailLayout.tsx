@@ -81,7 +81,7 @@ const main: React.CSSProperties = {
   fontFamily: FONT_STACK,
   color: "#000000",
   margin: 0,
-  padding: "24px 0",
+  padding: "40px",
 };
 
 // Inner container: the fixed-width content card. Capped at 600px, centred, and

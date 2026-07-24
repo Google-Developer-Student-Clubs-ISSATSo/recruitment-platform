@@ -30,23 +30,45 @@ export const getUserPermissions = cache(async function getUserPermissions(
 });
 
 /**
+ * Is this applicant's interview note closed?
+ *
+ * A closed note is locked to MANAGE_ACCOUNTS only (see below). No row, or a row
+ * with a null closedAt, means open. Request-cached like the permission checks.
+ */
+export const isInterviewNoteClosed = cache(async function isInterviewNoteClosed(
+  applicantId: string,
+): Promise<boolean> {
+  const note = await prisma.interviewNote.findUnique({
+    where: { applicantId },
+    select: { closedAt: true },
+  });
+  return note?.closedAt != null;
+});
+
+/**
  * May this user write the interview note for this applicant?
  *
- * Two routes in:
- *   - MANAGE_ACCOUNTS — the TM Lead can always edit any note, panel or not.
- *   - EDIT_OWN_INTERVIEW_NOTES *and* actually sitting on this applicant's panel,
- *     i.e. holding one of its PanelSeats.
+ * Routes in:
+ *   - MANAGE_ACCOUNTS — the TM Lead can always edit any note, panel or not,
+ *     open or closed. This is checked first, so nothing below can lock them out.
+ *   - Otherwise, once the note is CLOSED nobody but MANAGE_ACCOUNTS may touch it
+ *     — a panel member loses all access the moment it's closed, not just the
+ *     inputs. Reopening (MANAGE_ACCOUNTS only) restores the access below.
+ *   - On an open note: EDIT_OWN_INTERVIEW_NOTES *and* actually sitting on this
+ *     applicant's panel (holding one of its PanelSeats).
  *
- * The second half is the important one: the permission alone is not enough. It
- * is held by every interviewer in the club, so without the seat check anyone
- * could write into any candidate's note. "Own" in the permission name means the
- * interviews you are on, and the seat is what establishes that.
+ * The seat check is the important half: EDIT_OWN_INTERVIEW_NOTES is held by
+ * every interviewer, so without it anyone could write into any candidate's note.
+ * "Own" means the interviews you are on, and the seat is what establishes that.
  */
 export const canEditInterviewNote = cache(async function canEditInterviewNote(
   userId: string,
   applicantId: string,
 ): Promise<boolean> {
   if (await hasPermission(userId, PermissionKeyEnum.MANAGE_ACCOUNTS)) return true;
+
+  // A closed note is off-limits to everyone except MANAGE_ACCOUNTS (handled above).
+  if (await isInterviewNoteClosed(applicantId)) return false;
 
   if (!(await hasPermission(userId, PermissionKeyEnum.EDIT_OWN_INTERVIEW_NOTES))) {
     return false;
@@ -62,15 +84,20 @@ export const canEditInterviewNote = cache(async function canEditInterviewNote(
 /**
  * May this user read the interview note for this applicant?
  *
- * Anyone who can edit it, plus VIEW_COMMITTEE_DASHBOARD holders — Committee
- * Reps review interviews they did not personally sit on, but strictly
- * read-only; the page renders static text for them, and the save action still
- * checks {@link canEditInterviewNote}.
+ * MANAGE_ACCOUNTS always. Otherwise a CLOSED note grants no read access at all —
+ * panel members and Committee Reps alike are turned away, same as if they never
+ * had permission. On an open note: anyone who can edit it, plus
+ * VIEW_COMMITTEE_DASHBOARD holders (Committee Reps review interviews they did not
+ * personally sit on, strictly read-only; the save action still checks
+ * {@link canEditInterviewNote}).
  */
 export const canViewInterviewNote = cache(async function canViewInterviewNote(
   userId: string,
   applicantId: string,
 ): Promise<boolean> {
+  if (await hasPermission(userId, PermissionKeyEnum.MANAGE_ACCOUNTS)) return true;
+  if (await isInterviewNoteClosed(applicantId)) return false;
+
   if (await canEditInterviewNote(userId, applicantId)) return true;
   return hasPermission(userId, PermissionKeyEnum.VIEW_COMMITTEE_DASHBOARD);
 });

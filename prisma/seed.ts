@@ -330,12 +330,61 @@ function emailFor(fullName: string): string {
   return `${slug}@gmail.com`;
 }
 
+// Bare alphabetic handle used for the GitHub/LinkedIn URLs.
+function handleFor(fullName: string): string {
+  return fullName
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z]/g, "");
+}
+
+/**
+ * The applicant's submitted form row, keyed by the EXACT `sourceField` / CSV
+ * headers the scoring queue reads each answer from — plus "GitHub link" and
+ * "LinkedIn link", which the technical-only view shows as profile links.
+ *
+ * This is deliberate: an earlier seed wrote only { hobbies, motto }, so NONE of
+ * the question source fields were present. The full reviewer view then rendered
+ * "No answer found" for every question — which read as "the admin sees no
+ * answers", while the technical-only view still showed the always-present name.
+ * Populating the real keys here is what makes the full view show actual answers.
+ */
+function buildRawFormData(fullName: string): Record<string, string> {
+  const handle = handleFor(fullName);
+  const data: Record<string, string> = {
+    "Full name": fullName,
+    "GitHub link": `github.com/${handle}`,
+    "LinkedIn link": `linkedin.com/in/${handle}`,
+  };
+  for (const q of PHASE_ONE_QUESTIONS) {
+    if (q.sourceField) {
+      data[q.sourceField] = faker.lorem.sentences({ min: 1, max: 3 });
+    }
+  }
+  return data;
+}
+
+// Snap a raw strength in [0,1] to the nearest allowed note-scale point.
+function nearestScalePoint(scale: number[], target: number): number {
+  return scale.reduce((best, p) =>
+    Math.abs(p - target) < Math.abs(best - target) ? p : best,
+  );
+}
+
 async function main() {
   const seedEmails = USERS.map((u) => u.email);
 
   // Idempotent: clear anything this seed manages, children first.
   await prisma.userPermission.deleteMany({});
   await prisma.roleTemplatePermission.deleteMany({});
+  // EmailLog references both Applicant and Campaign WITHOUT a cascade (it's an
+  // audit trail we never want silently discarded), so it must be cleared before
+  // either can be wiped — otherwise a reseed of a DB that has progressed far
+  // enough to have sent result emails fails with a foreign-key violation.
+  await prisma.emailLog.deleteMany({});
+  // Applicant deletes cascade to its Phase 1 scores/results and all interview
+  // rows (slots, panels, seats, notes); Campaign deletes cascade to its
+  // questions, config and committee capacities.
   await prisma.applicant.deleteMany({});
   await prisma.campaign.deleteMany({});
   // Drop the User -> RoleTemplate references before deleting templates, or the
@@ -383,6 +432,7 @@ async function main() {
   // can label/reset against their OWN template rather than inferring one.
   let userCount = 0;
   let userPermissionCount = 0;
+  const userIdByEmail = new Map<string, string>();
   for (const seedUser of USERS) {
     const user = await prisma.user.create({
       data: {
@@ -392,6 +442,7 @@ async function main() {
         roleTemplateId: templateIdByName[seedUser.role],
       },
     });
+    userIdByEmail.set(seedUser.email, user.id);
     const perms = buildUserPermissions(seedUser);
     if (perms.length > 0) {
       await prisma.userPermission.createMany({
@@ -422,10 +473,7 @@ async function main() {
       email: emailFor(a.fullName),
       isIssatsoStudent: a.isIssatsoStudent,
       preferredCommittee: a.preferredCommittee,
-      rawFormData: {
-        hobbies: faker.word.words({ count: { min: 2, max: 4 } }),
-        motto: faker.company.catchPhrase(),
-      },
+      rawFormData: buildRawFormData(a.fullName),
     })),
   });
 
@@ -438,10 +486,7 @@ async function main() {
       email: emailFor(a.fullName),
       isIssatsoStudent: a.isIssatsoStudent,
       preferredCommittee: a.preferredCommittee,
-      rawFormData: {
-        hobbies: faker.word.words({ count: { min: 2, max: 4 } }),
-        motto: faker.company.catchPhrase(),
-      },
+      rawFormData: buildRawFormData(a.fullName),
     })),
   });
 
@@ -465,6 +510,42 @@ async function main() {
     },
   });
 
+  // 3f. Complete Phase 1 scores for every open-campaign applicant, so the
+  // scoring queue, ranking and selection pages have real data to work on out of
+  // the box (a fresh "Recalculate" then produces a genuine spread rather than a
+  // pool of unscored PENDING rows). Each applicant gets a deterministic strength
+  // spread from ~0.9 down to ~0.15; every active question is scored to the scale
+  // point nearest that strength, so weighted totals span roughly the full range
+  // and about ten applicants clear the reject threshold of 40 — enough for the
+  // top-8 target to bind with a couple left above the line for human review.
+  const createdQuestions = await prisma.phaseOneQuestion.findMany({
+    where: { campaignId: campaign.id, isActive: true },
+    select: { id: true, noteScale: true },
+  });
+  const createdApplicants = await prisma.applicant.findMany({
+    where: { campaignId: campaign.id },
+    select: { id: true, fullName: true },
+    orderBy: { fullName: "asc" },
+  });
+  const scorerId =
+    userIdByEmail.get("krifaaziz04@gmail.com") ?? // Ons El Maleh (TM Lead)
+    userIdByEmail.values().next().value!;
+
+  const spread = createdApplicants.length > 1 ? createdApplicants.length - 1 : 1;
+  const scoreRows = createdApplicants.flatMap((applicant, i) => {
+    const strength = 0.9 - (i * 0.75) / spread;
+    return createdQuestions.map((q) => {
+      const jittered = Math.min(1, Math.max(0, strength + faker.number.float({ min: -0.1, max: 0.1 })));
+      return {
+        applicantId: applicant.id,
+        questionId: q.id,
+        value: nearestScalePoint(q.noteScale, jittered),
+        scoredById: scorerId,
+      };
+    });
+  });
+  await prisma.phaseOneScore.createMany({ data: scoreRows });
+
   console.log("Seed complete:");
   console.table({
     RoleTemplate: roleTemplateCount,
@@ -475,6 +556,7 @@ async function main() {
     Applicant: APPLICANTS.length + ARCHIVED_APPLICANTS.length,
     PhaseOneQuestion: PHASE_ONE_QUESTIONS.length,
     PhaseOneConfig: 1,
+    PhaseOneScore: scoreRows.length,
   });
 }
 

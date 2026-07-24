@@ -21,6 +21,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Last time the user opened the notification bell / activity feed. Drives the
+  // bell's unread indicator: any ActivityLogEntry newer than this is "unseen".
+  // Null until they first open it (treated as "everything is unseen").
+  lastViewedActivityAt DateTime?
+
   // The role template this user was originally assigned. Persisted so the
   // permissions UI can label deviations against the user's OWN template and
   // reset back to it, rather than inferring a template by scanning all of them.
@@ -36,6 +41,7 @@ model User {
   emailLogsSent         EmailLog[]
   interviewSlotsEntered InterviewSlot[]
   panelSeatsClaimed     PanelSeat[]
+  interviewNotesClosed  InterviewNote[]
 }
 
 model Account {
@@ -434,5 +440,12 @@ model InterviewNote {
   remarks          String?
   updatedAt        DateTime @updatedAt
 
+  // Closing an interview note locks it: once closedAt is set, only MANAGE_ACCOUNTS
+  // holders may view or edit it (see canViewInterviewNote / canEditInterviewNote).
+  // A MANAGE_ACCOUNTS holder can reopen it, clearing both fields.
+  closedAt   DateTime?
+  closedById String?
+
   applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  closedBy  User?     @relation(fields: [closedById], references: [id])
 }

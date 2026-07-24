@@ -3,13 +3,19 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canEditInterviewNote, canViewInterviewNote } from "@/lib/permissions";
+import {
+  canEditInterviewNote,
+  canViewInterviewNote,
+  hasPermission,
+} from "@/lib/permissions";
+import { PermissionKey } from "@/generated/prisma/enums";
 import { formatTunisDateTime } from "@/lib/tunis-time";
 import { PANEL_COMMITTEES } from "@/lib/interview-slot";
 import type { NoteScores } from "@/lib/interview-note";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
 import { Icon } from "@/components/app-shell/icon";
 import { NoteEditor } from "./NoteEditor";
+import { NoteClosingControls } from "./NoteClosingControls";
 
 /**
  * One shared interview note per applicant, written by whoever is on their panel.
@@ -43,7 +49,9 @@ export default async function InterviewNotesPage({
       rawFormData: true,
       phaseOneResult: { select: { weightedTotal: true } },
       interviewSlot: { select: { scheduledTime: true, room: true } },
-      interviewNote: true,
+      interviewNote: {
+        include: { closedBy: { select: { name: true, email: true } } },
+      },
       interviewPanel: {
         select: {
           seats: {
@@ -61,13 +69,22 @@ export default async function InterviewNotesPage({
   // the note is not this campaign's to show.
   if (!applicant || applicant.campaignId !== campaignId) redirect(deniedTo);
 
-  const [canView, canEdit] = await Promise.all([
+  const [canView, canEdit, isManage] = await Promise.all([
     canViewInterviewNote(userId, applicantId),
     canEditInterviewNote(userId, applicantId),
+    hasPermission(userId, PermissionKey.MANAGE_ACCOUNTS),
   ]);
   if (!canView) redirect(deniedTo);
 
   const note = applicant.interviewNote;
+  const closed = note?.closedAt != null;
+  // On an open note, whoever may edit it may also close it (panel member or
+  // MANAGE_ACCOUNTS). Reopening is MANAGE_ACCOUNTS-only, and only a closed note
+  // shows it — anyone else who can reach this page is looking at an open one.
+  const canClose = !closed && canEdit;
+  const canReopen = closed && isManage;
+  const closedByName =
+    note?.closedBy?.name ?? note?.closedBy?.email ?? "Someone";
   const initialScores: NoteScores = {
     personality: note?.personality ?? null,
     communication: note?.communication ?? null,
@@ -163,7 +180,43 @@ export default async function InterviewNotesPage({
           </div>
         </div>
 
-        {!canEdit && (
+        {/* Closing controls + status. A closed note only ever renders here for a
+            MANAGE_ACCOUNTS holder (everyone else was redirected away), so the
+            reopen button and closed banner are safe to show unconditionally when
+            `closed` is true. */}
+        {(closed || canClose) && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+            {closed ? (
+              <p className="flex items-center gap-1.5 rounded-lg bg-status-rejected/10 px-3 py-2 text-xs font-medium text-status-rejected">
+                <Icon name="lock" className="text-[14px]" />
+                Closed by {closedByName}
+                {note?.closedAt ? ` on ${formatTunisDateTime(note.closedAt)}` : ""}.
+                Only account managers can view or edit it now.
+              </p>
+            ) : (
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Closing the note locks it — you&apos;ll lose access to it
+                afterwards.
+              </p>
+            )}
+            {canClose && (
+              <NoteClosingControls
+                campaignId={campaignId}
+                applicantId={applicantId}
+                mode="close"
+              />
+            )}
+            {canReopen && (
+              <NoteClosingControls
+                campaignId={campaignId}
+                applicantId={applicantId}
+                mode="reopen"
+              />
+            )}
+          </div>
+        )}
+
+        {!canEdit && !closed && (
           <p className="mt-4 flex items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-2 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
             <Icon name="lock" className="text-[14px]" />
             Read-only — you&apos;re not on this applicant&apos;s panel.

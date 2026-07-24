@@ -17,6 +17,7 @@ const ACTION_LABELS: Record<string, string> = {
   ADMIN_TRANSFER_CANCELLED: "cancelled an admin transfer",
   CAMPAIGN_CREATED: "created a campaign",
   CAMPAIGN_DELETED: "deleted a campaign",
+  CAMPAIGN_STATUS_CHANGED: "changed a campaign's status",
   PHASE1_SCORE_ENTERED: "entered a Phase 1 score",
   PHASE1_TECHNICAL_SCORE_ENTERED: "entered a technical score",
   PHASE1_RANKING_RECALCULATED: "recalculated the Phase 1 ranking",
@@ -30,6 +31,9 @@ const ACTION_LABELS: Record<string, string> = {
   PHASE1_FINALIZED: "finalized Phase 1 selection",
   GDG_DAY_DETAILS_SET: "set the GDG Day details",
   PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
+  INTERVIEW_NOTE_UPDATED: "updated an interview note",
+  INTERVIEW_NOTE_CLOSED: "closed an interview note",
+  INTERVIEW_NOTE_REOPENED: "reopened an interview note",
   CAPACITY_UPDATED: "updated the committee capacity",
   FINAL_DECISION_RECORDED: "recorded a final decision",
   FINAL_DECISIONS_COMPLETED: "completed the final decisions",
@@ -68,6 +72,8 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // Irreversible and takes the whole applicant pool with it — the loudest tone
   // in the log.
   CAMPAIGN_DELETED: "rejected",
+  // Changing who can reach a campaign — sensitive, but reversible.
+  CAMPAIGN_STATUS_CHANGED: "pending",
   PERMISSION_GRANTED: "accepted",
   USER_DELETED: "rejected",
   PERMISSION_REVOKED: "rejected",
@@ -90,6 +96,10 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   PHASE1_MARKED_TO_DISCUSS: "pending",
   PHASE1_FINALIZED: "accepted",
   GDG_DAY_DETAILS_SET: "primary",
+  INTERVIEW_NOTE_UPDATED: "primary",
+  // Closing/reopening a note changes who can see it — sensitive but reversible.
+  INTERVIEW_NOTE_CLOSED: "pending",
+  INTERVIEW_NOTE_REOPENED: "pending",
   // Configuration, not a decision about anyone — the quiet end of the log, same
   // as the other settings changes.
   CAPACITY_UPDATED: "primary",

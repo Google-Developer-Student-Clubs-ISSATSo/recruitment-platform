@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Pager } from "@/components/ui/pager";
 import { Icon } from "@/components/app-shell/icon";
 import { BookingStatusBadge, type BookingState } from "./booking-status-badge";
 import { saveInterviewSlotAction } from "./actions";
@@ -28,6 +29,8 @@ export type SlotRow = {
  * <PermissionGate>, so there is no read-only variant to handle here. The save
  * action re-checks the permission regardless.
  */
+const PAGE_SIZE = 10;
+
 export function SlotEntryTable({
   campaignId,
   rows,
@@ -35,6 +38,11 @@ export function SlotEntryTable({
   campaignId: string;
   rows: SlotRow[];
 }) {
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   return (
     <div className="space-y-5 rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-start gap-3">
@@ -69,7 +77,7 @@ export function SlotEntryTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {pageRows.map((row) => (
                 <SlotTableRow
                   key={row.applicantId}
                   campaignId={campaignId}
@@ -79,6 +87,18 @@ export function SlotEntryTable({
             </tbody>
           </table>
         </div>
+      )}
+
+      {rows.length > PAGE_SIZE && (
+        <Pager
+          page={safePage}
+          pageCount={pageCount}
+          total={rows.length}
+          pageSize={PAGE_SIZE}
+          rowCount={pageRows.length}
+          unit="applicant"
+          onPageChange={setPage}
+        />
       )}
     </div>
   );
