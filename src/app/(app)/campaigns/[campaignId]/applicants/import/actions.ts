@@ -15,9 +15,18 @@ import {
   classifyCsv,
   summarize,
   toPreviewRow,
+  MAX_CSV_BYTES,
   type ImportSummary,
   type PreviewRow,
 } from "./parse";
+
+// Reject an oversized payload before parsing it. The client guards too, but a
+// server action is a public endpoint — a direct caller can send any string.
+function tooLarge(csvText: string): boolean {
+  return Buffer.byteLength(csvText, "utf8") > MAX_CSV_BYTES;
+}
+
+const TOO_LARGE_MESSAGE = "That file is too large. The limit is 5 MB.";
 
 // CSV applicant import. Both actions are gated by IMPORT_APPLICANTS (re-checked
 // server-side, not just hidden) and operate ONLY on the campaignId from the
@@ -50,6 +59,7 @@ export async function previewImport(
   csvText: string,
 ): Promise<PreviewResult> {
   await requirePermission(IMPORT);
+  if (tooLarge(csvText)) return { ok: false, error: TOO_LARGE_MESSAGE };
 
   const existing = await existingEmailsFor(campaignId);
   const { rows, headerError } = classifyCsv(csvText, existing);
@@ -75,6 +85,7 @@ export async function confirmImport(
   csvText: string,
 ): Promise<ConfirmResult> {
   const actorId = await requirePermission(IMPORT);
+  if (tooLarge(csvText)) return { ok: false, error: TOO_LARGE_MESSAGE };
 
   const existing = await existingEmailsFor(campaignId);
   const { rows, headerError } = classifyCsv(csvText, existing);

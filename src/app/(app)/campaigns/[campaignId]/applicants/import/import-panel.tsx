@@ -7,7 +7,7 @@ import { Icon } from "@/components/app-shell/icon";
 import { Button } from "@/components/ui/button";
 import { previewImport, confirmImport } from "./actions";
 import type { PreviewResult, ConfirmResult } from "./actions";
-import type { RowStatus } from "./parse";
+import { MAX_CSV_BYTES, type RowStatus } from "./parse";
 
 // Per-row preview badge styling (distinct from the committed ApplicantStatus
 // badge — these describe what WILL happen on import, not a saved status).
@@ -65,6 +65,13 @@ export function ImportPanel({ campaignId }: { campaignId: string }) {
 
     if (!/\.csv$/i.test(file.name) && file.type !== "text/csv") {
       setLocalError("Please choose a .csv file.");
+      setFileName(file.name);
+      return;
+    }
+    // Reject an oversized file before reading it into memory. The server
+    // re-checks this — the guard here is just a faster, clearer error.
+    if (file.size > MAX_CSV_BYTES) {
+      setLocalError("That file is too large. The limit is 5 MB.");
       setFileName(file.name);
       return;
     }

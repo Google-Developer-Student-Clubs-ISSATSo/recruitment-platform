@@ -26,6 +26,14 @@ const COMMITTEE_MAP: Record<string, Committee> = Object.fromEntries(
   ]),
 );
 
+// Hard ceiling on an uploaded file. The whole CSV is read into memory as a
+// string and parsed in one pass, so an unbounded upload is a memory-exhaustion
+// vector. 5 MB is orders of magnitude above any real responses export (a few
+// thousand rows of text), so a file past it is malformed or hostile, not real.
+// Enforced on BOTH sides: the client rejects early for a good error, the server
+// re-checks because the client can be bypassed.
+export const MAX_CSV_BYTES = 5 * 1024 * 1024;
+
 export type RowStatus = "import" | "auto_reject" | "duplicate" | "error";
 
 // What the preview table renders per row (light — no rawFormData).

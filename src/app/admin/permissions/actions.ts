@@ -155,6 +155,12 @@ export async function togglePermission(
   grant: boolean,
 ): Promise<void> {
   const actorId = await requirePermission(ADMIN);
+  // Reject an unknown permission string up front — the value crosses the wire
+  // from the client. Mirrors the guard in bulkSetPermission so a hand-crafted
+  // call can't reach Prisma with an off-enum value.
+  if (!Object.values(PermissionKey).includes(permission)) {
+    throw new Error("Unknown permission.");
+  }
   await assertNotLead(userId);
 
   if (grant) {
