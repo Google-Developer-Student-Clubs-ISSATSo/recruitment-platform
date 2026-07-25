@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "motion/react";
 
 import { PermissionKey } from "@/generated/prisma/enums";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { HIGH_CONSEQUENCE_PERMISSIONS, humanizePermission } from "./permission-config";
 
 /**
@@ -26,15 +28,24 @@ export function PermissionToggle({
   onToggle: (grant: boolean) => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Bumped on every actual toggle (not on mount), so the knob can pop on each
+  // change without replaying on first render.
+  const [flips, setFlips] = useState(0);
+  const reduced = useReducedMotion();
   const label = humanizePermission(permission);
   // Only a turn-OFF of a high-consequence permission needs confirmation.
   const needsConfirm = on && HIGH_CONSEQUENCE_PERMISSIONS.has(permission);
+
+  function commit(next: boolean) {
+    if (!reduced) setFlips((n) => n + 1);
+    onToggle(next);
+  }
 
   function handleClick() {
     if (needsConfirm) {
       setConfirmOpen(true);
     } else {
-      onToggle(!on);
+      commit(!on);
     }
   }
 
@@ -49,14 +60,20 @@ export function PermissionToggle({
       >
         <span className="text-[13px] text-foreground">{label}</span>
         <span
-          className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+          className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors duration-150 ease-out motion-reduce:transition-none ${
             on ? "bg-primary" : "bg-neutral-300 dark:bg-neutral-600"
           }`}
         >
-          <span
-            className={`h-4 w-4 rounded-full bg-white transition-transform ${
-              on ? "translate-x-4" : "translate-x-0"
-            }`}
+          <motion.span
+            key={flips}
+            initial={flips === 0 || reduced ? false : { scale: 0.8 }}
+            animate={{ scale: 1, x: on ? 16 : 0 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { duration: DURATION.fast, ease: EASE.out }
+            }
+            className="h-4 w-4 rounded-full bg-white"
           />
         </span>
       </button>
@@ -75,7 +92,7 @@ export function PermissionToggle({
           }
           confirmLabel="Revoke"
           destructive
-          onConfirm={() => onToggle(false)}
+          onConfirm={() => commit(false)}
         />
       )}
     </>

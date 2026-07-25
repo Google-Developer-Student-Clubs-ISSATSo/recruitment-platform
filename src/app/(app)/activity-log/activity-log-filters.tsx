@@ -34,12 +34,24 @@ export function ActivityLogFilters({
   filters,
   actorOptions,
   actionOptions,
+  idSuffix = "",
 }: {
   filters: ActivityFilters;
   actorOptions: ActorOption[];
   actionOptions: string[];
+  /**
+   * This component is mounted twice — once always-visible from md up, once
+   * inside the below-md collapsible drawer — so a bare
+   * `id="filter-member"` would collide and a <label htmlFor> would bind to
+   * whichever copy comes first in the DOM regardless of which one is visible.
+   * The mobile instance passes a suffix to keep every id (and its label) on
+   * this page unique.
+   */
+  idSuffix?: string;
 }) {
   const router = useRouter();
+  const memberId = `filter-member${idSuffix}`;
+  const actionId = `filter-action${idSuffix}`;
 
   function apply(patch: Partial<ActivityFilters>) {
     const next = { ...filters, ...patch };
@@ -62,11 +74,11 @@ export function ActivityLogFilters({
   return (
     <section className="grid grid-cols-1 gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="filter-member" className={LABEL_CLASS}>
+        <label htmlFor={memberId} className={LABEL_CLASS}>
           Member
         </label>
         <select
-          id="filter-member"
+          id={memberId}
           value={filters.actor}
           onChange={(e) => apply({ actor: e.target.value })}
           className={FIELD_CLASS}
@@ -81,11 +93,11 @@ export function ActivityLogFilters({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="filter-action" className={LABEL_CLASS}>
+        <label htmlFor={actionId} className={LABEL_CLASS}>
           Action Type
         </label>
         <select
-          id="filter-action"
+          id={actionId}
           value={filters.action}
           onChange={(e) => apply({ action: e.target.value })}
           className={FIELD_CLASS}
@@ -99,7 +111,13 @@ export function ActivityLogFilters({
         </select>
       </div>
 
-      <div className="flex flex-col gap-1.5 md:col-span-2">
+      {/* Spans the full row at md, not half of it: two native <input
+          type="date"> elements plus the "to" label don't have room to share a
+          2-of-4-column cell at exactly 768px — each date input refuses to
+          shrink below its own intrinsic content width, and the row overflowed
+          the page horizontally. col-span-2 only kicks in from lg, where the
+          extra width actually exists. */}
+      <div className="flex flex-col gap-1.5 md:col-span-4 lg:col-span-2">
         <div className="flex items-center justify-between">
           <span className={LABEL_CLASS}>Date Range</span>
           {anyActive && (

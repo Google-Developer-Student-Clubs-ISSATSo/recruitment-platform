@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "motion/react";
 
 import { PermissionKey } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/app-shell/icon";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { PERMISSION_CATEGORIES } from "./permission-config";
 
 /** Every PermissionKey, grouped the same way the per-user toggle panel groups them. */
@@ -30,13 +32,24 @@ export function BulkActionBar({
 }) {
   const [permission, setPermission] = useState<PermissionKey | "">("");
   const [confirming, setConfirming] = useState<null | "grant" | "revoke">(null);
+  const reduced = useReducedMotion();
 
-  if (selectedCount === 0) return null;
-
+  // Mount/unmount is now driven by the caller wrapping this in
+  // <AnimatePresence>, keyed on selectedCount > 0 — that's what lets the exit
+  // animation actually play instead of the bar vanishing on the same render
+  // that clears the selection.
   const memberWord = `${selectedCount} member${selectedCount === 1 ? "" : "s"}`;
 
   return (
-    <div className="sticky bottom-4 z-40 flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 shadow-lg backdrop-blur-sm dark:bg-primary/10">
+    <motion.div
+      initial={reduced ? false : { opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={reduced ? { opacity: 1 } : { opacity: 0, y: 16 }}
+      transition={
+        reduced ? { duration: 0 } : { duration: DURATION.base, ease: EASE.out }
+      }
+      className="sticky bottom-4 z-40 flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 shadow-lg backdrop-blur-sm dark:bg-primary/10"
+    >
       <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
         <Icon name="check_circle" className="text-[18px] text-primary" />
         {selectedCount} selected
@@ -119,6 +132,6 @@ export function BulkActionBar({
         destructive
         onConfirm={() => permission && onApply(permission, false)}
       />
-    </div>
+    </motion.div>
   );
 }

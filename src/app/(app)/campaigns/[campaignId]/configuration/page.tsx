@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { PermissionGate } from "@/components/permission-gate";
+import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { CapacityConfigSection } from "./CapacityConfigSection";
 import { FinalEmailLinksSection } from "./FinalEmailLinksSection";
 import { ScoringConfigSection } from "./ScoringConfigSection";
@@ -52,19 +53,25 @@ export default async function ConfigurationPage({
       </div>
 
       {hasAnyConfigAccess ? (
-        <div className="space-y-6">
-          <PermissionGate permission={PermissionKey.MANAGE_CAPACITY}>
-            <CapacityConfigSection campaignId={campaignId} />
-          </PermissionGate>
+        <StaggerGroup className="space-y-6">
+          <StaggerItem>
+            <PermissionGate permission={PermissionKey.MANAGE_CAPACITY}>
+              <CapacityConfigSection campaignId={campaignId} />
+            </PermissionGate>
+          </StaggerItem>
 
-          <PermissionGate permission={PermissionKey.SEND_EMAILS}>
-            <FinalEmailLinksSection campaignId={campaignId} />
-          </PermissionGate>
+          <StaggerItem>
+            <PermissionGate permission={PermissionKey.SEND_EMAILS}>
+              <FinalEmailLinksSection campaignId={campaignId} />
+            </PermissionGate>
+          </StaggerItem>
 
-          <PermissionGate permission={PermissionKey.CONFIGURE_SCREENING}>
-            <ScoringConfigSection campaignId={campaignId} />
-          </PermissionGate>
-        </div>
+          <StaggerItem>
+            <PermissionGate permission={PermissionKey.CONFIGURE_SCREENING}>
+              <ScoringConfigSection campaignId={campaignId} />
+            </PermissionGate>
+          </StaggerItem>
+        </StaggerGroup>
       ) : (
         <div className="rounded-xl border border-neutral-200 bg-white p-8 text-center dark:border-neutral-800 dark:bg-neutral-900">
           <p className="text-sm font-medium text-foreground">

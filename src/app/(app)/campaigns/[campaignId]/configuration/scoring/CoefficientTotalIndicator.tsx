@@ -1,6 +1,9 @@
 "use client";
 
+import { motion } from "motion/react";
+
 import { Icon } from "@/components/app-shell/icon";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 
 // The "Phase Summary" sidebar card from the Stitch scoring_configuration screen:
 // a plain count row, then the coefficient total as a large filled tile, then a
@@ -23,6 +26,7 @@ export function CoefficientTotalIndicator({
 }) {
   const balanced = total === 100;
   const delta = Math.round((total - 100) * 100) / 100;
+  const reduced = useReducedMotion();
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6 dark:border-neutral-800 dark:bg-neutral-950/40">
@@ -48,7 +52,12 @@ export function CoefficientTotalIndicator({
         </div>
 
         <div
-          className={`rounded-xl p-4 ${
+          // The colours swap by className, but `transition-colors` still
+          // animates smoothly across the swap — the browser interpolates the
+          // computed background/ring colour rather than cutting to it, so
+          // crossing 100 (in either direction, while typing a coefficient)
+          // reads as a state change rather than a flicker.
+          className={`rounded-xl p-4 transition-colors duration-200 ease-out motion-reduce:transition-none ${
             balanced
               ? "bg-status-accepted/10 ring-1 ring-status-accepted/30"
               : "bg-status-pending/10 ring-1 ring-status-pending/40"
@@ -57,7 +66,7 @@ export function CoefficientTotalIndicator({
           <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
             <Icon
               name={balanced ? "check_circle" : "info"}
-              className={`text-[14px] ${
+              className={`text-[14px] transition-colors duration-200 ease-out motion-reduce:transition-none ${
                 balanced
                   ? "text-status-accepted"
                   : "text-[color:var(--status-pending)]"
@@ -66,15 +75,26 @@ export function CoefficientTotalIndicator({
             Total Coefficient
           </p>
           <div className="flex items-baseline gap-2">
-            <span
-              className={`text-4xl font-bold tabular-nums ${
+            {/* A small pop on the exact frame the total crosses balanced/not —
+                the colour swap alone is easy to miss out of the corner of the
+                eye while typing a coefficient elsewhere in the list. */}
+            <motion.span
+              key={balanced ? "balanced" : "unbalanced"}
+              initial={reduced ? false : { scale: 0.92 }}
+              animate={{ scale: 1 }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : { duration: DURATION.fast, ease: EASE.out }
+              }
+              className={`text-4xl font-bold tabular-nums transition-colors duration-200 ease-out motion-reduce:transition-none ${
                 balanced
                   ? "text-status-accepted"
                   : "text-[color:var(--status-pending)]"
               }`}
             >
               {Number(total.toFixed(2))}
-            </span>
+            </motion.span>
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               units
             </span>

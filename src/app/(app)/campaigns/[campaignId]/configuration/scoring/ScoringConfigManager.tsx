@@ -217,11 +217,11 @@ export function ScoringConfigManager({
             type="button"
             onClick={addQuestion}
             disabled={pending}
-            className="group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 py-4 text-neutral-500 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400"
+            className="group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 py-4 text-neutral-500 transition-all duration-150 ease-out hover:border-primary hover:bg-primary/5 hover:text-primary disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none dark:border-neutral-700 dark:text-neutral-400"
           >
             <Icon
               name="add_circle"
-              className="text-[20px] transition-transform group-hover:scale-110"
+              className="text-[20px] transition-transform duration-150 ease-out group-hover:scale-110 motion-reduce:transition-none"
             />
             <span className="text-[11px] font-semibold uppercase tracking-widest">
               Add New Scored Question

@@ -48,7 +48,7 @@ export function NoteScaleEditor({
             aria-pressed={on}
             title={on ? `Remove ${fmt(mid)} from the scale` : `Add ${fmt(mid)} to the scale`}
             onClick={() => toggle(mid)}
-            className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+            className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors duration-150 ease-out disabled:opacity-50 motion-reduce:transition-none ${
               on
                 ? "border-primary/30 bg-primary/10 text-primary"
                 : "border-dashed border-neutral-300 bg-transparent text-neutral-400 hover:border-primary hover:text-primary dark:border-neutral-700"

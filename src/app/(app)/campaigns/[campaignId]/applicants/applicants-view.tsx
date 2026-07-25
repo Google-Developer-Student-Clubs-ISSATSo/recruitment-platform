@@ -1,7 +1,10 @@
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import { StatusBadge } from "./status-badge";
 import { ImportPanel } from "./import/import-panel";
-import { AnimatedCardList, AnimatedTableBody } from "./AnimatedTableBody";
+import {
+  AnimatedCardList,
+  AnimatedTableBody,
+} from "@/components/motion/table-slice";
 import { Pagination } from "./Pagination";
 import {
   ApplicantsFilters,

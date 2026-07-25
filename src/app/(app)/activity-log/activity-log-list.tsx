@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import {
@@ -9,6 +13,9 @@ import {
   type ActivitySummary,
   type ActivityTone,
 } from "@/lib/activity-descriptions";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
+import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
+import { AnimatedCardList, AnimatedTableBody } from "@/components/motion/table-slice";
 
 import { RefreshButton } from "./refresh-button";
 import {
@@ -68,6 +75,21 @@ export function ActivityLogList({
   /** Current filter values, echoed back from the URL. */
   filters: ActivityFilters;
 }) {
+  const reduced = useReducedMotion();
+  // Below md, the filter bar starts collapsed behind a toggle — a coordinator
+  // checking the log on a phone is usually here to read recent rows, not to
+  // set up a filter, and the four-field grid stacked open by default would push
+  // the table below the fold before anyone gets to it. It opens automatically
+  // if a filter is already active (arriving via a link with ?actor=… etc.),
+  // so a shared filtered link doesn't look unfiltered on a phone.
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(
+    () =>
+      Boolean(filters.actor) ||
+      Boolean(filters.action) ||
+      Boolean(filters.from) ||
+      Boolean(filters.to),
+  );
+
   // Pagination links must carry the active filters, or paging would silently
   // drop them and jump back to the unfiltered log.
   const anyFilterActive =
@@ -75,6 +97,16 @@ export function ActivityLogList({
     Boolean(filters.action) ||
     Boolean(filters.from) ||
     Boolean(filters.to);
+  const activeFilterCount = [
+    filters.actor,
+    filters.action,
+    filters.from,
+    filters.to,
+  ].filter(Boolean).length;
+
+  // Identifies the currently rendered slice — both layouts re-run their fade
+  // exactly when paging or filtering produced new rows.
+  const sliceSignature = `${page}|${filters.actor}|${filters.action}|${filters.from}|${filters.to}`;
 
   const pageHref = (n: number) => {
     const params = new URLSearchParams();
@@ -105,32 +137,99 @@ export function ActivityLogList({
 
       {/* Analytics summary — above the filters and table, so the headline
           numbers are the first thing read rather than a footnote. */}
-      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <SummaryCard
-          icon="trending_up"
-          tint="bg-primary/10 text-primary"
-          label="Actions Today"
-          value={summary.actionsToday}
-        />
-        <SummaryCard
-          icon="shield"
-          tint="bg-status-rejected/10 text-status-rejected"
-          label="Security Events"
-          value={summary.securityEvents}
-        />
-        <SummaryCard
-          icon="group"
-          tint="bg-status-accepted/10 text-status-accepted"
-          label="Most Active User"
-          value={summary.mostActiveUser}
-        />
-      </section>
+      <StaggerGroup className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <StaggerItem>
+          <SummaryCard
+            icon="trending_up"
+            tint="bg-primary/10 text-primary"
+            label="Actions Today"
+            value={summary.actionsToday}
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <SummaryCard
+            icon="shield"
+            tint="bg-status-rejected/10 text-status-rejected"
+            label="Security Events"
+            value={summary.securityEvents}
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <SummaryCard
+            icon="group"
+            tint="bg-status-accepted/10 text-status-accepted"
+            label="Most Active User"
+            value={summary.mostActiveUser}
+          />
+        </StaggerItem>
+      </StaggerGroup>
 
-      <ActivityLogFilters
-        filters={filters}
-        actorOptions={actorOptions}
-        actionOptions={actionOptions}
-      />
+      {/* md and up: filters are always visible inline, as before. Below md they
+          sit behind a toggle (see mobileFiltersOpen above). */}
+      <div className="hidden md:block">
+        <ActivityLogFilters
+          filters={filters}
+          actorOptions={actorOptions}
+          actionOptions={actionOptions}
+        />
+      </div>
+
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileFiltersOpen((v) => !v)}
+          aria-expanded={mobileFiltersOpen}
+          className="flex w-full items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-foreground shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+        >
+          <span className="flex items-center gap-2">
+            <Icon name="filter_list" className="text-[18px] text-neutral-400" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
+                {activeFilterCount}
+              </span>
+            )}
+          </span>
+          <motion.span
+            className="inline-flex"
+            animate={{ rotate: mobileFiltersOpen ? 180 : 0 }}
+            initial={false}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { duration: DURATION.fast, ease: EASE.out }
+            }
+          >
+            <Icon name="expand_more" className="text-[18px] text-neutral-400" />
+          </motion.span>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {mobileFiltersOpen && (
+            <motion.div
+              key="mobile-filters"
+              initial={reduced ? false : { height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={reduced ? { opacity: 1 } : { height: 0, opacity: 0 }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : { duration: DURATION.base, ease: EASE.out }
+              }
+              className="overflow-hidden"
+            >
+              <div className="pt-3">
+                <ActivityLogFilters
+                  filters={filters}
+                  actorOptions={actorOptions}
+                  actionOptions={actionOptions}
+                  idSuffix="-mobile"
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Log table */}
       <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
@@ -142,21 +241,22 @@ export function ActivityLogList({
             <button
               type="button"
               aria-label="Filter columns"
-              className="flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-neutral-100 hover:text-primary dark:hover:bg-neutral-800"
+              className="flex size-8 items-center justify-center rounded-lg transition-colors duration-150 ease-out hover:bg-neutral-100 hover:text-primary motion-reduce:transition-none dark:hover:bg-neutral-800"
             >
               <Icon name="filter_list" className="text-[20px]" />
             </button>
             <button
               type="button"
               aria-label="Choose columns"
-              className="flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-neutral-100 hover:text-primary dark:hover:bg-neutral-800"
+              className="flex size-8 items-center justify-center rounded-lg transition-colors duration-150 ease-out hover:bg-neutral-100 hover:text-primary motion-reduce:transition-none dark:hover:bg-neutral-800"
             >
               <Icon name="view_column" className="text-[20px]" />
             </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* md and up: the dense table. */}
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-left">
             <thead className="bg-neutral-50 dark:bg-neutral-950/40">
               <tr className="border-b border-neutral-200 dark:border-neutral-800">
@@ -172,8 +272,8 @@ export function ActivityLogList({
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
-              {rows.length === 0 ? (
+            {rows.length === 0 ? (
+              <tbody>
                 <tr>
                   <td
                     colSpan={5}
@@ -184,13 +284,18 @@ export function ActivityLogList({
                       : "No activity recorded yet."}
                   </td>
                 </tr>
-              ) : (
-                rows.map((row) => {
+              </tbody>
+            ) : (
+              <AnimatedTableBody
+                signature={sliceSignature}
+                className="divide-y divide-neutral-100 dark:divide-neutral-800/60"
+              >
+                {rows.map((row) => {
                   const { date, time } = splitTimestamp(row.createdAtISO);
                   return (
                     <tr
                       key={row.id}
-                      className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-950/40"
+                      className="transition-colors duration-150 ease-out hover:bg-neutral-50 motion-reduce:transition-none dark:hover:bg-neutral-950/40"
                     >
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-foreground">
                         {date}
@@ -223,10 +328,65 @@ export function ActivityLogList({
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
+                })}
+              </AnimatedTableBody>
+            )}
           </table>
+        </div>
+
+        {/* Below md: one card per entry — same reasoning as the Applicants and
+            Admin Permissions cards. Details still truncates (it can run to a
+            full sentence and a card is for scanning, not reading the full
+            audit note), everything else fits with no truncation. */}
+        <div className="md:hidden">
+          {rows.length === 0 ? (
+            <p className="px-6 py-10 text-center text-sm italic text-neutral-400">
+              {anyFilterActive
+                ? "No activity matches these filters."
+                : "No activity recorded yet."}
+            </p>
+          ) : (
+            <AnimatedCardList
+              signature={sliceSignature}
+              className="divide-y divide-neutral-100 dark:divide-neutral-800/60"
+            >
+              {rows.map((row) => {
+                const { date, time } = splitTimestamp(row.createdAtISO);
+                return (
+                  <li key={row.id} className="space-y-2 px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                          {initials(row.actorName)}
+                        </span>
+                        <span className="truncate text-sm font-medium text-foreground">
+                          {row.actorName}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-xs text-neutral-400">
+                        {date} <span className="text-neutral-400">{time}</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-bold uppercase tracking-tight ${TONE_CLASS[actionTone(row.actionType)]}`}
+                      >
+                        {actionTypeLabel(row.actionType)}
+                      </span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                        {row.target}
+                      </span>
+                    </div>
+                    {row.details && (
+                      <p className="truncate text-sm text-neutral-500 dark:text-neutral-400">
+                        {row.details}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </AnimatedCardList>
+          )}
         </div>
 
         <Pagination
@@ -279,8 +439,9 @@ function Pagination({
     (_, i) => windowStart + i,
   );
 
+  const reduced = useReducedMotion();
   const arrowClass =
-    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800";
+    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors duration-150 ease-out hover:bg-neutral-100 motion-reduce:transition-none dark:border-neutral-700 dark:hover:bg-neutral-800";
   const arrowDisabledClass =
     "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-300 opacity-40 dark:border-neutral-800 dark:text-neutral-600";
 
@@ -306,11 +467,25 @@ function Pagination({
 
         {pages.map((n) =>
           n === page ? (
+            // relative + isolate so the sliding pill sits behind the digit
+            // rather than over it — same shared-element treatment as the
+            // Applicants pager, with its own layoutId so the two never collide.
             <span
               key={n}
               aria-current="page"
-              className="flex size-8 items-center justify-center rounded bg-primary text-sm font-semibold text-white"
+              className="relative isolate flex size-8 items-center justify-center rounded text-sm font-semibold text-white"
             >
+              <motion.span
+                aria-hidden
+                layoutId="activity-log-page-indicator"
+                layout={!reduced}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { duration: DURATION.base, ease: EASE.inOut }
+                }
+                className="absolute inset-0 -z-10 rounded bg-primary"
+              />
               {n}
             </span>
           ) : (
@@ -318,7 +493,7 @@ function Pagination({
               key={n}
               href={pageHref(n)}
               aria-label={`Page ${n}`}
-              className="flex size-8 items-center justify-center rounded border border-neutral-200 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              className="flex size-8 items-center justify-center rounded border border-neutral-200 text-sm text-neutral-500 transition-colors duration-150 ease-out hover:bg-neutral-100 motion-reduce:transition-none dark:border-neutral-700 dark:hover:bg-neutral-800"
             >
               {n}
             </Link>

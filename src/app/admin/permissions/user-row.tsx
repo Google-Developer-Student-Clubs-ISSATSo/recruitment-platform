@@ -79,8 +79,14 @@ export function UserRow({
 
   return (
     <div className="border-b border-neutral-100 last:border-0 dark:border-neutral-800/60">
-      {/* Row */}
-      <div className="grid grid-cols-1 items-center gap-3 px-5 py-3.5 sm:grid-cols-[28px_24px_1fr_190px_110px_170px_110px] sm:gap-4">
+      {/* lg and up: the dense grid row, matching the header's columns exactly.
+          This collapses at lg rather than the Applicants/Activity Log tables'
+          md, because its seven columns include several fixed pixel widths
+          (190+110+170+110=580px alone, before gaps or the flexible member
+          cell) that don't fit in the ~680px of usable width at 768 — the same
+          table-vs-card TECHNIQUE as those pages, just a wider point to switch
+          at, since this table genuinely needs more room. */}
+      <div className="hidden items-center gap-4 px-5 py-3.5 lg:grid lg:grid-cols-[28px_24px_1fr_190px_110px_170px_110px]">
         {onSelectedChange ? (
           <input
             type="checkbox"
@@ -91,16 +97,16 @@ export function UserRow({
             className="size-4 rounded border-neutral-300 text-primary focus:ring-primary/30"
           />
         ) : (
-          <span className="hidden sm:block" />
+          <span />
         )}
         <button
           onClick={onToggleExpand}
-          className="hidden text-neutral-400 sm:block"
+          className="text-neutral-400"
           aria-label={expanded ? "Collapse" : "Expand"}
         >
           <Icon
             name="expand_more"
-            className={`text-[20px] transition-transform ${expanded ? "rotate-180" : ""}`}
+            className={`text-[20px] transition-transform duration-150 ease-out motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
           />
         </button>
 
@@ -145,11 +151,11 @@ export function UserRow({
           </span>
         </div>
 
-        <div className="flex items-center justify-start gap-1 sm:justify-end">
+        <div className="flex items-center justify-end gap-1">
           <button
             onClick={onToggleExpand}
             disabled={pending}
-            className="text-neutral-400 transition-colors hover:text-primary disabled:opacity-50"
+            className="text-neutral-400 transition-colors duration-150 ease-out hover:text-primary disabled:opacity-50 motion-reduce:transition-none"
             aria-label="Edit permissions"
           >
             <Icon name="more_vert" />
@@ -158,12 +164,90 @@ export function UserRow({
             <button
               onClick={() => setDeleteOpen(true)}
               disabled={pending}
-              className="text-neutral-400 transition-colors hover:text-status-rejected disabled:opacity-50"
+              className="text-neutral-400 transition-colors duration-150 ease-out hover:text-status-rejected disabled:opacity-50 motion-reduce:transition-none"
               aria-label={`Delete ${user.name}`}
             >
               <Trash2 className="size-[18px]" aria-hidden />
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Below lg: one card per member. Same fields as the table row, laid out
+          for a lookup-first read rather than a column scan — name loudest,
+          role/committee/access as a wrapped chip row, actions inline. Mirrors
+          the Applicants card pattern's reasoning: a handful of short fields
+          that fit with no truncation, so there's nothing a sticky-column table
+          would preserve that a card doesn't already show in full. */}
+      <div className="flex flex-col gap-3 px-4 py-3.5 lg:hidden">
+        <div className="flex items-start gap-3">
+          {onSelectedChange && (
+            <input
+              type="checkbox"
+              aria-label={`Select ${user.name}`}
+              checked={selected ?? false}
+              disabled={pending}
+              onChange={(e) => onSelectedChange(e.target.checked)}
+              className="mt-2.5 size-4 shrink-0 rounded border-neutral-300 text-primary focus:ring-primary/30"
+            />
+          )}
+          <button
+            onClick={onToggleExpand}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          >
+            <Avatar size="lg">
+              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                {initials(user.name)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-bold text-foreground">
+                {user.name}
+              </span>
+              <span className="block truncate text-xs text-neutral-500 dark:text-neutral-400">
+                {user.email}
+              </span>
+            </span>
+          </button>
+          <div className="flex shrink-0 items-center gap-1 pt-1">
+            <button
+              onClick={onToggleExpand}
+              disabled={pending}
+              className="text-neutral-400 transition-colors duration-150 ease-out hover:text-primary disabled:opacity-50 motion-reduce:transition-none"
+              aria-label={expanded ? "Collapse" : "Expand"}
+            >
+              <Icon
+                name="expand_more"
+                className={`text-[20px] transition-transform duration-150 ease-out motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
+              />
+            </button>
+            {canDelete && (
+              <button
+                onClick={() => setDeleteOpen(true)}
+                disabled={pending}
+                className="text-neutral-400 transition-colors duration-150 ease-out hover:text-status-rejected disabled:opacity-50 motion-reduce:transition-none"
+                aria-label={`Delete ${user.name}`}
+              >
+                <Trash2 className="size-[18px]" aria-hidden />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pl-1">
+          <RoleBadge templateLabel={user.templateLabel} isCustom={user.isCustom} />
+          <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-status-accepted/10 text-status-accepted">
+            {user.committee}
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+            <span className="h-2 w-12 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+              <span
+                className="block h-full rounded-full bg-primary"
+                style={{ width: `${access.pct}%` }}
+              />
+            </span>
+            {access.label} access
+          </span>
         </div>
       </div>
 

@@ -2,9 +2,12 @@
 
 import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 
 import { Committee, PermissionKey } from "@/generated/prisma/enums";
 import { Icon } from "@/components/app-shell/icon";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
+import { AnimatedList } from "@/components/motion/table-slice";
 import {
   type AdminUserRow,
   type TemplateOption,
@@ -66,6 +69,7 @@ export function PermissionTable({
     createUser,
     createInitial,
   );
+  const reduced = useReducedMotion();
 
   // Collapse the create panel the moment the action reports success. Adjusting
   // state during render on a changed value (rather than in an effect) is the
@@ -191,8 +195,26 @@ export function PermissionTable({
         <StatCard label="Customized" value={customizedCount} tone="rejected" />
       </div>
 
-      {/* Create form */}
-      {showCreate && (
+      {/* Create form — an inline expanding panel rather than a true dialog: it
+          keeps focus in the normal document flow right below the button that
+          opened it, and the actionState wiring below only needs to persist
+          across expand/collapse, not across a portal mount. The animation is
+          the same one the app already uses for collapsible sections
+          (height+opacity via AnimatePresence). */}
+      <AnimatePresence initial={false}>
+        {showCreate && (
+          <motion.div
+            key="create-panel"
+            initial={reduced ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduced ? { opacity: 1 } : { height: 0, opacity: 0 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { duration: DURATION.base, ease: EASE.out }
+            }
+            className="overflow-hidden"
+          >
         <form
           action={createAction}
           className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
@@ -269,7 +291,9 @@ export function PermissionTable({
             )}
           </div>
         </form>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search + filter */}
       <SearchFilterBar
@@ -320,7 +344,10 @@ export function PermissionTable({
           Members
         </h3>
         <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="hidden grid-cols-[28px_24px_1fr_190px_110px_170px_110px] items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 sm:grid dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+          {/* lg and up only — see the collapse-breakpoint note on UserRow for
+              why this one column set needs lg rather than the md the
+              Applicants and Activity Log tables use. */}
+          <div className="hidden grid-cols-[28px_24px_1fr_190px_110px_170px_110px] items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 lg:grid dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
             <input
               type="checkbox"
               aria-label="Select all members on this page"
@@ -380,7 +407,10 @@ export function PermissionTable({
               No members match your search.
             </div>
           ) : (
-            members.map((user) => (
+            <AnimatedList
+              signature={`${page}|${filters.q}|${filters.committee}|${filters.template}`}
+            >
+            {members.map((user) => (
               <UserRow
                 key={user.id}
                 user={user}
@@ -396,7 +426,8 @@ export function PermissionTable({
                 selected={selected.has(user.id)}
                 onSelectedChange={(on) => toggleOne(user.id, on)}
               />
-            ))
+            ))}
+            </AnimatedList>
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-5 py-3 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
@@ -412,12 +443,16 @@ export function PermissionTable({
         </div>
       </section>
 
-      <BulkActionBar
-        selectedCount={selected.size}
-        pending={pending}
-        onApply={applyBulk}
-        onClear={() => setSelected(new Set())}
-      />
+      <AnimatePresence>
+        {selected.size > 0 && (
+          <BulkActionBar
+            selectedCount={selected.size}
+            pending={pending}
+            onApply={applyBulk}
+            onClear={() => setSelected(new Set())}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
