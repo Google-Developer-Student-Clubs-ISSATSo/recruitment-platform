@@ -13,7 +13,7 @@ import { formatTunisDateTime } from "@/lib/tunis-time";
 import { PANEL_COMMITTEES } from "@/lib/interview-slot";
 import type { NoteScores } from "@/lib/interview-note";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 import { NoteEditor } from "./NoteEditor";
 import { NoteClosingControls } from "./NoteClosingControls";
 
@@ -240,7 +240,7 @@ function Meta({
   label,
   value,
 }: {
-  icon: string;
+  icon: IconName;
   label: string;
   value: string | null;
 }) {

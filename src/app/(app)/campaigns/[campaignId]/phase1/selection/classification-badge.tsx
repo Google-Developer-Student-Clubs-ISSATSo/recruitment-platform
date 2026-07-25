@@ -1,4 +1,9 @@
+"use client";
+
+import { motion } from "motion/react";
+
 import { PhaseOneClassification } from "@/generated/prisma/enums";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 
 // Phase 1 classification → label + Tailwind token classes, mirroring
 // applicants/status-badge.tsx. Colours are our status tokens only — the
@@ -58,6 +63,20 @@ const AWAITING_REVIEW = {
   className: "bg-primary/10 text-primary",
 } as const;
 
+/**
+ * The badge re-animates whenever the classification it displays changes.
+ *
+ * This is the visible receipt for the row-action menu: Accept / Reject / Mark as
+ * To Discuss / Revert all take effect through a server action and a revalidation,
+ * with no dialog and no toast, so the badge flipping colour is the ONLY thing
+ * that tells you the action landed. A scale-and-fade beat makes that flip
+ * impossible to miss on a 10-row table where the row you acted on may not be the
+ * one you are looking at.
+ *
+ * `key` covers both inputs, not just `value`: a fully-scored PENDING row reads
+ * "Awaiting Review" rather than "Pending", so completeness changes the badge
+ * without changing the enum, and that is equally worth animating.
+ */
 export function ClassificationBadge({
   value,
   complete = false,
@@ -66,15 +85,23 @@ export function ClassificationBadge({
   /** Whether the applicant is fully scored — only changes the PENDING label. */
   complete?: boolean;
 }) {
+  const reduced = useReducedMotion();
   const { label, className } =
     value === PhaseOneClassification.PENDING && complete
       ? AWAITING_REVIEW
       : CLASSIFICATION_STYLES[value];
+
   return (
-    <span
+    <motion.span
+      key={`${value}:${complete}`}
+      initial={reduced ? false : { opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={
+        reduced ? { duration: 0 } : { duration: DURATION.fast, ease: EASE.out }
+      }
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${className}`}
     >
       {label}
-    </span>
+    </motion.span>
   );
 }

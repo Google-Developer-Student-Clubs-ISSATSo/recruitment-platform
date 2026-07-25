@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { motion } from "motion/react";
 
 import { Icon } from "@/components/app-shell/icon";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { savePhaseOneScore } from "./actions";
 import { ApplicantQueueList, type QueueEntry } from "./ApplicantQueueList";
 import { ApplicantAnswerPanel } from "./ApplicantAnswerPanel";
@@ -17,18 +19,6 @@ import {
   type ViewMode,
 } from "./types";
 
-// Orchestrates the scoring queue. Local applicant state is the source of truth
-// for the UI so scoring feels instant; each selection persists via the server
-// action (which also revalidates the path). Completion and the Processed/
-// Remaining counter use each applicant's server-computed scoredCount, so they
-// reflect combined progress across ALL scorers — even in the technical-only
-// view, which never receives the other scorers' values or answers.
-//
-// `questions` and `initialApplicants` are already tailored to `viewMode` on the
-// server: full reviewers get every active question and full answers; the
-// technical-only viewer gets ONLY the Technical Skills question and a
-// name/GitHub/LinkedIn slice of each applicant. `totalQuestions` is always the
-// full active count, so completion is correct in both views.
 export function Phase1ScoringClient({
   campaignId,
   viewMode,
@@ -47,6 +37,9 @@ export function Phase1ScoringClient({
   const [applicants, setApplicants] = useState(initialApplicants);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const reduced = useReducedMotion();
+
+  const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
 
   const totalCoefficient = useMemo(
     () => questions.reduce((s, q) => s + q.coefficient, 0),
@@ -148,7 +141,10 @@ export function Phase1ScoringClient({
         </p>
       </div>
 
-      <ProcessedRemainingCounter processed={processed} total={applicants.length} />
+      <ProcessedRemainingCounter
+        processed={processed}
+        total={applicants.length}
+      />
 
       {error && (
         <p className="rounded-lg bg-status-rejected/10 px-4 py-2 text-sm text-status-rejected">
@@ -157,14 +153,48 @@ export function Phase1ScoringClient({
       )}
 
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-        <ApplicantQueueList
-          entries={entries}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
+        <div className={mobilePane === "detail" ? "hidden lg:block" : "block"}>
+          <ApplicantQueueList
+            entries={entries}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              // Only meaningful below lg; harmless above it, where both panes
+              // are always visible.
+              setMobilePane("detail");
+            }}
+          />
+        </div>
 
         {selected ? (
-          <div className="space-y-4">
+          // Crossfade keyed on the applicant: switching people replaces every
+          // answer and every score at once, and an instant swap of a dense panel
+          // gives no signal that the content changed rather than the page having
+          // glitched. Opacity only, at the `fast` token — reviewers step through
+          // this queue dozens of times an hour, so it must never feel like a wait.
+          <motion.div
+            key={selected.id}
+            initial={reduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { duration: DURATION.fast, ease: EASE.out }
+            }
+            className={`space-y-4 ${
+              mobilePane === "list" ? "hidden lg:block" : "block"
+            }`}
+          >
+            {/* Back to the queue — below lg only, where the queue is off-screen. */}
+            <button
+              type="button"
+              onClick={() => setMobilePane("list")}
+              className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-primary transition-opacity duration-150 ease-out hover:opacity-80 motion-reduce:transition-none lg:hidden"
+            >
+              <Icon name="arrow_back" className="text-[18px]" />
+              Back to queue
+            </button>
+
             {/* Applicant header + (full mode only) live total */}
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-lg font-semibold text-foreground">
@@ -179,6 +209,8 @@ export function Phase1ScoringClient({
               )}
             </div>
 
+            {/* Reading pane beside scoring from lg up; stacked below, with the
+                answers first — you read before you score. */}
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Reading pane */}
               <section>
@@ -241,7 +273,7 @@ export function Phase1ScoringClient({
                 </div>
               </section>
             </div>
-          </div>
+          </motion.div>
         ) : (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-16 text-center dark:border-neutral-700 dark:bg-neutral-800/40">
             <Icon name="how_to_reg" className="text-[32px] text-neutral-300" />

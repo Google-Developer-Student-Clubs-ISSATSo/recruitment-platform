@@ -44,7 +44,7 @@ export function SlotEntryTable({
   const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
-    <div className="space-y-5 rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="space-y-5 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Icon name="event" className="text-[20px]" />
@@ -65,28 +65,57 @@ export function SlotEntryTable({
           No shortlisted applicants yet. Finalize Phase 1 first.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
-                <Th>Applicant</Th>
-                <Th>Status</Th>
-                <Th>Date &amp; time (Tunis)</Th>
-                <Th>Room</Th>
-                <Th className="text-right">Save</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((row) => (
-                <SlotTableRow
-                  key={row.applicantId}
-                  campaignId={campaignId}
-                  row={row}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* lg and up: the table. It stays a table because the two inputs line
+              up into columns you can run down while transcribing a list of
+              bookings, which is exactly what this screen is for.
+
+              lg rather than the md used by the Applicants and Selection tables,
+              because this one is genuinely wider: a datetime-local input renders
+              at 216px, and with the room field and Save button the row needs
+              ~700px. At 768px the 256px sidebar leaves only ~512px of content, so
+              an md breakpoint overflowed the page (measured 967px against a 768px
+              viewport). overflow-x-auto stays as a floor so that even if a future
+              column pushes past the available width it scrolls inside the panel
+              instead of breaking the page. */}
+          <div className="hidden overflow-x-auto lg:block">
+            <table className="w-full min-w-[680px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
+                  <Th>Applicant</Th>
+                  <Th>Status</Th>
+                  <Th>Date &amp; time (Tunis)</Th>
+                  <Th>Room</Th>
+                  <Th className="text-right">Save</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row) => (
+                  <SlotTableRow
+                    key={row.applicantId}
+                    campaignId={campaignId}
+                    row={row}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Below lg: a card per applicant, matching the collapse used on
+              Applicants and Phase 1 Selection. This one has the strongest case of
+              the three — the old min-w-[720px] table meant typing into a field
+              that was half off-screen while the name it belonged to had scrolled
+              away. In a card both inputs go full-width instead. */}
+          <ul className="divide-y divide-neutral-100 lg:hidden dark:divide-neutral-800/60">
+            {pageRows.map((row) => (
+              <SlotCard
+                key={row.applicantId}
+                campaignId={campaignId}
+                row={row}
+              />
+            ))}
+          </ul>
+        </>
       )}
 
       {rows.length > PAGE_SIZE && (
@@ -120,13 +149,15 @@ function Th({
   );
 }
 
-function SlotTableRow({
-  campaignId,
-  row,
-}: {
-  campaignId: string;
-  row: SlotRow;
-}) {
+/**
+ * The draft/committed state for one applicant's slot, plus the save.
+ *
+ * A hook rather than duplicated state, because the table row and the card below
+ * md are two renderings of the same editable row — if they each kept their own
+ * copy of this logic the "Saved" indicator and the dirty-check would inevitably
+ * drift apart between the two layouts.
+ */
+function useSlotDraft(campaignId: string, row: SlotRow) {
   // `saved` is what's committed to the database, `time`/`room` are the draft in
   // the inputs. The badge reads `saved` so it only flips to "Scheduled" once the
   // write actually lands, never merely because someone typed into the field.
@@ -170,54 +201,155 @@ function SlotTableRow({
     });
   }
 
+  return {
+    time,
+    setTime,
+    room,
+    setRoom,
+    pending,
+    error,
+    justSaved,
+    dirty,
+    state,
+    save,
+  };
+}
+
+/** The save button plus its inline error / "Saved" acknowledgement. */
+function SaveCell({
+  error,
+  justSaved,
+  dirty,
+  pending,
+  onSave,
+}: {
+  error: string | null;
+  justSaved: boolean;
+  dirty: boolean;
+  pending: boolean;
+  onSave: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {error && <span className="text-xs text-status-rejected">{error}</span>}
+      {!error && justSaved && !dirty && (
+        <span className="flex items-center gap-1 text-xs text-status-accepted">
+          <Icon name="check" className="text-[14px]" />
+          Saved
+        </span>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending || !dirty}
+        onClick={onSave}
+      >
+        Save
+      </Button>
+    </div>
+  );
+}
+
+function SlotTableRow({
+  campaignId,
+  row,
+}: {
+  campaignId: string;
+  row: SlotRow;
+}) {
+  const d = useSlotDraft(campaignId, row);
+
   return (
     <tr className="border-b border-neutral-100 align-middle dark:border-neutral-800/60">
       <td className="px-3 py-2 font-medium text-foreground">{row.fullName}</td>
       <td className="px-3 py-2">
-        <BookingStatusBadge value={state} />
+        <BookingStatusBadge value={d.state} />
       </td>
       <td className="px-3 py-2">
         <Input
           type="datetime-local"
-          value={time}
-          disabled={pending}
+          value={d.time}
+          disabled={d.pending}
           aria-label={`Interview date and time for ${row.fullName}`}
-          onChange={(e) => setTime(e.target.value)}
+          onChange={(e) => d.setTime(e.target.value)}
           className="w-[13.5rem]"
         />
       </td>
       <td className="px-3 py-2">
         <Input
           type="text"
-          value={room}
-          disabled={pending}
+          value={d.room}
+          disabled={d.pending}
           placeholder="TBC"
           aria-label={`Interview room for ${row.fullName}`}
-          onChange={(e) => setRoom(e.target.value)}
+          onChange={(e) => d.setRoom(e.target.value)}
           className="w-32"
         />
       </td>
       <td className="px-3 py-2 text-right">
-        <div className="flex items-center justify-end gap-2">
-          {error && (
-            <span className="text-xs text-status-rejected">{error}</span>
-          )}
-          {!error && justSaved && !dirty && (
-            <span className="flex items-center gap-1 text-xs text-status-accepted">
-              <Icon name="check" className="text-[14px]" />
-              Saved
-            </span>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={pending || !dirty}
-            onClick={save}
-          >
-            Save
-          </Button>
-        </div>
+        <SaveCell
+          error={d.error}
+          justSaved={d.justSaved}
+          dirty={d.dirty}
+          pending={d.pending}
+          onSave={d.save}
+        />
       </td>
     </tr>
+  );
+}
+
+/** The same editable row at phone width: name and status on top, then the two
+ *  fields full-width where they have room to be typed into. */
+function SlotCard({ campaignId, row }: { campaignId: string; row: SlotRow }) {
+  const d = useSlotDraft(campaignId, row);
+
+  return (
+    <li className="space-y-3 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 flex-1 font-medium text-foreground">
+          {row.fullName}
+        </p>
+        <BookingStatusBadge value={d.state} />
+      </div>
+
+      <div className="space-y-2">
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+            Date &amp; time (Tunis)
+          </span>
+          <Input
+            type="datetime-local"
+            value={d.time}
+            disabled={d.pending}
+            aria-label={`Interview date and time for ${row.fullName}`}
+            onChange={(e) => d.setTime(e.target.value)}
+            className="w-full"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+            Room
+          </span>
+          <Input
+            type="text"
+            value={d.room}
+            disabled={d.pending}
+            placeholder="TBC"
+            aria-label={`Interview room for ${row.fullName}`}
+            onChange={(e) => d.setRoom(e.target.value)}
+            className="w-full"
+          />
+        </label>
+      </div>
+
+      <SaveCell
+        error={d.error}
+        justSaved={d.justSaved}
+        dirty={d.dirty}
+        pending={d.pending}
+        onSave={d.save}
+      />
+    </li>
   );
 }

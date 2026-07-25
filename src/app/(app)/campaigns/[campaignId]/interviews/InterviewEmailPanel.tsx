@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 import {
   sendInterviewInvitesAction,
   sendInterviewRemindersAction,
@@ -366,7 +366,7 @@ function TallyCard({
   detail,
   lastSentISO,
 }: {
-  icon: string;
+  icon: IconName;
   label: string;
   headline: string;
   detail: string;

@@ -1,5 +1,6 @@
-import { Icon } from "@/components/app-shell/icon";
 import { getPipelineFunnel } from "@/lib/campaign-dashboard";
+import { FunnelBar } from "./FunnelBar";
+import { WidgetPanel } from "./WidgetPanel";
 
 // The recruitment pipeline as four horizontal bars. Rendered only for
 // VIEW_STATISTICS holders (the <PermissionGate> in page.tsx) — this is its
@@ -49,24 +50,12 @@ export async function PipelineFunnel({ campaignId }: { campaignId: string }) {
   const widest = Math.max(...stages.map((s) => s.count), 1);
 
   return (
-    <section className="flex flex-col rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Icon name="filter_alt" className="text-[20px]" />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">
-              Pipeline Funnel
-            </h2>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              Cumulative — each stage counts everyone who reached it.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-5 p-6">
+    <WidgetPanel
+      icon="filter_alt"
+      title="Pipeline Funnel"
+      subtitle="Cumulative — each stage counts everyone who reached it."
+    >
+      <div className="space-y-5">
         {stages.map((stage, i) => {
           const rate = conversion(stage.count, i === 0 ? null : stages[i - 1].count);
           return (
@@ -75,21 +64,23 @@ export async function PipelineFunnel({ campaignId }: { campaignId: string }) {
               role="group"
               aria-label={`${stage.label}: ${stage.count} applicants — ${stage.hint}`}
             >
+              {/* gap-3 + min-w-0 on the label so a long stage name wraps inside
+                  its column instead of shoving the count off the panel edge at
+                  375px. */}
               <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm font-semibold text-foreground">
+                <span className="min-w-0 text-sm font-semibold text-foreground">
                   {stage.label}
                 </span>
-                <span className="text-xl font-bold tabular-nums text-foreground">
+                <span className="shrink-0 text-xl font-bold tabular-nums text-foreground">
                   {stage.count}
                 </span>
               </div>
 
-              <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                <div
-                  className={`h-full rounded-full transition-all ${STAGE_FILL[i]}`}
-                  style={{ width: `${(stage.count / widest) * 100}%` }}
-                />
-              </div>
+              <FunnelBar
+                percent={(stage.count / widest) * 100}
+                fillClassName={STAGE_FILL[i]}
+                index={i}
+              />
 
               <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                 {stage.hint}
@@ -99,6 +90,6 @@ export async function PipelineFunnel({ campaignId }: { campaignId: string }) {
           );
         })}
       </div>
-    </section>
+    </WidgetPanel>
   );
 }

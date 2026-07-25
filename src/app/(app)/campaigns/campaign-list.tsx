@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { splitTimestamp } from "@/lib/activity-descriptions";
 import {
   createCampaign,
@@ -51,7 +52,7 @@ export function CampaignList({
   const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       {denied && (
         <div className="rounded-lg border border-status-rejected/30 bg-status-rejected/10 px-4 py-3 text-sm font-medium text-status-rejected">
           You don&apos;t have access to that page.
@@ -61,16 +62,18 @@ export function CampaignList({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Campaigns</h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="mt-1 max-w-2xl text-sm text-neutral-500 dark:text-neutral-400">
             Choose a recruitment campaign to work in. Everything else — the
             applicant pool, screening, interviews — is scoped to the campaign you
             pick.
           </p>
         </div>
         {canManage && (
+          // w-full below sm so it doesn't end up as a lone stranded button on a
+          // line of its own at 375px.
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 ease-out hover:bg-primary/90 motion-reduce:transition-none sm:w-auto"
           >
             <Icon name="add" className="text-[18px]" />
             Create Campaign
@@ -88,11 +91,17 @@ export function CampaignList({
           </p>
         </div>
       ) : (
-        <ul className="space-y-3">
+        // A CARD GRID, not the dense table the Applicants page uses. There are
+        // only ever a handful of campaigns and each one is a destination you
+        // commit to for weeks, so every item earns real estate: its own surface,
+        // its own metadata strip and its own actions. Two columns from sm, three
+        // from xl, one below — the actions row needs ~300px before the Enter and
+        // Open/Close buttons start crowding each other.
+        <StaggerGroup as="ul" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {campaigns.map((c) => (
-            <CampaignRow key={c.id} campaign={c} canManage={canManage} />
+            <CampaignCard key={c.id} campaign={c} canManage={canManage} />
           ))}
-        </ul>
+        </StaggerGroup>
       )}
 
       {showCreate && <CreateCampaignModal onClose={() => setShowCreate(false)} />}
@@ -100,7 +109,17 @@ export function CampaignList({
   );
 }
 
-function CampaignRow({
+/**
+ * One campaign as a card: status and destructive action on the top row, the name
+ * as the loudest thing on the card, a bordered metadata strip, then the actions
+ * pinned to the bottom.
+ *
+ * Vertical rather than the old single-row layout because a row forces every
+ * campaign to compete for one line of width — at 375px the old version wrapped
+ * its four controls into a ragged stack. Here the shape is the same at every
+ * width; only the number of columns in the grid changes.
+ */
+function CampaignCard({
   campaign,
   canManage,
 }: {
@@ -124,53 +143,84 @@ function CampaignRow({
   }
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="min-w-0">
-        <div className="flex items-center gap-3">
-          <h2 className="truncate text-lg font-semibold text-foreground">
-            {campaign.name}
-          </h2>
+    <StaggerItem
+      as="li"
+      className="group flex h-full flex-col rounded-xl border border-neutral-200 bg-white shadow-sm transition-[border-color,box-shadow,transform] duration-150 ease-out hover:border-primary/40 hover:shadow-md motion-reduce:transition-none sm:hover:-translate-y-0.5 motion-reduce:sm:hover:translate-y-0 dark:border-neutral-800 dark:bg-neutral-900"
+    >
+      <div className="flex flex-1 flex-col p-5">
+        <div className="flex items-start justify-between gap-3">
           <StatusBadge isOpen={campaign.isOpen} />
+          {canManage && (
+            // Always present, not hover-revealed: on a touch screen there is no
+            // hover, and a delete you cannot find is worse than one that is
+            // visible. It stays low-contrast until hovered instead.
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              aria-label={`Delete ${campaign.name}`}
+              title="Delete campaign"
+              className="-mr-1 -mt-1 flex shrink-0 items-center rounded-lg p-1.5 text-neutral-400 transition-colors duration-150 ease-out hover:bg-status-rejected/10 hover:text-status-rejected motion-reduce:transition-none"
+            >
+              <Icon name="delete" className="text-[18px]" />
+            </button>
+          )}
         </div>
-        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-          Created {date} · {campaign.applicantCount} applicant
-          {campaign.applicantCount === 1 ? "" : "s"}
-        </p>
+
+        <h2 className="mt-3 text-lg font-semibold text-balance text-foreground">
+          {campaign.name}
+        </h2>
+
+        {/* The two facts that decide whether this is the campaign you want,
+            given the weight of a bordered strip rather than a muted one-liner. */}
+        <dl className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+          <div className="min-w-0">
+            <dt className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+              Applicants
+            </dt>
+            <dd className="truncate text-xl font-bold tabular-nums text-foreground">
+              {campaign.applicantCount}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+              Created
+            </dt>
+            <dd className="truncate text-sm font-medium text-foreground">
+              {date}
+            </dd>
+          </div>
+        </dl>
+
         {statusError && (
-          <p className="mt-1 text-xs text-status-rejected">{statusError}</p>
+          <p className="mt-3 text-xs text-status-rejected">{statusError}</p>
         )}
       </div>
-      <div className="flex items-center gap-2">
+
+      {/* mt-auto via flex-1 above keeps this row on the bottom edge, so the
+          Enter buttons line up across cards of differing name lengths. */}
+      <div className="flex items-center gap-2 border-t border-neutral-200 p-4 dark:border-neutral-800">
+        <Link
+          href={`/campaigns/${campaign.id}/dashboard`}
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary transition-colors duration-150 ease-out hover:bg-primary/10 motion-reduce:transition-none"
+        >
+          Enter
+          <Icon
+            name="arrow_forward"
+            className="text-[18px] transition-transform duration-150 ease-out group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+          />
+        </Link>
         {canManage && (
           <button
             onClick={() => setConfirmingStatus(true)}
             disabled={pending}
             aria-label={`${willOpen ? "Open" : "Close"} ${campaign.name}`}
             title={willOpen ? "Re-open campaign" : "Close campaign"}
-            className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-foreground disabled:opacity-50 dark:border-neutral-800 dark:hover:bg-neutral-800"
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-500 transition-colors duration-150 ease-out hover:bg-neutral-100 hover:text-foreground disabled:opacity-50 motion-reduce:transition-none dark:border-neutral-800 dark:hover:bg-neutral-800"
           >
             <Icon
               name={willOpen ? "lock_open" : "lock"}
               className="text-[18px]"
             />
             {willOpen ? "Open" : "Close"}
-          </button>
-        )}
-        <Link
-          href={`/campaigns/${campaign.id}/dashboard`}
-          className="flex items-center gap-2 rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
-        >
-          Enter
-          <Icon name="arrow_forward" className="text-[18px]" />
-        </Link>
-        {canManage && (
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            aria-label={`Delete ${campaign.name}`}
-            title="Delete campaign"
-            className="flex items-center rounded-lg border border-neutral-200 p-2 text-neutral-400 transition-colors hover:border-status-rejected/40 hover:bg-status-rejected/10 hover:text-status-rejected dark:border-neutral-800"
-          >
-            <Icon name="delete" className="text-[18px]" />
           </button>
         )}
       </div>
@@ -206,7 +256,7 @@ function CampaignRow({
           />
         </>
       )}
-    </li>
+    </StaggerItem>
   );
 }
 

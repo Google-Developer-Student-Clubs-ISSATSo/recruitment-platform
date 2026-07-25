@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 import { PhaseOneClassification } from "@/generated/prisma/enums";
 import {
   finalizePhaseOneAction,
@@ -74,6 +74,45 @@ function matchesFilter(row: SelectionRow, filter: Filter): boolean {
 function formatTotal(total: number | null): string {
   return total === null ? "—" : (Math.round(total * 100) / 100).toFixed(2);
 }
+
+/**
+ * Which actions and which emphasis a row's current classification calls for.
+ *
+ * Derived once and shared by the desktop table row and the mobile card, so the
+ * two layouts can never offer a different menu for the same applicant — the
+ * failure mode of hand-writing the conditions twice.
+ */
+type RowState = {
+  isRejected: boolean;
+  isToDiscuss: boolean;
+  isManualAccept: boolean;
+  isManualReject: boolean;
+  /** Sticky rows survive a recalculation, so they need an explicit way back. */
+  isSticky: boolean;
+};
+
+function rowStateOf(row: SelectionRow): RowState {
+  const isToDiscuss = row.classification === PhaseOneClassification.TO_DISCUSS;
+  const isManualAccept =
+    row.classification === PhaseOneClassification.MANUAL_ACCEPT;
+  const isManualReject =
+    row.classification === PhaseOneClassification.MANUAL_REJECT;
+  return {
+    isRejected: REJECTED.includes(row.classification),
+    isToDiscuss,
+    isManualAccept,
+    isManualReject,
+    isSticky: isManualAccept || isManualReject || isToDiscuss,
+  };
+}
+
+/** The four row actions, threaded to both layouts as one object. */
+type RowActions = {
+  onAccept: () => void;
+  onReject: () => void;
+  onToDiscuss: () => void;
+  onRevert: () => void;
+};
 
 /**
  * Smooth-scroll to the result-email panel once it exists. It's rendered by the
@@ -268,6 +307,15 @@ export function SelectionClient({
       if (!res.ok) setError(res.error);
     });
   }
+
+  // Bind the four actions to one applicant. Both layouts call this, so the
+  // desktop row and the mobile card are wired to literally the same handlers.
+  const actionsFor = (applicantId: string): RowActions => ({
+    onAccept: () => override(applicantId, "ACCEPT"),
+    onReject: () => override(applicantId, "REJECT"),
+    onToDiscuss: () => markToDiscuss(applicantId),
+    onRevert: () => revert(applicantId),
+  });
 
   // Finalize is blocked only by unresolved discussions — an applicant nobody has
   // decided on has no outcome to write. Incomplete applicants warn but don't
@@ -488,9 +536,15 @@ export function SelectionClient({
         </label>
       </div>
 
-      {/* Ranked table */}
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="overflow-x-auto">
+      {/* Ranked table (md and up) / stacked cards (below md) */}
+      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        {/* Below md this collapses to one card per applicant, the same call made
+            on the Applicants table — and for an extra reason here: every row
+            carries an action menu, and a menu trigger inside a horizontally
+            scrolled cell is a genuinely awkward target on a phone, whereas in a
+            card it sits at a fixed, reachable position. The rank stays legible
+            because a card can give it a badge instead of a 64px column. */}
+        <div className="hidden md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-800/40">
@@ -513,23 +567,13 @@ export function SelectionClient({
             </thead>
             <tbody>
               {paged.map((row) => {
-                const isRejected = REJECTED.includes(row.classification);
-                const isToDiscuss =
-                  row.classification === PhaseOneClassification.TO_DISCUSS;
-                const isManualAccept =
-                  row.classification === PhaseOneClassification.MANUAL_ACCEPT;
-                const isManualReject =
-                  row.classification === PhaseOneClassification.MANUAL_REJECT;
-                const isManual = isManualAccept || isManualReject;
-                // Sticky rows are the ones a recalculation won't touch, so they
-                // are exactly the ones that need an explicit way back.
-                const isSticky = isManual || isToDiscuss;
+                const s = rowStateOf(row);
                 return (
                   <tr
                     key={row.applicantId}
-                    className={`border-b border-neutral-100 last:border-0 dark:border-neutral-800/60 ${
-                      isRejected ? "bg-status-rejected/[0.03] opacity-70" : ""
-                    } ${isToDiscuss ? "bg-status-pending/[0.06]" : ""}`}
+                    className={`border-b border-neutral-100 transition-colors duration-150 ease-out last:border-0 motion-reduce:transition-none dark:border-neutral-800/60 ${
+                      s.isRejected ? "bg-status-rejected/[0.03] opacity-70" : ""
+                    } ${s.isToDiscuss ? "bg-status-pending/[0.06]" : ""}`}
                   >
                     <td className="px-4 py-3 font-semibold text-neutral-500">
                       {row.rank === null ? "—" : `#${row.rank}`}
@@ -553,77 +597,14 @@ export function SelectionClient({
                         complete={row.complete}
                       />
                     </td>
-                    {/* Row actions collapse into one menu: three buttons per row
-                        across a 15+ row table is a lot of chrome for controls
-                        that are used occasionally. Only the actions that mean
-                        something for this row's current state are listed — an
-                        already-manually-accepted row offers no "Accept", and a
-                        row that was never overridden offers no "Revert". */}
                     <td className="px-4 py-3">
                       <div className="flex justify-end">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            disabled={pending}
-                            aria-label={`Actions for ${row.fullName}`}
-                            render={
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="px-2"
-                              />
-                            }
-                          >
-                            <Icon name="more_vert" className="text-[18px]" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="min-w-44">
-                            {!isManualAccept && (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  override(row.applicantId, "ACCEPT")
-                                }
-                              >
-                                <Icon
-                                  name="how_to_reg"
-                                  className="text-[16px]"
-                                />
-                                Accept
-                              </DropdownMenuItem>
-                            )}
-                            {!isManualReject && (
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() =>
-                                  override(row.applicantId, "REJECT")
-                                }
-                              >
-                                <Icon
-                                  name="do_not_disturb_on"
-                                  className="text-[16px]"
-                                />
-                                Reject
-                              </DropdownMenuItem>
-                            )}
-                            {!isToDiscuss && (
-                              <DropdownMenuItem
-                                onClick={() => markToDiscuss(row.applicantId)}
-                              >
-                                <Icon name="forum" className="text-[16px]" />
-                                Mark as To Discuss
-                              </DropdownMenuItem>
-                            )}
-                            {isSticky && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => revert(row.applicantId)}
-                                >
-                                  <Icon name="undo" className="text-[16px]" />
-                                  Revert to automatic
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <RowActionsMenu
+                          row={row}
+                          state={s}
+                          pending={pending}
+                          actions={actionsFor(row.applicantId)}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -641,6 +622,27 @@ export function SelectionClient({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Below md: one card per applicant, same data and same action menu. */}
+        <div className="md:hidden">
+          {visible.length === 0 ? (
+            <p className="px-4 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">
+              No applicants match this filter.
+            </p>
+          ) : (
+            <ul className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
+              {paged.map((row) => (
+                <SelectionCard
+                  key={row.applicantId}
+                  row={row}
+                  state={rowStateOf(row)}
+                  pending={pending}
+                  actions={actionsFor(row.applicantId)}
+                />
+              ))}
+            </ul>
+          )}
         </div>
         {visible.length > PAGE_SIZE && (
           <Pager
@@ -724,13 +726,140 @@ export function SelectionClient({
   );
 }
 
+/**
+ * The per-row action menu.
+ *
+ * Row actions collapse into one menu rather than three inline buttons: across a
+ * 15+ row table that is a lot of chrome for controls used occasionally. Only the
+ * actions that mean something for this row's current state are listed — an
+ * already-manually-accepted row offers no "Accept", and a row that was never
+ * overridden offers no "Revert".
+ *
+ * Shared verbatim by the table row and the mobile card.
+ */
+function RowActionsMenu({
+  row,
+  state,
+  pending,
+  actions,
+}: {
+  row: SelectionRow;
+  state: RowState;
+  pending: boolean;
+  actions: RowActions;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={pending}
+        aria-label={`Actions for ${row.fullName}`}
+        render={<Button variant="ghost" size="sm" className="px-2" />}
+      >
+        <Icon name="more_vert" className="text-[18px]" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-44">
+        {!state.isManualAccept && (
+          <DropdownMenuItem onClick={actions.onAccept}>
+            <Icon name="how_to_reg" className="text-[16px]" />
+            Accept
+          </DropdownMenuItem>
+        )}
+        {!state.isManualReject && (
+          <DropdownMenuItem variant="destructive" onClick={actions.onReject}>
+            <Icon name="do_not_disturb_on" className="text-[16px]" />
+            Reject
+          </DropdownMenuItem>
+        )}
+        {!state.isToDiscuss && (
+          <DropdownMenuItem onClick={actions.onToDiscuss}>
+            <Icon name="forum" className="text-[16px]" />
+            Mark as To Discuss
+          </DropdownMenuItem>
+        )}
+        {state.isSticky && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={actions.onRevert}>
+              <Icon name="undo" className="text-[16px]" />
+              Revert to automatic
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * One applicant at phone width.
+ *
+ * The rank gets a badge rather than a column — it is the single most important
+ * number on this page and a card has no header row to explain a bare "#3". The
+ * form score keeps its mono/tabular treatment so a column of cards still reads
+ * as comparable figures, which is the one thing the table did that a card risks
+ * losing.
+ */
+function SelectionCard({
+  row,
+  state,
+  pending,
+  actions,
+}: {
+  row: SelectionRow;
+  state: RowState;
+  pending: boolean;
+  actions: RowActions;
+}) {
+  return (
+    <li
+      className={`flex items-start gap-3 px-4 py-4 ${
+        state.isRejected ? "bg-status-rejected/[0.03] opacity-70" : ""
+      } ${state.isToDiscuss ? "bg-status-pending/[0.06]" : ""}`}
+    >
+      <span className="mt-0.5 flex min-w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 px-2 py-1 text-sm font-bold tabular-nums text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+        {row.rank === null ? "—" : `#${row.rank}`}
+      </span>
+
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <p className="font-medium text-balance text-foreground">
+          {row.fullName}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <ClassificationBadge
+            value={row.classification}
+            complete={row.complete}
+          />
+          {!row.complete && (
+            <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300">
+              NOT FULLY SCORED
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Form score{" "}
+          <span className="font-mono text-foreground">
+            {formatTotal(row.weightedTotal)}
+          </span>
+        </p>
+      </div>
+
+      <RowActionsMenu
+        row={row}
+        state={state}
+        pending={pending}
+        actions={actions}
+      />
+    </li>
+  );
+}
+
 function StatCard({
   icon,
   label,
   value,
   tone,
 }: {
-  icon: string;
+  icon: IconName;
   label: string;
   value: string;
   tone: "accepted" | "rejected" | "pending" | "primary" | "neutral";

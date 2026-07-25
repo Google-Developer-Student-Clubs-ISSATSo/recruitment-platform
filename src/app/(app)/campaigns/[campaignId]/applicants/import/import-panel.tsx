@@ -109,12 +109,18 @@ export function ImportPanel({ campaignId }: { campaignId: string }) {
         // wide scrollable shell instead of AlertDialogContent's narrow centred
         // popup — but the overlay and surface tokens are the baseline ones, so
         // it reads as the same family of modal as the rest of the app.
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/10 p-4 supports-backdrop-filter:backdrop-blur-xs sm:p-8">
-          <div className="w-full max-w-4xl rounded-xl bg-popover text-popover-foreground ring-1 ring-foreground/10">
+        // p-2 at phone width rather than p-4 — the preview table wants every
+        // pixel it can get, and the backdrop still reads at 8px inset.
+        // The animate-in pair matches <AlertDialogContent> so this wizard enters
+        // like the rest of the app's modals, at the same `base` (200ms) token,
+        // and motion-reduce:animate-none for the same reason it needs one there:
+        // tw-animate-css does not self-disable under prefers-reduced-motion.
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/10 p-2 duration-200 supports-backdrop-filter:backdrop-blur-xs motion-safe:animate-in motion-safe:fade-in-0 sm:p-8">
+          <div className="w-full max-w-4xl rounded-xl bg-popover text-popover-foreground ring-1 ring-foreground/10 duration-200 motion-safe:animate-in motion-safe:zoom-in-95">
             {/* Header */}
-            <div className="flex items-center justify-between gap-3 border-b border-neutral-200 p-5 dark:border-neutral-800">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">
+            <div className="flex items-start justify-between gap-3 border-b border-neutral-200 p-4 sm:items-center sm:p-5 dark:border-neutral-800">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-foreground sm:text-lg">
                   Import applicants from CSV
                 </h2>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -125,13 +131,13 @@ export function ImportPanel({ campaignId }: { campaignId: string }) {
               <button
                 onClick={close}
                 aria-label="Close"
-                className="text-neutral-400 transition-colors hover:text-foreground"
+                className="-mr-1 shrink-0 text-neutral-400 transition-colors duration-150 ease-out hover:text-foreground motion-reduce:transition-none"
               >
                 <Icon name="close" className="text-[22px]" />
               </button>
             </div>
 
-            <div className="space-y-5 p-5">
+            <div className="space-y-5 p-4 sm:p-5">
               {/* Step 1: file picker */}
               <div className="flex flex-wrap items-center gap-3">
                 <input
@@ -178,8 +184,14 @@ export function ImportPanel({ campaignId }: { campaignId: string }) {
                     <Pill tone="neutral">{summary.totalRows} total rows</Pill>
                   </div>
 
+                  {/* Six columns of raw CSV rows: this one genuinely does need
+                      sideways scrolling on a phone, and min-w forces it rather
+                      than letting the columns crush into unreadable slivers.
+                      Unlike the applicants list, the point here is checking the
+                      parse row by row before committing, so the tabular shape is
+                      the content. */}
                   <div className="max-h-[46vh] overflow-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-                    <table className="w-full text-left text-sm">
+                    <table className="w-full min-w-[640px] text-left text-sm">
                       <thead className="sticky top-0 border-b border-neutral-200 bg-neutral-50 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
                         <tr>
                           <th className="px-3 py-2.5">#</th>
@@ -251,7 +263,7 @@ export function ImportPanel({ campaignId }: { campaignId: string }) {
             </div>
 
             {/* Footer actions */}
-            <div className="flex items-center justify-end gap-3 border-t border-neutral-200 p-5 dark:border-neutral-800">
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-neutral-200 p-4 sm:p-5 dark:border-neutral-800">
               {result?.ok ? (
                 <Button onClick={close}>Done</Button>
               ) : (

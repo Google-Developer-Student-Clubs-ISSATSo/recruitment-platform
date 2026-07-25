@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 import { setGdgDayDetailsAction, sendPhaseOneEmailsAction } from "./actions";
 
 type Tally = { total: number; sent: number };
@@ -348,7 +348,7 @@ function RecipientCard({
   total,
   sent,
 }: {
-  icon: string;
+  icon: IconName;
   label: string;
   total: number;
   sent: number;

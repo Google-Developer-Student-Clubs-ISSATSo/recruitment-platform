@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 import {
   actionTone,
   actionTypeLabel,
@@ -349,7 +349,7 @@ function SummaryCard({
   label,
   value,
 }: {
-  icon: string;
+  icon: IconName;
   tint: string;
   label: string;
   value: string | number;

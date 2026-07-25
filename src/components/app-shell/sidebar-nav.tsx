@@ -10,7 +10,7 @@ import {
   PLATFORM_PAGE_PERMISSIONS,
   pageAccessKeys,
 } from "@/lib/route-permissions";
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 
 // The main navigation. Links are rendered only when the current user holds the
 // permission that gates their target, so a link never appears for a page the
@@ -25,10 +25,17 @@ import { Icon } from "./icon";
 //   3. Platform-wide items (Activity Log, Admin Settings) — shown regardless of
 //      campaign context, gated by their own permission.
 
+/**
+ * A rendered nav entry. Module-scope (rather than local to the component) so the
+ * standalone items below can be annotated with it — otherwise TypeScript widens
+ * their `icon` to `string` and they no longer satisfy <Icon>'s IconName union.
+ */
+type NavItem = { icon: IconName; label: string; href: string };
+
 // Campaign-scoped items, keyed by the sub-path under /campaigns/[id]/. A null
 // permission means "always visible once inside a campaign" (the dashboard).
 const CAMPAIGN_NAV: {
-  icon: string;
+  icon: IconName;
   label: string;
   segment: string;
   // A single key, or "any of these grants access" (Phase 1 uses the array form).
@@ -73,7 +80,11 @@ const CAMPAIGN_NAV: {
   },
 ];
 
-const CAMPAIGNS_ITEM = { icon: "campaign", label: "Campaigns", href: "/campaigns" };
+const CAMPAIGNS_ITEM: NavItem = {
+  icon: "campaign",
+  label: "Campaigns",
+  href: "/campaigns",
+};
 
 // Configuration is shown to anyone holding at least one configuration-related
 // permission (MANAGE_CAPACITY or CONFIGURE_SCREENING), and only inside a
@@ -81,14 +92,14 @@ const CAMPAIGNS_ITEM = { icon: "campaign", label: "Campaigns", href: "/campaigns
 const CONFIG_SEGMENT = "configuration";
 
 // Activity Log is a platform-wide page gated by VIEW_ACTIVITY_LOG.
-const ACTIVITY_LOG_ITEM = {
+const ACTIVITY_LOG_ITEM: NavItem = {
   icon: "receipt_long",
   label: "Activity Log",
   href: "/activity-log",
 };
 
 // Admin Settings is only shown to holders of MANAGE_ACCOUNTS.
-const ADMIN_ITEM = {
+const ADMIN_ITEM: NavItem = {
   icon: "settings",
   label: "Admin Settings",
   href: "/admin/permissions",
@@ -100,13 +111,24 @@ function campaignIdFromPath(pathname: string): string | null {
   return match ? match[1] : null;
 }
 
-export function SidebarNav({ permissions }: { permissions: PermissionKey[] }) {
+export function SidebarNav({
+  permissions,
+  onNavigate,
+}: {
+  permissions: PermissionKey[];
+  /**
+   * Called when a nav link is activated. The shell uses it to dismiss the
+   * below-768px drawer, which would otherwise stay open over the page it just
+   * navigated to. Fired on click rather than watched via a pathname effect so
+   * it also closes when the target is the current route.
+   */
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const held = new Set(permissions);
   const campaignId = campaignIdFromPath(pathname);
 
-  type Item = { icon: string; label: string; href: string };
-  const items: Item[] = [CAMPAIGNS_ITEM];
+  const items: NavItem[] = [CAMPAIGNS_ITEM];
 
   // Campaign-scoped links only make sense while inside a campaign.
   if (campaignId) {
@@ -164,6 +186,7 @@ export function SidebarNav({ permissions }: { permissions: PermissionKey[] }) {
           <Link
             key={n.href}
             href={n.href}
+            onClick={onNavigate}
             className={
               active
                 ? "flex items-center gap-3 rounded-lg border-l-4 border-primary bg-primary/10 px-3 py-2.5 text-sm font-bold text-primary"

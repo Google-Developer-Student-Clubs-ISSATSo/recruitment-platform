@@ -18,7 +18,7 @@ import {
   type FinalDecision,
 } from "@/lib/final-decision";
 import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CapacityBar } from "./CapacityBar";
 import { FinalEmailPanel } from "./FinalEmailPanel";
@@ -812,7 +812,7 @@ function DecisionButton({
   onClick,
 }: {
   tone: keyof typeof DECISION_TONE;
-  icon: string;
+  icon: IconName;
   label: string;
   disabled: boolean;
   onClick: () => void;

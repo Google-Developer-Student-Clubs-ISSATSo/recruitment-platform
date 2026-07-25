@@ -76,8 +76,11 @@ export function ApplicantsFilters({
   const anyActive = Boolean(q || filters.status || filters.committee);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="relative min-w-[220px] flex-1">
+    // At 375px the search box takes the full first line and the two selects
+    // split the second, rather than the search claiming a 220px minimum and
+    // shoving one select onto a line of its own.
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="relative w-full sm:min-w-[220px] sm:flex-1">
         <Icon
           name="search"
           className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-neutral-400"
@@ -149,7 +152,9 @@ function FilterSelect({
       aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+      // flex-1 below sm so the two selects share the row evenly instead of
+      // sizing to their longest option and wrapping.
+      className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-none dark:bg-input/30"
     >
       {children}
     </select>

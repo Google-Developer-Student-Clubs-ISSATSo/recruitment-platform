@@ -1,6 +1,6 @@
 "use client";
 
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 import type { Phase1Question, ViewMode } from "./types";
 
 // Exact rawFormData keys for the two profile links shown in the technical-only
@@ -110,7 +110,7 @@ function LinkCard({
   url,
 }: {
   label: string;
-  icon: string;
+  icon: IconName;
   url: string;
 }) {
   const href = url ? (/^https?:\/\//i.test(url) ? url : `https://${url}`) : null;

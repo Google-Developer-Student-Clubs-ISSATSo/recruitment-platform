@@ -1,6 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { motion } from "motion/react";
+
 import { Icon } from "@/components/app-shell/icon";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 
 // Trim float noise: 0.5 → "0.5", 0.25 → "0.25", 1 → "1".
 export function fmtScale(n: number) {
@@ -52,25 +56,64 @@ export function ScoringControl({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="group">
-      {noteScale.map((v) => {
-        const selected = value !== undefined && Math.abs(v - value) < 1e-9;
-        return (
-          <button
-            key={v}
-            type="button"
-            disabled={pending}
-            aria-pressed={selected}
-            onClick={() => onSelect(v)}
-            className={`min-w-9 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50 ${
-              selected
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-neutral-300 bg-transparent text-neutral-600 hover:border-primary hover:text-primary dark:border-neutral-700 dark:text-neutral-300"
-            }`}
-          >
-            {fmtScale(v)}
-          </button>
-        );
-      })}
+      {noteScale.map((v) => (
+        <ScoreButton
+          key={v}
+          value={v}
+          selected={value !== undefined && Math.abs(v - value) < 1e-9}
+          pending={pending}
+          onSelect={onSelect}
+        />
+      ))}
     </div>
+  );
+}
+
+/**
+ * One value on the scale.
+ *
+ * The pop on click is doing real work, not decoration: this control has no Save
+ * button because a pick is written to the database immediately, and without any
+ * acknowledgement there is nothing to distinguish "saved" from "I clicked and
+ * the page ignored me". A 200ms scale beat gives the click a receipt. It fires
+ * on every pick — including re-picking the value that's already selected, which
+ * still issues a write and so still deserves feedback.
+ */
+function ScoreButton({
+  value,
+  selected,
+  pending,
+  onSelect,
+}: {
+  value: number;
+  selected: boolean;
+  pending: boolean;
+  onSelect: (value: number) => void;
+}) {
+  const reduced = useReducedMotion();
+  const [pulsing, setPulsing] = useState(false);
+
+  return (
+    <motion.button
+      type="button"
+      disabled={pending}
+      aria-pressed={selected}
+      onClick={() => {
+        if (!reduced) setPulsing(true);
+        onSelect(value);
+      }}
+      animate={pulsing ? { scale: [1, 1.12, 1] } : { scale: 1 }}
+      transition={
+        reduced ? { duration: 0 } : { duration: DURATION.base, ease: EASE.out }
+      }
+      onAnimationComplete={() => setPulsing(false)}
+      className={`min-w-9 cursor-pointer rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ease-out disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none ${
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-neutral-300 bg-transparent text-neutral-600 hover:border-primary hover:text-primary dark:border-neutral-700 dark:text-neutral-300"
+      }`}
+    >
+      {fmtScale(value)}
+    </motion.button>
   );
 }

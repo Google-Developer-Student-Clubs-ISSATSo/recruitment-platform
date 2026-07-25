@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Icon } from "@/components/app-shell/icon";
 import { getInterviewSnapshot } from "@/lib/campaign-dashboard";
 import { PANEL_COMMITTEES } from "@/lib/interview-slot";
+import { WidgetPanel } from "./WidgetPanel";
 
 // Today's interview load, for anyone who can sit on a panel. Rendered only for
 // CLAIM_PANEL_SEAT holders (the <PermissionGate> in page.tsx) — the same
@@ -18,20 +19,27 @@ export async function InterviewsTodayCard({
   const { today, needingPanel, scheduled } = await getInterviewSnapshot(campaignId);
 
   return (
-    <section className="flex flex-col rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="flex items-center gap-3 border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon name="video_chat" className="text-[20px]" />
-        </span>
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Interviews</h2>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            {scheduled} scheduled on this campaign.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid flex-1 gap-4 p-6 sm:grid-cols-2">
+    <WidgetPanel
+      icon="video_chat"
+      title="Interviews"
+      subtitle={`${scheduled} scheduled on this campaign.`}
+      footer={
+        <Link
+          href={`/campaigns/${campaignId}/interviews`}
+          className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-opacity hover:opacity-80"
+        >
+          Go to Interviews
+          <Icon name="arrow_forward" className="text-[18px]" />
+        </Link>
+      }
+    >
+      {/* Two mini-readouts side by side, stacking below sm. Bordered rather than
+          filled so they read as subdivisions of this panel and not as two more
+          <StatCard> tiles competing with the top row.
+          content-start, not h-full: this panel sits beside the much taller
+          funnel and stretches to match it, and without this the two small boxes
+          stretch with it into tall mostly-empty rectangles. */}
+      <div className="grid content-start gap-4 sm:grid-cols-2">
         <div
           role="group"
           aria-label={`${today} interviews scheduled today`}
@@ -78,16 +86,6 @@ export async function InterviewsTodayCard({
           </p>
         </div>
       </div>
-
-      <div className="border-t border-neutral-200 px-6 py-4 dark:border-neutral-800">
-        <Link
-          href={`/campaigns/${campaignId}/interviews`}
-          className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-opacity hover:opacity-80"
-        >
-          Go to Interviews
-          <Icon name="arrow_forward" className="text-[18px]" />
-        </Link>
-      </div>
-    </section>
+    </WidgetPanel>
   );
 }

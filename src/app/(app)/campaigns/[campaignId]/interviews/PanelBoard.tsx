@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/app-shell/icon";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import type { Committee } from "@/generated/prisma/enums";
 import type { BoardDay, BoardCard, BoardSeat } from "@/lib/panel-board";
 
@@ -59,7 +61,7 @@ export function PanelBoard({
   );
 
   return (
-    <div className="space-y-5 rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="space-y-5 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -136,6 +138,7 @@ function DaySection({
   canOverrideRelease: boolean;
 }) {
   const [open, setOpen] = useState(!day.isPast);
+  const reduced = useReducedMotion();
 
   const dayFilled = day.cards.reduce(
     (n, c) => n + c.seats.filter((s) => s.claimedById !== null).length,
@@ -145,7 +148,7 @@ function DaySection({
 
   return (
     <section
-      className={`rounded-xl border ${
+      className={`overflow-hidden rounded-xl border ${
         day.isToday
           ? "border-primary/40 bg-primary/[0.03]"
           : "border-neutral-200 dark:border-neutral-800"
@@ -155,11 +158,15 @@ function DaySection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left"
+        className="flex w-full cursor-pointer flex-wrap items-center gap-2 px-4 py-3 text-left transition-colors duration-150 ease-out hover:bg-neutral-50 motion-reduce:transition-none dark:hover:bg-neutral-800/40"
       >
+        {/* One chevron that rotates, rather than swapping between two glyphs —
+            the rotation is the affordance, and a swap can't be animated. */}
         <Icon
-          name={open ? "expand_more" : "chevron_right"}
-          className="text-[18px] text-neutral-400"
+          name="chevron_right"
+          className={`text-[18px] text-neutral-400 transition-transform duration-200 ease-out motion-reduce:transition-none ${
+            open ? "rotate-90" : ""
+          }`}
         />
         <h3
           className={`text-sm font-semibold ${
@@ -178,26 +185,51 @@ function DaySection({
             Past
           </span>
         )}
-        <span className="ml-auto text-xs text-neutral-500 dark:text-neutral-400">
+        {/* Basis-full below sm so the seat tally drops to its own line instead of
+            squeezing the date label at 375px. */}
+        <span className="basis-full text-xs text-neutral-500 sm:ml-auto sm:basis-auto dark:text-neutral-400">
           {day.cards.length} interview{day.cards.length === 1 ? "" : "s"} ·{" "}
           {dayFilled}/{daySeats} seats
         </span>
       </button>
 
-      {open && (
-        <div className="grid gap-4 px-4 pb-4 md:grid-cols-2 xl:grid-cols-3">
-          {day.cards.map((card) => (
-            <PanelCard
-              key={card.applicantId}
-              campaignId={campaignId}
-              card={card}
-              currentUserId={currentUserId}
-              currentUserCommittee={currentUserCommittee}
-              canOverrideRelease={canOverrideRelease}
-            />
-          ))}
-        </div>
-      )}
+      {/* Height-animated collapse. Past days start closed, so on a board with a
+          few weeks of history this is the control someone actually uses; snapping
+          open makes it unclear whether the content appeared or the page jumped. */}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="day-body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { duration: DURATION.slow, ease: EASE.inOut }
+            }
+            className="overflow-hidden"
+          >
+            {/* Three-up only from 2xl. At 1280 (xl) a card is a third of the
+                content column, which is ~300px once the sidebar and padding are
+                taken out — narrow enough that interviewer names truncate to
+                "Med …". Two-up holds until 1536, where thirds are wide enough to
+                show a full name. */}
+            <div className="grid gap-4 px-4 pb-4 md:grid-cols-2 2xl:grid-cols-3">
+              {day.cards.map((card) => (
+                <PanelCard
+                  key={card.applicantId}
+                  campaignId={campaignId}
+                  card={card}
+                  currentUserId={currentUserId}
+                  currentUserCommittee={currentUserCommittee}
+                  canOverrideRelease={canOverrideRelease}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
@@ -231,7 +263,7 @@ function PanelCard({
 
   return (
     <div
-      className={`flex flex-col overflow-hidden rounded-xl border transition-colors ${
+      className={`flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-[border-color,box-shadow] duration-200 ease-out hover:shadow-md motion-reduce:transition-none dark:bg-neutral-900 ${
         complete
           ? "border-status-accepted/40"
           : "border-neutral-200 dark:border-neutral-800"
@@ -259,6 +291,27 @@ function PanelCard({
             )}
           </div>
         </div>
+
+        {/* One pip per seat, filled in the same MKT → TM → EER order as the rows
+            below. The footer already states the count in words; this is for
+            scanning a grid of cards for the half-empty one without reading any of
+            them, which is the whole reason this section is a board. */}
+        <span
+          className="flex shrink-0 items-center gap-1"
+          aria-label={`${filled} of ${card.seats.length} seats filled`}
+        >
+          {card.seats.map((s) => (
+            <span
+              key={s.seatId}
+              aria-hidden
+              className={`size-1.5 rounded-full transition-colors duration-200 ease-out motion-reduce:transition-none ${
+                s.claimedById !== null
+                  ? "bg-status-accepted"
+                  : "bg-neutral-300 dark:bg-neutral-600"
+              }`}
+            />
+          ))}
+        </span>
       </div>
 
       {/* Seats, always MKT → TM → EER */}
@@ -336,30 +389,83 @@ function SeatRow({
   onClaim: () => void;
   onRelease: () => void;
 }) {
+  const reduced = useReducedMotion();
   const claimed = seat.claimedById !== null;
   // Whoever holds it may hand it back; MANAGE_ACCOUNTS may free anyone's seat.
   const canRelease = claimed && (isMine || canOverrideRelease);
 
+  /**
+   * A one-shot wash of colour over the seat after you act on it.
+   *
+   * Claiming a seat is a server round-trip that changes one row inside a grid of
+   * cards, and the resulting difference — a name where "Awaiting interviewer"
+   * used to be — is easy to miss when you are looking at the button you just
+   * pressed. The flash draws the eye to the row that changed.
+   *
+   * Driven by the CLICK rather than by watching `seat.claimedById`, deliberately:
+   * a prop-watching flash would also fire for every already-claimed seat on first
+   * paint, lighting up the whole board on page load. `nonce` lets a repeated
+   * claim/release re-trigger it. Green for claiming, amber for releasing — the
+   * same tokens those two states mean everywhere else in the app.
+   */
+  const [flash, setFlash] = useState<{
+    kind: "claim" | "release";
+    nonce: number;
+  } | null>(null);
+
+  const trigger = (kind: "claim" | "release") => {
+    if (reduced) return;
+    setFlash((f) => ({ kind, nonce: (f?.nonce ?? 0) + 1 }));
+  };
+
   return (
     <div
-      className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 ${
+      className={`relative isolate flex items-center justify-between gap-2 overflow-hidden rounded-lg px-3 py-2 transition-colors duration-200 ease-out motion-reduce:transition-none ${
         claimed
           ? "bg-status-accepted/5"
           : "border border-dashed border-neutral-300 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800/40"
       }`}
     >
+      <AnimatePresence>
+        {flash && (
+          <motion.span
+            aria-hidden
+            key={flash.nonce}
+            initial={{ opacity: 0.4 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: DURATION.slow, ease: EASE.out }}
+            onAnimationComplete={() => setFlash(null)}
+            className={`pointer-events-none absolute inset-0 -z-10 ${
+              flash.kind === "claim"
+                ? "bg-status-accepted"
+                : "bg-status-pending"
+            }`}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
           {seat.committee}
         </span>
         {claimed ? (
-          <span className="truncate text-sm font-medium text-foreground">
-            {seat.claimedByName}
-            {isMine && (
-              <span className="ml-1.5 text-xs font-normal text-neutral-500 dark:text-neutral-400">
-                (you)
-              </span>
-            )}
+          <span className="flex min-w-0 items-center gap-2">
+            {/* An initials chip for the holder, so a filled seat reads as "a
+                person is in it" at a glance — the board equivalent of an
+                assignee avatar. Tinted with primary rather than the seat's
+                status green, so it identifies rather than restating "claimed". */}
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary">
+              {initialsOf(seat.claimedByName ?? "?")}
+            </span>
+            <span className="truncate text-sm font-medium text-foreground">
+              {seat.claimedByName}
+              {isMine && (
+                <span className="ml-1.5 text-xs font-normal text-neutral-500 dark:text-neutral-400">
+                  (you)
+                </span>
+              )}
+            </span>
           </span>
         ) : (
           <span className="truncate text-sm italic text-neutral-500 dark:text-neutral-400">
@@ -370,24 +476,37 @@ function SeatRow({
 
       {claimed ? (
         <div className="flex shrink-0 items-center gap-1.5">
-          <Icon
-            name="lock"
-            className="text-[16px] text-status-accepted"
-          />
+          {/* The padlock only earns its space when there is no Release button:
+              with one present, the button already says the seat is taken, and the
+              row is tight enough at two-up that ~22px of redundant chrome is what
+              pushes the interviewer's name into an ellipsis. */}
+          {!canRelease && (
+            <Icon name="lock" className="text-[16px] text-status-accepted" />
+          )}
           {canRelease && (
             <Button
               size="sm"
               variant="ghost"
               disabled={pending}
               title={isMine ? "Release your seat" : "Release this seat (override)"}
-              onClick={onRelease}
+              onClick={() => {
+                trigger("release");
+                onRelease();
+              }}
             >
               Release
             </Button>
           )}
         </div>
       ) : isMyCommittee ? (
-        <Button size="sm" disabled={pending} onClick={onClaim}>
+        <Button
+          size="sm"
+          disabled={pending}
+          onClick={() => {
+            trigger("claim");
+            onClaim();
+          }}
+        >
           Claim
         </Button>
       ) : (

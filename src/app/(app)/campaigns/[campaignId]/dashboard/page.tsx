@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { PermissionGate } from "@/components/permission-gate";
 import { Icon } from "@/components/app-shell/icon";
+import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { tunisDayDelta } from "@/lib/campaign-dashboard";
 import { getCampaignCounts } from "@/lib/campaign-statistics";
 import { formatTunisDate, formatTunisDateTime } from "@/lib/tunis-time";
@@ -101,7 +102,9 @@ export default async function CampaignDashboardPage({
           that mark how far the campaign has actually progressed. */}
       <header>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          {/* min-w-0 + wrapping so a long campaign name shares the row with the
+              Open/Closed pill at 375px instead of pushing it off-screen. */}
+          <h1 className="min-w-0 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {campaign.name}
           </h1>
           <span
@@ -141,95 +144,115 @@ export default async function CampaignDashboardPage({
       </header>
 
       {/* STEP 2 — aggregate counts, ungated: these are pool-level totals, not
-          per-applicant detail, so anyone inside the campaign may see them. */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <StatCard
-          icon="person_add"
-          tone="primary"
-          label="Total Applicants"
-          value={counts.total}
-          hint={
-            counts.total === 0
-              ? "No applications imported yet."
-              : "In this campaign."
-          }
-        />
+          per-applicant detail, so anyone inside the campaign may see them.
+          One column at 375px, two from sm, three from lg. The three-up row only
+          returns at lg rather than md because the middle card carries a 3-column
+          breakdown that gets cramped in a ~240px column. */}
+      <StaggerGroup className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+        <StaggerItem>
+          <StatCard
+            icon="person_add"
+            tone="primary"
+            label="Total Applicants"
+            value={counts.total}
+            hint={
+              counts.total === 0
+                ? "No applications imported yet."
+                : "In this campaign."
+            }
+          />
+        </StaggerItem>
 
-        <StatCard icon="fact_check" tone="pending" label="Phase 1 Status">
-          <dl className="mt-3 grid grid-cols-3 gap-3">
-            {[
-              {
-                label: "Submitted",
-                value: counts.submitted,
-                className: "text-foreground",
-              },
-              {
-                label: "Shortlisted",
-                value: counts.shortlisted,
-                className: "text-primary",
-              },
-              {
-                label: "Rejected",
-                value: counts.rejectedPhaseOne,
-                className: "text-status-rejected",
-              },
-            ].map((item) => (
-              <div key={item.label}>
-                <dt className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                  {item.label}
-                </dt>
-                <dd
-                  className={`text-2xl font-bold tabular-nums ${item.className}`}
-                >
-                  {item.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </StatCard>
+        <StaggerItem>
+          <StatCard icon="fact_check" tone="pending" label="Phase 1 Status">
+            <dl className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+              {[
+                {
+                  label: "Submitted",
+                  value: counts.submitted,
+                  className: "text-foreground",
+                },
+                {
+                  label: "Shortlisted",
+                  value: counts.shortlisted,
+                  className: "text-primary",
+                },
+                {
+                  label: "Rejected",
+                  value: counts.rejectedPhaseOne,
+                  className: "text-status-rejected",
+                },
+              ].map((item) => (
+                <div key={item.label}>
+                  {/* No tracking-wider here (unlike the card's own label): at
+                      375px these three sit in ~90px columns and the extra
+                      letter-spacing is what tips "Shortlisted" into wrapping. */}
+                  <dt className="text-[10px] font-semibold uppercase text-neutral-500 sm:text-[11px] dark:text-neutral-400">
+                    {item.label}
+                  </dt>
+                  <dd
+                    className={`text-xl font-bold tabular-nums sm:text-2xl ${item.className}`}
+                  >
+                    {item.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </StatCard>
+        </StaggerItem>
 
-        <StatCard
-          icon="event_available"
-          tone={gdg.tone}
-          label="GDG Day"
-          value={gdg.value}
-          hint={gdg.hint}
-          chip={gdg.chip}
-          chipTone="pending"
-        />
-      </div>
+        <StaggerItem>
+          <StatCard
+            icon="event_available"
+            tone={gdg.tone}
+            label="GDG Day"
+            value={gdg.value}
+            hint={gdg.hint}
+            chip={gdg.chip}
+            chipTone="pending"
+          />
+        </StaggerItem>
+      </StaggerGroup>
 
-      {/* STEPS 3 & 4 — each gated on its own permission. A flex row rather than
-          a fixed column grid so whichever widgets survive their gates fill the
-          width: the funnel takes twice the interviews card when both render,
-          and either one alone stretches to full width instead of leaving a
-          stranded gap. */}
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <PermissionGate permission={PermissionKey.VIEW_STATISTICS}>
-          <div className="lg:min-w-0 lg:grow-[2] lg:basis-0">
-            <PipelineFunnel campaignId={campaignId} />
-          </div>
+      {/* STEPS 3, 4 & 5 — each gated on its own permission, and all three in one
+          stagger group so they arrive as a single sequence rather than three
+          independent runs.
+
+          The funnel/interviews row stays a flex row rather than a fixed column
+          grid so whichever widgets survive their gates fill the width: the funnel
+          takes twice the interviews card when both render, and either one alone
+          stretches to full width instead of leaving a stranded gap. */}
+      <StaggerGroup className="space-y-6">
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <PermissionGate permission={PermissionKey.VIEW_STATISTICS}>
+            <StaggerItem className="lg:min-w-0 lg:grow-[2] lg:basis-0">
+              <PipelineFunnel campaignId={campaignId} />
+            </StaggerItem>
+          </PermissionGate>
+
+          <PermissionGate permission={PermissionKey.CLAIM_PANEL_SEAT}>
+            <StaggerItem className="lg:min-w-0 lg:grow lg:basis-0">
+              <InterviewsTodayCard campaignId={campaignId} />
+            </StaggerItem>
+          </PermissionGate>
+        </div>
+
+        {/* Capacity belongs to whoever runs the decision meeting or sets the
+            targets, so either permission opens it. */}
+        <PermissionGate
+          permission={[
+            PermissionKey.ENTER_FINAL_DECISION,
+            PermissionKey.MANAGE_CAPACITY,
+          ]}
+        >
+          <StaggerItem>
+            <CapacityWidget campaignId={campaignId} />
+          </StaggerItem>
         </PermissionGate>
+      </StaggerGroup>
 
-        <PermissionGate permission={PermissionKey.CLAIM_PANEL_SEAT}>
-          <div className="lg:min-w-0 lg:grow lg:basis-0">
-            <InterviewsTodayCard campaignId={campaignId} />
-          </div>
-        </PermissionGate>
-      </div>
-
-      {/* STEP 5 — capacity belongs to whoever runs the decision meeting or sets
-          the targets, so either permission opens it. */}
-      <PermissionGate
-        permission={[
-          PermissionKey.ENTER_FINAL_DECISION,
-          PermissionKey.MANAGE_CAPACITY,
-        ]}
-      >
-        <CapacityWidget campaignId={campaignId} />
-      </PermissionGate>
-
-      {/* STEPS 6 & 7 — self-filtering against the shared route-permission map. */}
+      {/* STEPS 6 & 7 — self-filtering against the shared route-permission map.
+          Carries its own stagger group (see QuickLinksGrid). */}
       <QuickLinksGrid campaignId={campaignId} userId={userId} />
     </div>
   );

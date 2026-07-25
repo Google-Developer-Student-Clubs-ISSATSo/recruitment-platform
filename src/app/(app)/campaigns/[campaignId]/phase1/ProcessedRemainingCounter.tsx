@@ -38,10 +38,15 @@ export function ProcessedRemainingCounter({
           {remaining}
         </span>
       </div>
-      <div className="ml-auto flex items-center gap-2">
+      {/* ml-auto only once there is a row to push against — below sm the bar
+          wraps onto its own line and would otherwise be shoved to the far edge. */}
+      <div className="flex items-center gap-2 sm:ml-auto">
         <div className="h-2 w-28 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+          {/* Grows as applicants complete. 300ms is the `slow` token — the bar
+              only moves when a whole applicant flips to processed, which is rare
+              enough to be worth seeing travel. */}
           <div
-            className="h-full rounded-full bg-status-accepted transition-all"
+            className="h-full rounded-full bg-status-accepted transition-[width] duration-300 ease-out motion-reduce:transition-none"
             style={{ width: `${pct}%` }}
           />
         </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
+import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { getUserPermissions } from "@/lib/permissions";
 import type { PermissionKey } from "@/generated/prisma/enums";
 import {
@@ -23,7 +24,7 @@ type QuickLink = {
   href: string;
   label: string;
   description: string;
-  icon: string;
+  icon: IconName;
   /** A single key, or "any of these grants access". */
   permission: PermissionKey | readonly PermissionKey[];
   /** Marks a destination that lives outside the campaign. */
@@ -117,36 +118,44 @@ export async function QuickLinksGrid({
         Only the sections your permissions let you open.
       </p>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* One column at 375px, two from sm, three from lg — the description line
+          needs roughly 40 characters to avoid reading as a stack of fragments,
+          which a third column cannot give it below ~1024px. */}
+      <StaggerGroup className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="group flex items-start gap-4 rounded-xl border border-neutral-200 bg-white p-5 transition-colors hover:border-primary/40 hover:bg-primary/5 dark:border-neutral-800 dark:bg-neutral-900"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <StaggerItem key={link.href} className="h-full">
+            <Link
+              href={link.href}
+              // These DO navigate, so they get the affordance the stat tiles
+              // deliberately don't: a lift, a shadow and a border tint on hover.
+              // 150ms is the `fast` token — the ceiling for something that has to
+              // keep up with a moving pointer.
+              className="group flex h-full items-start gap-4 rounded-xl border border-neutral-200 bg-white p-5 shadow-sm transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0 dark:border-neutral-800 dark:bg-neutral-900"
+            >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Icon name={link.icon} className="text-[22px]" />
             </span>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1 font-semibold text-foreground">
-                {link.label}
-                <Icon
-                  name="arrow_forward"
-                  className="text-[16px] text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
-                />
-              </p>
-              <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
-                {link.description}
-              </p>
-              {link.platformWide && (
-                <span className="mt-2 inline-flex rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500 dark:bg-neutral-700 dark:text-neutral-300">
-                  Platform-wide
-                </span>
-              )}
-            </div>
-          </Link>
+              <div className="min-w-0">
+                <p className="flex items-center gap-1 font-semibold text-foreground">
+                  {link.label}
+                  <Icon
+                    name="arrow_forward"
+                    className="text-[16px] text-neutral-400 transition-transform duration-150 ease-out group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+                  />
+                </p>
+                <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+                  {link.description}
+                </p>
+                {link.platformWide && (
+                  <span className="mt-2 inline-flex rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500 dark:bg-neutral-700 dark:text-neutral-300">
+                    Platform-wide
+                  </span>
+                )}
+              </div>
+            </Link>
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerGroup>
     </section>
   );
 }

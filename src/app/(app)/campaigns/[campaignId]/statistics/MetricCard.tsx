@@ -1,4 +1,4 @@
-import { Icon } from "@/components/app-shell/icon";
+import { Icon, type IconName } from "@/components/app-shell/icon";
 
 // The summary tile at the top of Statistics, following the Stitch reference:
 // tinted icon chip, small uppercase label, the figure at display size, then one
@@ -20,7 +20,7 @@ export function MetricCard({
   value,
   context,
 }: {
-  icon: string;
+  icon: IconName;
   tone?: keyof typeof TONE;
   label: string;
   value: string;
