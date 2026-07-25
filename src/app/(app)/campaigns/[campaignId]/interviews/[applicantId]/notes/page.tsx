@@ -14,7 +14,7 @@ import { PANEL_COMMITTEES } from "@/lib/interview-slot";
 import type { NoteScores } from "@/lib/interview-note";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
 import { Icon, type IconName } from "@/components/app-shell/icon";
-import { NoteEditor } from "./NoteEditor";
+import { NoteEditor, type NoteMode } from "./NoteEditor";
 import { NoteClosingControls } from "./NoteClosingControls";
 
 /**
@@ -85,6 +85,10 @@ export default async function InterviewNotesPage({
   const canReopen = closed && isManage;
   const closedByName =
     note?.closedBy?.name ?? note?.closedBy?.email ?? "Someone";
+  // The editor's visual mode. `closed` wins over `canEdit` on purpose: a closed
+  // note is still writable by MANAGE_ACCOUNTS, and that is exactly the case the
+  // loud surface exists to flag.
+  const mode: NoteMode = closed ? "locked" : canEdit ? "edit" : "readonly";
   const initialScores: NoteScores = {
     personality: note?.personality ?? null,
     communication: note?.communication ?? null,
@@ -125,14 +129,17 @@ export default async function InterviewNotesPage({
         </Link>
       </div>
 
-      {/* Header: who they are, and who's interviewing them */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">
+      {/* Header: who they are, and who's interviewing them.
+          Below md the three blocks stack in reading order — name, then the
+          score, then the jury — rather than trying to hold a two-up row at a
+          width where the jury names would truncate to initials. */}
+      <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-6">
+        <div className="flex flex-col gap-5 md:flex-row md:flex-wrap md:items-start md:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">
               {applicant.fullName}
             </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-neutral-500 dark:text-neutral-400">
+            <div className="mt-2 flex flex-col gap-1 text-sm text-neutral-500 dark:text-neutral-400 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5">
               <Meta icon="school" label="Year of study" value={yearOfStudy} />
               <Meta
                 icon="schedule"
@@ -149,7 +156,7 @@ export default async function InterviewNotesPage({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-start gap-6">
+          <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
                 Form Score
@@ -158,18 +165,21 @@ export default async function InterviewNotesPage({
                 {formScore === null ? "—" : formScore.toFixed(2)}
               </p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
                 Jury
               </p>
               <ul className="mt-1 space-y-0.5">
                 {jury.map((j) => (
-                  <li key={j.committee} className="flex items-center gap-2 text-sm">
-                    <span className="inline-flex min-w-10 justify-center rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                  <li
+                    key={j.committee}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <span className="inline-flex min-w-10 shrink-0 justify-center rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
                       {j.committee}
                     </span>
                     {j.name ? (
-                      <span className="text-foreground">{j.name}</span>
+                      <span className="truncate text-foreground">{j.name}</span>
                     ) : (
                       <span className="italic text-neutral-400">Open</span>
                     )}
@@ -228,6 +238,7 @@ export default async function InterviewNotesPage({
         campaignId={campaignId}
         applicantId={applicantId}
         editable={canEdit}
+        mode={mode}
         initialScores={initialScores}
         initialRemarks={note?.remarks ?? ""}
       />

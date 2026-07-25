@@ -1,5 +1,6 @@
 import { Icon } from "@/components/app-shell/icon";
 import type { PhaseOneOutcomeCounts } from "@/lib/campaign-statistics";
+import { StatBar } from "./StatBar";
 
 // How Phase 1 was decided, for the applicants who were actually scored.
 //
@@ -86,7 +87,7 @@ export function Phase1OutcomeBreakdown({
       </p>
 
       <div className="mt-6 space-y-5">
-        {ROWS.map((row) => {
+        {ROWS.map((row, index) => {
           const count = counts[row.key];
           const tone = TONE[row.tone];
           return (
@@ -110,10 +111,11 @@ export function Phase1OutcomeBreakdown({
                 </span>
               </div>
 
-              <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                <div
-                  className={`h-full rounded-full ${tone.fill}`}
-                  style={{ width: `${(count / widest) * 100}%` }}
+              <div className="mt-1.5">
+                <StatBar
+                  percent={(count / widest) * 100}
+                  fillClassName={tone.fill}
+                  index={index}
                 />
               </div>
 

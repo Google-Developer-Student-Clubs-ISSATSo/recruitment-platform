@@ -2,6 +2,8 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
+import { DURATION_MS, useReducedMotion } from "@/lib/motion-tokens";
+
 // Where the campaign's rejections happened. Part-to-whole at a glance, three
 // segments — inside the ≤ 6 a donut can carry honestly.
 //
@@ -53,6 +55,7 @@ function DonutTooltip({
 }
 
 export function RejectionDonutChart({ slices }: { slices: RejectionSlice[] }) {
+  const reduced = useReducedMotion();
   const total = slices.reduce((sum, s) => sum + s.count, 0);
 
   return (
@@ -85,7 +88,15 @@ export function RejectionDonutChart({ slices }: { slices: RejectionSlice[] }) {
                   // drawn around each one.
                   paddingAngle={2}
                   stroke="none"
-                  isAnimationActive={false}
+                  // Segments sweep in from 12 o'clock in pipeline order, which
+                  // is the same order the ramp's lightness steps encode — the
+                  // entrance re-states the reading rather than decorating it.
+                  // recharts' own animation, capped at the 0.3s ceiling and off
+                  // entirely under prefers-reduced-motion.
+                  isAnimationActive={!reduced}
+                  animationBegin={0}
+                  animationDuration={DURATION_MS.slow}
+                  animationEasing="ease-out"
                 >
                   {slices.map((slice) => (
                     <Cell key={slice.key} fill={`var(${slice.color})`} />

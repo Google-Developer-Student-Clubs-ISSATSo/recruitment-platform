@@ -4,6 +4,7 @@ import {
   formatRate,
   getCampaignStatistics,
 } from "@/lib/campaign-statistics";
+import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { CommitteeAcceptanceTable } from "./CommitteeAcceptanceTable";
 import { CommitteeBarChart } from "./CommitteeBarChart";
 import { MetricCard } from "./MetricCard";
@@ -75,29 +76,35 @@ export default async function StatisticsPage({
 
       {/* STEP 3 — the three headline figures. Each card's third line names the
           denominator, so a rate can't be misread as a share of the whole pool. */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <MetricCard
-          icon="groups"
-          tone="primary"
-          label="Total Applicants"
-          value={String(stats.totalApplicants)}
-          context="Every application in this campaign."
-        />
-        <MetricCard
-          icon="verified"
-          tone="accepted"
-          label="Phase 1 Pass Rate"
-          value={formatRate(stats.phase1PassRate)}
-          context={`${enteredScoring} entered scoring — non-ISSATSO auto-rejects excluded.`}
-        />
-        <MetricCard
-          icon="how_to_reg"
-          tone="primary"
-          label="Final Acceptance Rate"
-          value={formatRate(stats.finalAcceptanceRate)}
-          context={`${stats.accepted} accepted of ${finalVerdicts} who reached a final verdict.`}
-        />
-      </div>
+      <StaggerGroup className="grid gap-6 md:grid-cols-3">
+        <StaggerItem>
+          <MetricCard
+            icon="groups"
+            tone="primary"
+            label="Total Applicants"
+            value={String(stats.totalApplicants)}
+            context="Every application in this campaign."
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <MetricCard
+            icon="verified"
+            tone="accepted"
+            label="Phase 1 Pass Rate"
+            value={formatRate(stats.phase1PassRate)}
+            context={`${enteredScoring} entered scoring — non-ISSATSO auto-rejects excluded.`}
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <MetricCard
+            icon="how_to_reg"
+            tone="primary"
+            label="Final Acceptance Rate"
+            value={formatRate(stats.finalAcceptanceRate)}
+            context={`${stats.accepted} accepted of ${finalVerdicts} who reached a final verdict.`}
+          />
+        </StaggerItem>
+      </StaggerGroup>
 
       {/* STEPS 4 & 5 — side by side, because the whole point of the pair is
           comparing them: same three categories, deliberately different totals. */}

@@ -1,6 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { motion } from "motion/react";
+
 import { RATING_MAX, RATING_MIN, RATING_STEP } from "@/lib/interview-note";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 
 /** Trim float noise: 7 → "7", 7.25 → "7.25". */
 export function fmtRating(n: number): string {
@@ -37,6 +41,16 @@ export function RatingControl({
   onDraft: (value: number) => void;
   onCommit: (value: number) => void;
 }) {
+  const reduced = useReducedMotion();
+  // Bumped on every commit so the readout can replay its pop even when the user
+  // settles on the value it already held.
+  const [pop, setPop] = useState(0);
+
+  function commit(next: number) {
+    if (!reduced) setPop((n) => n + 1);
+    onCommit(next);
+  }
+
   if (!editable) {
     return (
       <span className="inline-flex min-w-14 items-center justify-center rounded-lg bg-neutral-100 px-3 py-1.5 text-sm font-semibold text-foreground dark:bg-neutral-800">
@@ -47,16 +61,27 @@ export function RatingControl({
 
   return (
     <div className="flex items-center gap-3">
-      <output
+      {/* The readout pops and tints on commit — a slider gives no landing
+          feedback of its own, so this is the only signal that the value was
+          taken. Scale + colour together, at the `fast` token: the panel holds
+          seven of these and a slower confirmation would stack up while a jury
+          works down the list. */}
+      <motion.output
+        key={pop}
         htmlFor={id}
-        className={`min-w-14 shrink-0 rounded-lg border px-3 py-1.5 text-center text-sm font-semibold tabular-nums ${
+        initial={pop === 0 || reduced ? false : { scale: 0.9 }}
+        animate={{ scale: 1 }}
+        transition={
+          reduced ? { duration: 0 } : { duration: DURATION.fast, ease: EASE.out }
+        }
+        className={`min-w-14 shrink-0 rounded-lg border px-3 py-1.5 text-center text-sm font-semibold tabular-nums transition-colors duration-150 ease-out motion-reduce:transition-none ${
           value === null
             ? "border-neutral-200 text-neutral-400 dark:border-neutral-700"
             : "border-primary/30 bg-primary/5 text-primary"
         }`}
       >
         {value === null ? "—" : fmtRating(value)}
-      </output>
+      </motion.output>
       <input
         id={id}
         type="range"
@@ -70,10 +95,10 @@ export function RatingControl({
         aria-label={`${label} rating, 0 to 10`}
         aria-valuetext={value === null ? "Not rated" : fmtRating(value)}
         onChange={(e) => onDraft(Number(e.target.value))}
-        onPointerUp={(e) => onCommit(Number(e.currentTarget.value))}
-        onKeyUp={(e) => onCommit(Number(e.currentTarget.value))}
-        onBlur={(e) => onCommit(Number(e.currentTarget.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-neutral-200 accent-primary disabled:opacity-50 dark:bg-neutral-700"
+        onPointerUp={(e) => commit(Number(e.currentTarget.value))}
+        onKeyUp={(e) => commit(Number(e.currentTarget.value))}
+        onBlur={(e) => commit(Number(e.currentTarget.value))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-neutral-200 accent-primary disabled:opacity-50 dark:bg-neutral-700"
       />
     </div>
   );

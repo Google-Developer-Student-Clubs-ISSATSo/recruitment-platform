@@ -13,6 +13,7 @@ import {
 
 import { committeeLabel } from "@/lib/committee";
 import type { CommitteeCount } from "@/lib/campaign-statistics";
+import { DURATION_MS, useReducedMotion } from "@/lib/motion-tokens";
 
 // Applicant counts per committee. Used twice on the Statistics page — once for
 // the committee people ASKED for, once for the committee they were accepted
@@ -57,6 +58,7 @@ export function CommitteeBarChart({
   caption: string;
   emptyMessage?: string;
 }) {
+  const reduced = useReducedMotion();
   const rows: ChartRow[] = data.map((d) => ({
     committee: d.committee,
     label: committeeLabel(d.committee),
@@ -115,7 +117,16 @@ export function CommitteeBarChart({
                 // 4px rounded data-end, anchored square on the baseline.
                 radius={[4, 4, 0, 0]}
                 maxBarSize={72}
-                isAnimationActive={false}
+                // Grown from the baseline on load, using recharts' own
+                // animation rather than a motion wrapper — the bar geometry is
+                // recharts', and animating the SVG from outside would fight it.
+                // Capped at the shared 0.3s ceiling, and switched off entirely
+                // under prefers-reduced-motion, where the bars render at full
+                // height immediately.
+                isAnimationActive={!reduced}
+                animationBegin={0}
+                animationDuration={DURATION_MS.slow}
+                animationEasing="ease-out"
               >
                 {/* Three bars only, so every one can carry its value without
                     becoming the "a number on every point" mess. */}

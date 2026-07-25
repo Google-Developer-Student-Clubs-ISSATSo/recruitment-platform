@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { AnimatePresence, motion } from "motion/react";
 
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import { CAPACITY_COMMITTEES } from "@/lib/committee-capacity";
@@ -20,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { CapacityBar } from "./CapacityBar";
 import { FinalEmailPanel } from "./FinalEmailPanel";
 import { ShortlistPool } from "./ShortlistPool";
@@ -101,6 +103,7 @@ export function FinalDecisionClient({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const reduced = useReducedMotion();
 
   const completed = completedAtISO !== null;
 
@@ -308,8 +311,9 @@ export function FinalDecisionClient({
         />
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+      {/* Tabs. Scrolls horizontally rather than wrapping below ~400px: two tab
+          labels on two lines would push the whole decision panel down a row. */}
+      <div className="flex gap-1 overflow-x-auto border-b border-neutral-200 dark:border-neutral-800">
         <TabButton active={tab === "PASS"} onClick={() => setTab("PASS")}>
           Decision Pass ({buckets.undecided.length})
         </TabButton>
@@ -407,13 +411,32 @@ export function FinalDecisionClient({
             </div>
           </div>
 
-          {/* Main panel */}
+          {/* Main panel.
+              Crossfade only, keyed on the applicant, at the `fast` token — the
+              panel swaps wholesale when a decision advances the queue, and with
+              no signal at all that swap reads as a glitch on a shared screen.
+              Opacity and nothing else: no travel, no layout animation, so the
+              next name is legible ~0.15s after the button is pressed. */}
           {selected ? (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+            <motion.div
+              // `reduced` is part of the key for the same reason it is on
+              // StatBar: the hook reads false in the hydration snapshot, so
+              // without a remount the mount-time fade starts anyway and the
+              // zero-length transition arrives too late to stop it.
+              key={`${selected.id}:${reduced}`}
+              initial={reduced ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : { duration: DURATION.fast, ease: EASE.out }
+              }
+              className="space-y-4"
+            >
+              <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-6">
-                  <div>
-                    <h2 className="text-4xl font-bold tracking-tight text-foreground">
+                  <div className="min-w-0">
+                    <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
                       {selected.fullName}
                     </h2>
                     <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-base text-neutral-500 dark:text-neutral-400">
@@ -531,7 +554,7 @@ export function FinalDecisionClient({
                   onClick={() => decide(selected, "REJECT")}
                 />
               </div>
-            </div>
+            </motion.div>
           ) : (
             <div className="rounded-xl border border-dashed border-neutral-300 p-10 text-center dark:border-neutral-700">
               <p className="text-base font-medium text-foreground">
@@ -598,7 +621,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`-mb-px border-b-2 px-4 py-2.5 text-base font-semibold transition-colors ${
+      className={`-mb-px shrink-0 cursor-pointer whitespace-nowrap border-b-2 px-4 py-2.5 text-base font-semibold transition-colors motion-reduce:transition-none ${
         active
           ? "border-primary text-primary"
           : "border-transparent text-neutral-500 hover:text-foreground dark:text-neutral-400"
@@ -674,6 +697,7 @@ function ScoreTile({
  */
 function FullInterviewNotes({ row }: { row: DecisionRow }) {
   const [open, setOpen] = useState(false);
+  const reduced = useReducedMotion();
 
   return (
     <div className="mt-6 rounded-xl border border-neutral-200 dark:border-neutral-800">
@@ -681,19 +705,46 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+        className="flex w-full cursor-pointer items-center justify-between gap-2 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Icon name="description" className="text-[18px] text-neutral-400" />
           View Full Interview Notes
         </span>
-        <Icon
-          name={open ? "expand_less" : "expand_more"}
-          className="text-[20px] text-neutral-400"
-        />
+        {/* The chevron rotates rather than swapping glyphs — one element that
+            turns reads as the same control changing state. */}
+        <motion.span
+          className="inline-flex"
+          animate={{ rotate: open ? 180 : 0 }}
+          initial={false}
+          transition={
+            reduced
+              ? { duration: 0 }
+              : { duration: DURATION.fast, ease: EASE.out }
+          }
+        >
+          <Icon name="expand_more" className="text-[20px] text-neutral-400" />
+        </motion.span>
       </button>
 
-      {open && (
+      {/* Opens at the `fast` token — this is the one thing on the page someone
+          waits on mid-discussion ("can you open the notes?"), so it must be
+          essentially instantaneous while still showing that the panel grew out
+          of the header rather than appearing from nowhere. */}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="notes-body"
+            initial={reduced ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduced ? { opacity: 1 } : { height: 0, opacity: 0 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { duration: DURATION.fast, ease: EASE.out }
+            }
+            className="overflow-hidden"
+          >
         <div className="space-y-5 border-t border-neutral-200 px-4 py-4 dark:border-neutral-800">
           {/* Jury — the 3 panel seats, "Open" for any unclaimed one */}
           <div>
@@ -785,7 +836,9 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
             )}
           </p>
         </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -804,6 +857,17 @@ const DECISION_TONE = {
     "bg-status-rejected text-white dark:text-neutral-950 hover:bg-status-rejected/85",
 } as const;
 
+/**
+ * A decision button, with a press confirmation that lasts 0.15s and nothing
+ * more.
+ *
+ * The whole room is looking at this button when it is pressed, and the outcome
+ * it triggers moves the list, the capacity bar and the panel at once — so the
+ * button's own feedback has to land and be gone before any of that. It is a
+ * single quick scale dip back to rest, keyed on a click counter so a second
+ * press of the same button replays it. No colour flash, no ripple, nothing that
+ * outlives the click.
+ */
 function DecisionButton({
   tone,
   icon,
@@ -817,15 +881,28 @@ function DecisionButton({
   disabled: boolean;
   onClick: () => void;
 }) {
+  const reduced = useReducedMotion();
+  const [pulsing, setPulsing] = useState(false);
+
   return (
-    <button
+    <motion.button
       type="button"
       disabled={disabled}
-      onClick={onClick}
-      className={`flex items-center justify-center gap-2 rounded-xl px-6 py-5 text-xl font-bold uppercase tracking-wide transition-colors disabled:opacity-50 ${DECISION_TONE[tone]}`}
+      onClick={() => {
+        if (!reduced) setPulsing(true);
+        onClick();
+      }}
+      animate={pulsing ? { scale: [1, 0.96, 1] } : { scale: 1 }}
+      // Cleared the moment it finishes, so the next press starts from rest and
+      // replays instead of finding the target already satisfied.
+      onAnimationComplete={() => setPulsing(false)}
+      transition={
+        reduced ? { duration: 0 } : { duration: DURATION.fast, ease: EASE.out }
+      }
+      className={`flex items-center justify-center gap-2 rounded-xl px-6 py-5 text-xl font-bold uppercase tracking-wide transition-colors disabled:opacity-50 motion-reduce:transition-none ${DECISION_TONE[tone]}`}
     >
       <Icon name={icon} className="text-[24px]" />
       {label}
-    </button>
+    </motion.button>
   );
 }

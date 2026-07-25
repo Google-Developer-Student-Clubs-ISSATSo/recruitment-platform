@@ -1,6 +1,7 @@
 import { committeeLabel } from "@/lib/committee";
 import { getCapacityUsage } from "@/lib/committee-capacity-store";
 import { capacityLevel } from "@/lib/final-decision";
+import { StatBar } from "./StatBar";
 
 // How full each committee is, as a table.
 //
@@ -61,7 +62,7 @@ export async function CommitteeAcceptanceTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            {usage.map(({ committee, accepted, target }) => {
+            {usage.map(({ committee, accepted, target }, index) => {
               const level = capacityLevel(accepted, target);
               // A zero target means "no seats", which any acceptance overfills,
               // so the rate reads as full rather than dividing by zero.
@@ -89,12 +90,12 @@ export async function CommitteeAcceptanceTable({
                     {Math.round(filled * 100)}%
                   </td>
                   <td className="px-6 py-4">
-                    <div className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                      <div
-                        className={`h-full rounded-full ${LEVEL_FILL[level]}`}
-                        style={{ width: `${Math.min(100, filled * 100)}%` }}
-                      />
-                    </div>
+                    <StatBar
+                      percent={Math.min(100, filled * 100)}
+                      fillClassName={LEVEL_FILL[level]}
+                      trackClassName="h-2"
+                      index={index}
+                    />
                   </td>
                 </tr>
               );

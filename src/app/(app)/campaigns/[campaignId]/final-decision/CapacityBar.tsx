@@ -1,7 +1,10 @@
 "use client";
 
+import { motion } from "motion/react";
+
 import { Icon } from "@/components/app-shell/icon";
 import { capacityLevel, type CommitteeUsage } from "@/lib/final-decision";
+import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 
 // Per-committee seat usage, pinned above everything else on the page. Sized for
 // a screen-share: the count is the largest text on the row, and the fill bar
@@ -39,6 +42,8 @@ function caption(accepted: number, target: number) {
 }
 
 export function CapacityBar({ usage }: { usage: CommitteeUsage[] }) {
+  const reduced = useReducedMotion();
+
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       {usage.map(({ committee, accepted, target }) => {
@@ -74,10 +79,25 @@ export function CapacityBar({ usage }: { usage: CommitteeUsage[] }) {
               </span>
             </div>
 
+            {/* The fill slides to its new width rather than jumping, so a seat
+                being taken during the meeting reads as a change to THIS bar and
+                not as the page having re-rendered. `initial={false}` means the
+                first paint is already at the right width — the animation only
+                ever covers a decision made in front of the room.
+
+                At the `fast` token deliberately: the room is watching this bar
+                the instant Accept is pressed, and 0.15s is long enough to see
+                the movement without anyone waiting on it. */}
             <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-              <div
-                className={`h-full rounded-full transition-all ${style.fill}`}
-                style={{ width: `${pct}%` }}
+              <motion.div
+                className={`h-full rounded-full ${style.fill}`}
+                initial={false}
+                animate={{ width: `${pct}%` }}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { duration: DURATION.fast, ease: EASE.out }
+                }
               />
             </div>
 
