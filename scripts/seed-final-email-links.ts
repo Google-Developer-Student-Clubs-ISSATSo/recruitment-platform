@@ -25,7 +25,7 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is not set — cannot seed final email links.");
 }
 
-const adapter = new PrismaPg({ connectionString });
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {

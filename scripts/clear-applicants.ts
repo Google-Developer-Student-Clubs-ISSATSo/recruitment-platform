@@ -11,12 +11,12 @@ import { PrismaClient } from "../src/generated/prisma/client";
 
 const CAMPAIGN_NAME = "Recruitment 2026 (Dev Seed)";
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DIRECT_URL;
 if (!connectionString) {
-  throw new Error("DATABASE_URL is not set — cannot clear applicants.");
+  throw new Error("DIRECT_URL is not set — cannot clear applicants.");
 }
 
-const adapter = new PrismaPg({ connectionString });
+const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function countsFor(campaignId: string) {

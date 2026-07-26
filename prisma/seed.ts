@@ -8,12 +8,12 @@ import {
 } from "../src/generated/prisma/enums";
 import { faker } from "@faker-js/faker";
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DIRECT_URL;
 if (!connectionString) {
-  throw new Error("DATABASE_URL is not set — cannot seed.");
+  throw new Error("DIRECT_URL is not set — cannot seed.");
 }
 
-const adapter = new PrismaPg({ connectionString });
+const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL });
 const prisma = new PrismaClient({ adapter });
 
 // Deterministic mock data across runs.
@@ -530,11 +530,15 @@ async function main() {
     userIdByEmail.get("krifaaziz04@gmail.com") ?? // Ons El Maleh (TM Lead)
     userIdByEmail.values().next().value!;
 
-  const spread = createdApplicants.length > 1 ? createdApplicants.length - 1 : 1;
+  const spread =
+    createdApplicants.length > 1 ? createdApplicants.length - 1 : 1;
   const scoreRows = createdApplicants.flatMap((applicant, i) => {
     const strength = 0.9 - (i * 0.75) / spread;
     return createdQuestions.map((q) => {
-      const jittered = Math.min(1, Math.max(0, strength + faker.number.float({ min: -0.1, max: 0.1 })));
+      const jittered = Math.min(
+        1,
+        Math.max(0, strength + faker.number.float({ min: -0.1, max: 0.1 })),
+      );
       return {
         applicantId: applicant.id,
         questionId: q.id,
