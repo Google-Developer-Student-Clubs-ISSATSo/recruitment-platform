@@ -22,10 +22,9 @@ import { NoteClosingControls } from "./NoteClosingControls";
  *
  * Access is decided by canViewInterviewNote / canEditInterviewNote rather than a
  * flat permission: EDIT_OWN_INTERVIEW_NOTES is held by every interviewer, so the
- * seat on *this* applicant's panel is what actually grants write access. A
- * Committee Rep with VIEW_COMMITTEE_DASHBOARD gets a read-only render — no
- * inputs at all, not merely disabled ones — and the save actions refuse them
- * independently.
+ * seat on *this* applicant's panel is what actually grants access. Reading and
+ * writing now coincide — the panel and the TM Lead, nobody else — so anyone off
+ * the panel is redirected away rather than shown a read-only render.
  */
 export default async function InterviewNotesPage({
   params,
@@ -88,6 +87,10 @@ export default async function InterviewNotesPage({
   // The editor's visual mode. `closed` wins over `canEdit` on purpose: a closed
   // note is still writable by MANAGE_ACCOUNTS, and that is exactly the case the
   // loud surface exists to flag.
+  //
+  // "readonly" is currently unreachable — since the committee-preview grant was
+  // removed, anyone who can view an open note can also edit it — and is kept as
+  // the safe fallback should view and edit ever diverge again.
   const mode: NoteMode = closed ? "locked" : canEdit ? "edit" : "readonly";
   const initialScores: NoteScores = {
     personality: note?.personality ?? null,

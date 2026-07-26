@@ -4,6 +4,7 @@ import {
   formatTunisTimeOfDay,
 } from "@/lib/tunis-time";
 import { PANEL_COMMITTEES } from "@/lib/interview-slot";
+import { isInterviewDone } from "@/lib/interview-note";
 import type { Committee } from "@/generated/prisma/enums";
 
 export type BoardSeat = {
@@ -26,6 +27,13 @@ export type BoardCard = {
    * panel — it varies card by card for the same user. "none" hides the link.
    */
   noteAccess: "edit" | "view" | "none";
+  /**
+   * The interview happened and its note was closed — see {@link isInterviewDone}.
+   * Freezes the panel: seats can no longer be released, because the seats are
+   * the record of who actually conducted the interview. Recomputed from the
+   * note's current `closedAt` on every render, so a reopen unfreezes it.
+   */
+  interviewDone: boolean;
 };
 
 /**
@@ -49,6 +57,8 @@ export type ScheduledApplicant = {
   id: string;
   fullName: string;
   interviewSlot: { scheduledTime: Date | null; room: string | null } | null;
+  /** Null when no note row exists yet — which counts as not-done. */
+  interviewNote: { closedAt: Date | null } | null;
   interviewPanel: {
     seats: {
       id: string;
@@ -98,6 +108,7 @@ export function groupScheduledIntoDays(
       scheduledTimeLabel: formatTunisTimeOfDay(at),
       room: a.interviewSlot?.room ?? null,
       noteAccess: noteAccess.get(a.id) ?? "none",
+      interviewDone: isInterviewDone(a.interviewNote),
       seats: [...(a.interviewPanel?.seats ?? [])]
         .sort(
           (x, y) =>

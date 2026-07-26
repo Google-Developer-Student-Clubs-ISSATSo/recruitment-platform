@@ -1,10 +1,3 @@
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
-
 # GDGC Recruitment Platform --- Agent Context
 
 This document exists so any new Claude Code session (or Claude chat) can
@@ -29,7 +22,6 @@ Related docs, all in `docs/`:
 
 - `PRODUCT_SPECIFICATION.md` --- the full functional spec
 - `HANDOFF_RUNBOOK.md` --- ownership/credentials/yearly handoff process
-- `BUILD_CHECKLIST.md` --- the staged build plan this app was built from
 
 ---
 
@@ -81,16 +73,16 @@ transfers via an invite-and-accept flow (`AdminTransferInvite`), never by
 directly editing another account's permissions. The outgoing TM Lead is
 auto-demoted to `TM_REVIEWER` on transfer completion.
 
-**Update (post-cleanup): both permissions removed, not just proposed.**
-`VIEW_STATISTICS` was deleted --- the Statistics page is now open to any
-authenticated member, no permission check at all. `VIEW_COMMITTEE_DASHBOARD`
-was deleted entirely --- Committee Reps no longer have standing dashboard
-or notes-preview access; the interview-note close/reopen workflow
-(panelist-only + TM Lead) fully replaced that carve-out. The
-final-decision dashboard page is now gated purely by `enter_final_decision`
-(plus TM Lead). If you see either identifier (`view_committee_dashboard` /
-`view_statistics`) referenced anywhere in code, seeds, or docs, that's
-stale and should be removed on sight.
+There is no `VIEW_STATISTICS` or `VIEW_COMMITTEE_DASHBOARD` permission ---
+the Statistics page is open to any authenticated member with no
+permission check, and the final-decision dashboard is gated purely by
+`enter_final_decision` (plus TM Lead). Committee Reps have no standing
+dashboard or notes-preview access; interview-note visibility for anyone
+who isn't the TM Lead runs entirely through actual panel membership plus
+the close/reopen workflow (panelist-only while open). If either
+identifier (`view_committee_dashboard` / `view_statistics`) turns up
+anywhere in code, seeds, or docs, that's stale and should be removed on
+sight.
 
 ### Campaign scoping
 
@@ -225,12 +217,10 @@ Logging: `ActivityLogEntry`
   Configuration, Admin Permissions, and Activity Log have all been
   through the 21st.dev component pass + `motion` animation +
   responsive treatment. This work is DONE, not in progress.
-- **Permission changes (VIEW_STATISTICS default for all,
-  remove VIEW_COMMITTEE_DASHBOARD): DONE.** `VIEW_STATISTICS` removed,
-  Statistics page open to all members. `VIEW_COMMITTEE_DASHBOARD` removed
-  entirely, including its role in interview-notes visibility (see the
-  Update note above). Permission Management UI now also shows a short
-  plain-language definition under every remaining permission.
+- **Permission Management**: statistics are open to every member with no
+  gating permission, the final-decision dashboard is gated purely by
+  `enter_final_decision`, and the UI shows a short plain-language
+  definition under every permission.
 - **Code cleanup pass: NOT YET DONE, next up** --- remove unused
   files/dependencies, dead code, unnecessary comments, leftover debug
   console statements, consolidate duplicated logic. A full prompt for
@@ -251,8 +241,6 @@ Logging: `ActivityLogEntry`
   risk of a rewrite
 - Calendly/bit.ly live sync --- explicitly NOT built; manual slot-time
   entry was chosen deliberately over webhook/polling integration
-- VIEW_STATISTICS/VIEW_COMMITTEE_DASHBOARD permission changes ---
-  DONE, no longer pending (see Feature Status)
 - Real infrastructure deployment (Vercel, production Supabase/Postgres,
   Tech Lead's dedicated email) --- not yet done, tracked in
   `HANDOFF_RUNBOOK.md`
@@ -261,9 +249,6 @@ Logging: `ActivityLogEntry`
 
 ## Immediate Next Step
 
-The permission changes and the "permission definitions" admin feature
-(plain-language description under every permission in Permission
-Management, to avoid misconfiguring someone's access) are both DONE.
 The code cleanup pass (unused files/deps, dead code, comments, console
 statements, duplicated-logic consolidation) is next up now.
 

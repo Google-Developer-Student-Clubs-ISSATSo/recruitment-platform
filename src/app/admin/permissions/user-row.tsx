@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Icon } from "@/components/app-shell/icon";
 import {
   PERMISSION_CATEGORIES,
+  PERMISSION_DEFINITIONS,
   humanizePermission,
   type AdminUserRow,
 } from "./permission-config";
@@ -270,22 +271,27 @@ export function UserRow({
                 <div className="space-y-3">
                   {cat.permissions.map((perm) =>
                     readOnly ? (
-                      <div
-                        key={perm}
-                        className="flex items-center justify-between gap-3"
-                      >
-                        <span className="text-[13px] text-foreground">
-                          {humanizePermission(perm)}
-                        </span>
-                        {held.has(perm) ? (
-                          <span className="rounded-full bg-status-accepted/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-status-accepted">
-                            Granted
+                      // Read-only rows carry the same definition as the
+                      // editable toggles — every permission is described,
+                      // whichever variant of the panel is rendering.
+                      <div key={perm}>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[13px] text-foreground">
+                            {humanizePermission(perm)}
                           </span>
-                        ) : (
-                          <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400">
-                            Off
-                          </span>
-                        )}
+                          {held.has(perm) ? (
+                            <span className="rounded-full bg-status-accepted/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-status-accepted">
+                              Granted
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400">
+                              Off
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 pr-12 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                          {PERMISSION_DEFINITIONS[perm]}
+                        </p>
                       </div>
                     ) : (
                       <PermissionToggle

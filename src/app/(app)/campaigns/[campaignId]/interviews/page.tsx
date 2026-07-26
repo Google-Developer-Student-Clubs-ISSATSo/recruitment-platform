@@ -91,6 +91,9 @@ export default async function InterviewsPage({
         id: true,
         fullName: true,
         interviewSlot: { select: { scheduledTime: true, room: true } },
+        // Drives the "Completed" badge and the release freeze. Read fresh on
+        // every render, so reopening a note restores both immediately.
+        interviewNote: { select: { closedAt: true } },
         interviewPanel: {
           select: {
             seats: {

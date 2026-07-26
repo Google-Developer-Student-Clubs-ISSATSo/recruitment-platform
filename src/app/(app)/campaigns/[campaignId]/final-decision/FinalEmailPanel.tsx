@@ -19,22 +19,22 @@ type Summary = {
 /**
  * The final-results send, shown once the decisions are signed off.
  *
- * Two independent gates stand in front of the button, and both explain
- * themselves rather than just greying it out: the caller must hold SEND_EMAILS
- * (`canSend`), and all four external links must be configured
- * (`missingLinkLabels`) — the same disabled-with-message pattern the interview
- * booking panel uses for its calendar link. The batch re-checks both server-side.
+ * The caller is only ever rendered for SEND_EMAILS holders — the page wraps
+ * this component in <PermissionGate permission={SEND_EMAILS}> before it ever
+ * mounts, so there is no internal "you don't have permission" branch here.
+ * The one gate this component itself expresses is that all four external
+ * links must be configured (`missingLinkLabels`) — the same
+ * disabled-with-message pattern the interview booking panel uses for its
+ * calendar link. The batch re-checks SEND_EMAILS server-side regardless.
  */
 export function FinalEmailPanel({
   campaignId,
-  canSend,
   acceptedCount,
   rejectedCount,
   alreadySent,
   missingLinkLabels,
 }: {
   campaignId: string;
-  canSend: boolean;
   acceptedCount: number;
   rejectedCount: number;
   alreadySent: number;
@@ -48,7 +48,7 @@ export function FinalEmailPanel({
   const total = acceptedCount + rejectedCount;
   const pendingCount = Math.max(0, total - alreadySent);
   const needsLinks = missingLinkLabels.length > 0;
-  const blocked = !canSend || needsLinks || pendingCount === 0;
+  const blocked = needsLinks || pendingCount === 0;
 
   function send() {
     setError(null);
@@ -111,13 +111,6 @@ export function FinalEmailPanel({
         </div>
       )}
 
-      {!canSend && (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          You don&apos;t have permission to send emails. Ask someone with the
-          Send Emails permission to run this.
-        </p>
-      )}
-
       {error && (
         <div className="rounded-lg border border-status-rejected/30 bg-status-rejected/10 px-4 py-3 text-sm font-medium text-status-rejected">
           {error}
@@ -155,7 +148,7 @@ export function FinalEmailPanel({
           <Icon name="send" className="text-[18px]" />
           {pending ? "Sending…" : "Send Final Results"}
         </Button>
-        {pendingCount === 0 && total > 0 && canSend && !needsLinks && (
+        {pendingCount === 0 && total > 0 && !needsLinks && (
           <span className="flex items-center gap-1 text-sm text-status-accepted">
             <Icon name="check" className="text-[16px]" />
             Everyone has been emailed.

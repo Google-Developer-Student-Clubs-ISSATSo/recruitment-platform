@@ -24,7 +24,6 @@ faker.seed(2026);
 const COMMITTEE_REPRESENTATIVE_BASELINE: PermissionKey[] = [
   PermissionKey.CLAIM_PANEL_SEAT,
   PermissionKey.EDIT_OWN_INTERVIEW_NOTES,
-  PermissionKey.VIEW_COMMITTEE_DASHBOARD,
 ];
 
 // Which PermissionKeys each RoleTemplate grants. Permissions are plain global

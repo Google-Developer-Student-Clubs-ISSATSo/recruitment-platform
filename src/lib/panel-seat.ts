@@ -1,15 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { hasPermission } from "@/lib/permissions";
+import { isInterviewDone } from "@/lib/interview-note";
 import { PermissionKey } from "@/generated/prisma/enums";
 
 export type SeatResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Load a seat together with everything the authorization checks need: which
- * campaign its applicant belongs to, and who (if anyone) currently holds it.
- * Callers pass only a seat id, so all of this is re-read server-side rather than
- * trusted from the request.
+ * campaign its applicant belongs to, who (if anyone) currently holds it, and
+ * whether that applicant's interview is already done. Callers pass only a seat
+ * id, so all of this is re-read server-side rather than trusted from the
+ * request.
  */
 async function loadSeat(seatId: string) {
   return prisma.panelSeat.findUnique({
@@ -21,7 +23,14 @@ async function loadSeat(seatId: string) {
       panel: {
         select: {
           applicant: {
-            select: { id: true, fullName: true, campaignId: true },
+            select: {
+              id: true,
+              fullName: true,
+              campaignId: true,
+              // Pulled in the same round-trip as the rest of the seat, so the
+              // release guard costs no extra query.
+              interviewNote: { select: { closedAt: true } },
+            },
           },
         },
       },
@@ -94,6 +103,13 @@ export async function claimPanelSeat(
  * Release a panel seat. Allowed for the person currently holding it, or for any
  * MANAGE_ACCOUNTS holder as a TM Lead override — the case where an interviewer
  * can no longer make the session and someone has to free the seat for them.
+ *
+ * Refused outright once the interview is done (its note is closed), for
+ * everyone including the seat's own holder and the MANAGE_ACCOUNTS override.
+ * At that point the seats are no longer a staffing plan that can still change;
+ * they are the record of who actually sat on the panel, and letting anyone
+ * empty them would quietly rewrite history — the interview note stays attributed
+ * to a panel nobody appears to have been on. Reopening the note lifts this.
  */
 export async function releasePanelSeat(
   campaignId: string,
@@ -109,6 +125,16 @@ export async function releasePanelSeat(
 
   if (seat.claimedById === null) {
     return { ok: false, error: "That seat isn't claimed." };
+  }
+
+  // Checked before the ownership branch below, so the message is the same
+  // whoever asks — the board hides the button, and this is the boundary.
+  if (isInterviewDone(applicant.interviewNote)) {
+    return {
+      ok: false,
+      error:
+        "That interview is already completed — its panel can't be changed. Reopen the interview note first.",
+    };
   }
 
   const isOwnClaim = seat.claimedById === userId;

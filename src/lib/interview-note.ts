@@ -94,3 +94,28 @@ export function formatAverage(avg: number | null): string {
   return avg === null ? "—" : avg.toFixed(1);
 }
 
+/**
+ * Has this applicant's interview actually happened and been written up?
+ *
+ * The signal is the note's close state, NOT `InterviewSlot.scheduledTime`
+ * against the clock. A slot time in the past proves only that a moment passed:
+ * a no-show, or an interview rescheduled without the slot being updated, would
+ * both read as "done" under a time comparison. Closing the note is the point at
+ * which a human confirms the interview took place and the record is finished,
+ * so that is what "done" means here.
+ *
+ * No note row at all is NOT done — nothing can be complete before anyone has
+ * even started writing it. Reopening a note (which clears `closedAt`) makes it
+ * not-done again, so callers must read this off the CURRENT row rather than
+ * caching a one-time flag.
+ *
+ * Deliberately a pure predicate over the one field it needs, so the same rule
+ * serves the client board and the server-side release guard without either
+ * re-stating it.
+ */
+export function isInterviewDone(
+  note: { closedAt: Date | null } | null | undefined,
+): boolean {
+  return note?.closedAt != null;
+}
+

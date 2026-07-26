@@ -2,13 +2,12 @@ import { getPipelineFunnel } from "@/lib/campaign-dashboard";
 import { FunnelBar } from "./FunnelBar";
 import { WidgetPanel } from "./WidgetPanel";
 
-// The recruitment pipeline as four horizontal bars. Rendered only for
-// VIEW_STATISTICS holders (the <PermissionGate> in page.tsx) — this is its
-// first widget outside the /statistics route itself.
+// The recruitment pipeline as four horizontal bars — the same campaign figures
+// the /statistics route shows, surfaced on the dashboard. Ungated, like that
+// route: statistics are open to every member.
 //
-// Loads its own data rather than taking counts as props, so a viewer without
-// the permission never triggers the queries: the gate decides whether this
-// async component is ever invoked.
+// Loads its own data rather than taking counts as props, so the queries stay
+// with the widget that needs them.
 //
 // Every figure is computed live from Applicant / InterviewNote rows — see
 // getPipelineFunnel. Nothing here is stored.

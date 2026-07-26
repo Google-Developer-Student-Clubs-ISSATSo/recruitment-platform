@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { hasPermission, requirePermission } from "@/lib/permissions";
-import { PermissionKey } from "@/generated/prisma/enums";
+import { requirePermission } from "@/lib/permissions";
+import { ApplicantStatus, PermissionKey } from "@/generated/prisma/enums";
 import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
 import { FINAL_TEMPLATE } from "@/lib/final-email-templates";
 import { missingLinkLabels } from "@/lib/final-email-links";
@@ -11,13 +10,16 @@ import { getCapacityUsage } from "@/lib/committee-capacity-store";
 import { PANEL_COMMITTEES } from "@/lib/interview-slot";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
 import { DASHBOARD_STATUSES, type DecisionRow } from "@/lib/final-decision";
+import { PermissionGate } from "@/components/permission-gate";
 import { FinalDecisionClient } from "./FinalDecisionClient";
+import { FinalEmailPanel } from "./FinalEmailPanel";
 
 // The live dashboard driven during the Discord decision meeting.
 //
-// ENTER_FINAL_DECISION gates loading this page (read access). It replaced
-// VIEW_COMMITTEE_DASHBOARD, which is a separate read-only committee view and no
-// longer stands in for entering the final-decision screen.
+// ENTER_FINAL_DECISION is the only key that gates loading this page (read
+// access) — plus the TM Lead, who holds it like every other permission. There is
+// no read-only committee variant: a Committee Rep without ENTER_FINAL_DECISION
+// does not see this page at all.
 //
 // Everything here is read fresh on every render: the applicant pool, and the
 // per-committee accepted counts behind the capacity bar. Each decision action
@@ -32,9 +34,6 @@ export default async function FinalDecisionPage({
   await requirePermission(CAMPAIGN_PAGE_PERMISSIONS["final-decision"], {
     redirectTo: `/campaigns/${campaignId}/dashboard?denied=1`,
   });
-
-  const session = await auth();
-  const userId = session!.user!.id!;
 
   const [campaign, applicants, usage] = await Promise.all([
     prisma.campaign.findUnique({
@@ -92,29 +91,28 @@ export default async function FinalDecisionPage({
 
   if (!campaign) notFound();
 
-  // Email panel inputs. Only loaded once the meeting is signed off — before
-  // that there is nothing to send, and the panel isn't rendered.
+  // Email panel input. Only loaded once the meeting is signed off — before
+  // that there is nothing to send, and the panel isn't rendered. Whether the
+  // viewer may see the panel at all is <PermissionGate>'s job below, not a
+  // value fetched here.
   const completed = campaign.finalDecisionCompletedAt !== null;
-  const [canSendEmails, alreadySent] = await Promise.all([
-    hasPermission(userId, PermissionKey.SEND_EMAILS),
-    completed
-      ? prisma.emailLog
-          .findMany({
-            where: {
-              campaignId,
-              status: "SENT",
-              templateKey: {
-                in: [FINAL_TEMPLATE.ACCEPTANCE, FINAL_TEMPLATE.REJECTION],
-              },
+  const alreadySent = completed
+    ? await prisma.emailLog
+        .findMany({
+          where: {
+            campaignId,
+            status: "SENT",
+            templateKey: {
+              in: [FINAL_TEMPLATE.ACCEPTANCE, FINAL_TEMPLATE.REJECTION],
             },
-            // Distinct recipients, not raw rows: a resend after a failure would
-            // otherwise inflate the "already sent" figure past the pool size.
-            distinct: ["applicantId"],
-            select: { applicantId: true },
-          })
-          .then((rows) => rows.length)
-      : Promise.resolve(0),
-  ]);
+          },
+          // Distinct recipients, not raw rows: a resend after a failure would
+          // otherwise inflate the "already sent" figure past the pool size.
+          distinct: ["applicantId"],
+          select: { applicantId: true },
+        })
+        .then((rows) => rows.length)
+    : 0;
 
   const rows: DecisionRow[] = applicants.map((a) => {
     const note = a.interviewNote;
@@ -158,22 +156,40 @@ export default async function FinalDecisionPage({
     };
   });
 
+  // Built here rather than inside FinalDecisionClient so <PermissionGate> — a
+  // Server Component — can actually gate it. A Server Component can be handed
+  // to a Client Component as a prop/children, but never constructed from
+  // inside one, so the gate has to live at this level; FinalDecisionClient just
+  // renders whatever node it's given, completed campaign or not.
+  const emailPanel = completed ? (
+    <PermissionGate permission={PermissionKey.SEND_EMAILS}>
+      <FinalEmailPanel
+        campaignId={campaignId}
+        acceptedCount={
+          applicants.filter((a) => a.status === ApplicantStatus.ACCEPTED).length
+        }
+        rejectedCount={
+          applicants.filter((a) => a.status === ApplicantStatus.REJECTED_FINAL)
+            .length
+        }
+        alreadySent={alreadySent}
+        missingLinkLabels={missingLinkLabels({
+          acceptanceFormLink: campaign.acceptanceFormLink,
+          gdgcProgramLink: campaign.gdgcProgramLink,
+          gdgcPlatformLink: campaign.gdgcPlatformLink,
+          discordInviteLink: campaign.discordInviteLink,
+        })}
+      />
+    </PermissionGate>
+  ) : null;
+
   return (
     <FinalDecisionClient
       campaignId={campaignId}
       initialRows={rows}
       usage={usage}
       completedAtISO={campaign.finalDecisionCompletedAt?.toISOString() ?? null}
-      email={{
-        canSend: canSendEmails,
-        alreadySent,
-        missingLinkLabels: missingLinkLabels({
-          acceptanceFormLink: campaign.acceptanceFormLink,
-          gdgcProgramLink: campaign.gdgcProgramLink,
-          gdgcPlatformLink: campaign.gdgcPlatformLink,
-          discordInviteLink: campaign.discordInviteLink,
-        }),
-      }}
+      emailPanel={emailPanel}
     />
   );
 }

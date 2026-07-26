@@ -214,9 +214,9 @@ export default async function CampaignDashboardPage({
         </StaggerItem>
       </StaggerGroup>
 
-      {/* STEPS 3, 4 & 5 — each gated on its own permission, and all three in one
-          stagger group so they arrive as a single sequence rather than three
-          independent runs.
+      {/* STEPS 3, 4 & 5 — gated on their own permission where they have one
+          (the funnel has none), and all three in one stagger group so they
+          arrive as a single sequence rather than three independent runs.
 
           The funnel/interviews row stays a flex row rather than a fixed column
           grid so whichever widgets survive their gates fill the width: the funnel
@@ -224,11 +224,10 @@ export default async function CampaignDashboardPage({
           stretches to full width instead of leaving a stranded gap. */}
       <StaggerGroup className="space-y-6">
         <div className="flex flex-col gap-6 lg:flex-row">
-          <PermissionGate permission={PermissionKey.VIEW_STATISTICS}>
-            <StaggerItem className="lg:min-w-0 lg:grow-[2] lg:basis-0">
-              <PipelineFunnel campaignId={campaignId} />
-            </StaggerItem>
-          </PermissionGate>
+          {/* The funnel is ungated — statistics are open to every member. */}
+          <StaggerItem className="lg:min-w-0 lg:grow-[2] lg:basis-0">
+            <PipelineFunnel campaignId={campaignId} />
+          </StaggerItem>
 
           <PermissionGate permission={PermissionKey.CLAIM_PANEL_SEAT}>
             <StaggerItem className="lg:min-w-0 lg:grow lg:basis-0">

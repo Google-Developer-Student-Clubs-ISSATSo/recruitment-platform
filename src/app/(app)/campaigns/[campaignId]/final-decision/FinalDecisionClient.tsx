@@ -23,7 +23,6 @@ import { Icon, type IconName } from "@/components/app-shell/icon";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { CapacityBar } from "./CapacityBar";
-import { FinalEmailPanel } from "./FinalEmailPanel";
 import { ShortlistPool } from "./ShortlistPool";
 import {
   assignCommitteeAction,
@@ -78,17 +77,21 @@ export function FinalDecisionClient({
   initialRows,
   usage,
   completedAtISO,
-  email,
+  emailPanel,
 }: {
   campaignId: string;
   initialRows: DecisionRow[];
   usage: CommitteeUsage[];
   completedAtISO: string | null;
-  email: {
-    canSend: boolean;
-    alreadySent: number;
-    missingLinkLabels: string[];
-  };
+  /**
+   * The SEND_EMAILS-gated "Final Result Emails" section, already built and
+   * wrapped in <PermissionGate> by the page — a Server Component, which is
+   * why this arrives as a ready-made node rather than being constructed here.
+   * Null whenever the campaign isn't completed yet or the viewer lacks the
+   * permission; either way, there is nothing more for this component to do
+   * beyond rendering it in place.
+   */
+  emailPanel: React.ReactNode;
 }) {
   // Rows come straight from the server on every render: each action calls
   // revalidatePath, so the RSC payload is the single source of truth. Mirroring
@@ -299,17 +302,10 @@ export function FinalDecisionClient({
       {/* STEP 3 — always visible, above both tabs */}
       <CapacityBar usage={liveUsage} />
 
-      {/* Sending only makes sense once every outcome is final. */}
-      {completed && (
-        <FinalEmailPanel
-          campaignId={campaignId}
-          canSend={email.canSend}
-          acceptedCount={buckets.accepted.length}
-          rejectedCount={buckets.rejected.length}
-          alreadySent={email.alreadySent}
-          missingLinkLabels={email.missingLinkLabels}
-        />
-      )}
+      {/* Sending only makes sense once every outcome is final — the page
+          already only builds emailPanel once `completed`, so this just
+          renders whatever it was handed. */}
+      {emailPanel}
 
       {/* Tabs. Scrolls horizontally rather than wrapping below ~400px: two tab
           labels on two lines would push the whole decision panel down a row. */}

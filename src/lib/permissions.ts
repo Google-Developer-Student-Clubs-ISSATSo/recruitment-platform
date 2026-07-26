@@ -84,12 +84,16 @@ export const canEditInterviewNote = cache(async function canEditInterviewNote(
 /**
  * May this user read the interview note for this applicant?
  *
- * MANAGE_ACCOUNTS always. Otherwise a CLOSED note grants no read access at all —
- * panel members and Committee Reps alike are turned away, same as if they never
- * had permission. On an open note: anyone who can edit it, plus
- * VIEW_COMMITTEE_DASHBOARD holders (Committee Reps review interviews they did not
- * personally sit on, strictly read-only; the save action still checks
- * {@link canEditInterviewNote}).
+ * Exactly the panel and the TM Lead — no wider preview for anyone else.
+ * MANAGE_ACCOUNTS (the TM Lead) always. Otherwise a CLOSED note grants no read
+ * access at all: even a panel member is turned away, same as if they never had
+ * permission. On an open note, read access is precisely "can edit it", i.e.
+ * holding EDIT_OWN_INTERVIEW_NOTES *and* a seat on this applicant's panel.
+ *
+ * There is deliberately no permission-flag fallback here. The read-only
+ * committee preview this used to grant (via the since-deleted
+ * VIEW_COMMITTEE_DASHBOARD) was made obsolete by the close/reopen workflow, so
+ * being off the panel now means no access at any point in the note's life.
  */
 export const canViewInterviewNote = cache(async function canViewInterviewNote(
   userId: string,
@@ -98,8 +102,7 @@ export const canViewInterviewNote = cache(async function canViewInterviewNote(
   if (await hasPermission(userId, PermissionKeyEnum.MANAGE_ACCOUNTS)) return true;
   if (await isInterviewNoteClosed(applicantId)) return false;
 
-  if (await canEditInterviewNote(userId, applicantId)) return true;
-  return hasPermission(userId, PermissionKeyEnum.VIEW_COMMITTEE_DASHBOARD);
+  return canEditInterviewNote(userId, applicantId);
 });
 
 /** True if the user holds at least one of the given permissions. */

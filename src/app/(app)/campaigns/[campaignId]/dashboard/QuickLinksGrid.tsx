@@ -25,8 +25,11 @@ type QuickLink = {
   label: string;
   description: string;
   icon: IconName;
-  /** A single key, or "any of these grants access". */
-  permission: PermissionKey | readonly PermissionKey[];
+  /**
+   * A single key, or "any of these grants access". Null means the destination
+   * has no permission gate at all, so the card is always offered (Statistics).
+   */
+  permission: PermissionKey | readonly PermissionKey[] | null;
   /** Marks a destination that lives outside the campaign. */
   platformWide?: boolean;
 };
@@ -65,7 +68,8 @@ const CAMPAIGN_LINKS: Omit<QuickLink, "platformWide">[] = [
     label: "Statistics",
     description: "Campaign-wide recruitment numbers.",
     icon: "bar_chart",
-    permission: CAMPAIGN_PAGE_PERMISSIONS["statistics"],
+    // Ungated — every member can open the Statistics page.
+    permission: null,
   },
   {
     href: "configuration",
@@ -107,7 +111,11 @@ export async function QuickLinksGrid({
       href: `/campaigns/${campaignId}/${link.href}`,
     })),
     ACTIVITY_LOG_LINK,
-  ].filter((link) => pageAccessKeys(link.permission).some((k) => held.has(k)));
+  ].filter(
+    (link) =>
+      link.permission === null ||
+      pageAccessKeys(link.permission).some((k) => held.has(k)),
+  );
 
   if (links.length === 0) return null;
 
@@ -115,7 +123,8 @@ export async function QuickLinksGrid({
     <section>
       <h2 className="text-lg font-semibold text-foreground">Quick Links</h2>
       <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Only the sections your permissions let you open.
+        The sections you can open — everything open to all members, plus
+        whatever your permissions add.
       </p>
 
       {/* One column at 375px, two from sm, three from lg — the description line

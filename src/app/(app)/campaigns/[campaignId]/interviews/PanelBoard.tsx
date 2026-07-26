@@ -188,7 +188,8 @@ function DaySection({
         {/* Basis-full below sm so the seat tally drops to its own line instead of
             squeezing the date label at 375px. */}
         <span className="basis-full text-xs text-neutral-500 sm:ml-auto sm:basis-auto dark:text-neutral-400">
-          {day.cards.length} interview{day.cards.length === 1 ? "" : "s"} ·{" "}
+          <strong>{day.cards.length}</strong> interview
+          {day.cards.length === 1 ? "" : "s"} ·{" "}
           {dayFilled}/{daySeats} seats
         </span>
       </button>
@@ -252,6 +253,10 @@ function PanelCard({
 
   const filled = card.seats.filter((s) => s.claimedById !== null).length;
   const complete = filled === card.seats.length && card.seats.length > 0;
+  // Note the two distinct meanings of "complete" on this card: `complete` is
+  // seat staffing (all three claimed), `card.interviewDone` is the interview
+  // itself having happened and been written up. They move independently.
+  const done = card.interviewDone;
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -279,6 +284,16 @@ function PanelCard({
             <h3 className="truncate font-semibold text-foreground">
               {card.fullName}
             </h3>
+            {/* The interview happened and its note was closed. Same pill shape,
+                size and status-accepted tokens as <BookingStatusBadge> and the
+                Phase 1 classification badges, rather than a new visual idiom.
+                Sits directly under the name so the state reads as belonging to
+                this applicant, not to the seats below. */}
+            {done && (
+              <span className="mt-1 inline-flex items-center rounded-full bg-status-accepted/10 px-2.5 py-0.5 text-[11px] font-semibold text-status-accepted">
+                Completed
+              </span>
+            )}
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
               <Icon name="schedule" className="text-[14px]" />
               {card.scheduledTimeLabel}
@@ -324,6 +339,7 @@ function PanelCard({
             isMine={seat.claimedById === currentUserId}
             isMyCommittee={seat.committee === currentUserCommittee}
             canOverrideRelease={canOverrideRelease}
+            interviewDone={done}
             onClaim={() =>
               run(() => claimPanelSeatAction(campaignId, seat.seatId))
             }
@@ -378,6 +394,7 @@ function SeatRow({
   isMine,
   isMyCommittee,
   canOverrideRelease,
+  interviewDone,
   onClaim,
   onRelease,
 }: {
@@ -386,13 +403,19 @@ function SeatRow({
   isMine: boolean;
   isMyCommittee: boolean;
   canOverrideRelease: boolean;
+  /** This applicant's interview is done — the panel is frozen. */
+  interviewDone: boolean;
   onClaim: () => void;
   onRelease: () => void;
 }) {
   const reduced = useReducedMotion();
   const claimed = seat.claimedById !== null;
   // Whoever holds it may hand it back; MANAGE_ACCOUNTS may free anyone's seat.
-  const canRelease = claimed && (isMine || canOverrideRelease);
+  // Once the interview is done, neither can: the seats have stopped being a
+  // staffing plan and become the record of who conducted it. That applies to
+  // the override too — `releasePanelSeat` refuses both cases server-side, and a
+  // button that only ever returned an error would be worse than no button.
+  const canRelease = claimed && !interviewDone && (isMine || canOverrideRelease);
 
   /**
    * A one-shot wash of colour over the seat after you act on it.

@@ -76,7 +76,8 @@ const CAMPAIGN_NAV: {
     icon: "bar_chart",
     label: "Statistics",
     segment: "statistics",
-    permission: CAMPAIGN_PAGE_PERMISSIONS["statistics"],
+    // Open to every member — no gate on the page, so no gate on the link.
+    permission: null,
   },
 ];
 

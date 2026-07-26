@@ -38,10 +38,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
   },
   {
     title: "Decisions",
-    permissions: [
-      PermissionKey.VIEW_COMMITTEE_DASHBOARD,
-      PermissionKey.ENTER_FINAL_DECISION,
-    ],
+    permissions: [PermissionKey.ENTER_FINAL_DECISION],
   },
   {
     title: "Admin",
@@ -51,11 +48,57 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       PermissionKey.MANAGE_CAMPAIGNS,
       PermissionKey.SEND_EMAILS,
       PermissionKey.VIEW_CAMPAIGN_HISTORY,
-      PermissionKey.VIEW_STATISTICS,
       PermissionKey.VIEW_ACTIVITY_LOG,
     ],
   },
 ];
+
+/**
+ * What each permission actually lets someone do, in one plain sentence — the
+ * single source of truth for the descriptions shown under every toggle in the
+ * Permission Management screen.
+ *
+ * Typed as a full `Record<PermissionKey, string>` on purpose, NOT a Partial: a
+ * new key added to the enum fails to compile until it is described here, so no
+ * permission can ship into the admin UI undocumented.
+ *
+ * It lives here rather than next to `lib/permissions.ts` because this file is
+ * the permission UI's metadata module (categories, labels, consequence set) and
+ * is safe to import from client components — `lib/permissions.ts` pulls in
+ * Prisma and auth, which a client toggle cannot.
+ */
+export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
+  [PermissionKey.VIEW_FULL_POOL]:
+    "See every applicant in the campaign and read their complete application answers.",
+  [PermissionKey.CONFIGURE_SCREENING]:
+    "Add, edit and re-weight the Phase 1 scoring questions everyone else screens against.",
+  [PermissionKey.SCREEN_PHASE1]:
+    "Score applications on the Phase 1 rubric and run the selection that shortlists or rejects them.",
+  [PermissionKey.ENTER_TECHNICAL_SCORE]:
+    "Score only the Technical Skills question, on a restricted view of the scoring queue.",
+  [PermissionKey.ENTER_INTERVIEW_SLOT]:
+    "Record the date, time and room each shortlisted applicant booked for their interview.",
+  [PermissionKey.CLAIM_PANEL_SEAT]:
+    "Take or release a committee seat on an applicant's interview panel — this is what puts someone on a panel.",
+  [PermissionKey.EDIT_OWN_INTERVIEW_NOTES]:
+    "Read and write the interview note for applicants whose panel they sit on, and no one else's.",
+  [PermissionKey.ENTER_FINAL_DECISION]:
+    "Open the final-decision dashboard and record each applicant's accept or reject outcome.",
+  [PermissionKey.MANAGE_CAPACITY]:
+    "Set how many seats each committee is recruiting for in this campaign.",
+  [PermissionKey.IMPORT_APPLICANTS]:
+    "Upload the application CSV and commit the imported applicants into a campaign.",
+  [PermissionKey.MANAGE_ACCOUNTS]:
+    "Full administrative control: create and delete members, change anyone's permissions, and view, edit or reopen any interview note.",
+  [PermissionKey.MANAGE_CAMPAIGNS]:
+    "Create campaigns, and open or close (archive) existing ones.",
+  [PermissionKey.SEND_EMAILS]:
+    "Send the templated result and interview-booking emails to applicants.",
+  [PermissionKey.VIEW_CAMPAIGN_HISTORY]:
+    "Open closed, archived campaigns from previous recruitment cycles.",
+  [PermissionKey.VIEW_ACTIVITY_LOG]:
+    "Read the platform-wide audit trail of every recorded action and who took it.",
+};
 
 /** Human-friendly names for the role templates. */
 export const ROLE_TEMPLATE_LABELS: Record<RoleTemplateName, string> = {

@@ -48,9 +48,9 @@ async function main() {
       run: async () => (await committeeOf("lina@gdgc-issatso.dev")) === Committee.MKT,
     },
     {
-      label: "Lina (Committee Rep) VIEW_COMMITTEE_DASHBOARD (unscoped)",
+      label: "Lina (Committee Rep) CLAIM_PANEL_SEAT (baseline grant)",
       expect: true,
-      run: () => hasPermission(lina, PermissionKey.VIEW_COMMITTEE_DASHBOARD),
+      run: () => hasPermission(lina, PermissionKey.CLAIM_PANEL_SEAT),
     },
     {
       label: "Lina (Committee Rep) ENTER_FINAL_DECISION (not granted)",

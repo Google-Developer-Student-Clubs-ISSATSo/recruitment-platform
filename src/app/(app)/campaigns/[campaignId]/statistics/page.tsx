@@ -1,5 +1,6 @@
-import { requirePermission } from "@/lib/permissions";
-import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
 import {
   formatRate,
   getCampaignStatistics,
@@ -14,9 +15,11 @@ import {
   type RejectionSlice,
 } from "./RejectionDonutChart";
 
-// Campaign statistics. Gated as a whole by VIEW_STATISTICS via the shared
-// route-permission map — there is no partially-visible version of this page, so
-// it uses requirePermission rather than per-section gates.
+// Campaign statistics. Open to every authenticated member — there is no
+// permission gate on this page at all, which is why it has no entry in
+// CAMPAIGN_PAGE_PERMISSIONS. The only check is that someone is signed in, and
+// that is already enforced by the proxy and the (app) layout; the `auth()` call
+// below is defense-in-depth, matching how the other pages resolve their session.
 //
 // Every figure comes from campaign-statistics.ts, which the dashboard's
 // pipeline funnel reads from as well. That is deliberate: the funnel's
@@ -28,9 +31,8 @@ export default async function StatisticsPage({
   params: Promise<{ campaignId: string }>;
 }) {
   const { campaignId } = await params;
-  await requirePermission(CAMPAIGN_PAGE_PERMISSIONS["statistics"], {
-    redirectTo: `/campaigns/${campaignId}/dashboard?denied=1`,
-  });
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
 
   const stats = await getCampaignStatistics(campaignId);
 

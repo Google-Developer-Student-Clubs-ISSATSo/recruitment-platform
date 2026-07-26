@@ -9,9 +9,13 @@ import { PermissionKey } from "@/generated/prisma/enums";
  *   2. the sidebar, to decide whether to render the link at all, and
  *   3. any future middleware/testing that needs the page↔permission map.
  *
- * Note on final-decision: ENTER_FINAL_DECISION gates whether the page loads.
- * VIEW_COMMITTEE_DASHBOARD is a *separate* read-only committee view and no
- * longer stands in for entering the final-decision screen.
+ * Note on final-decision: ENTER_FINAL_DECISION alone gates whether the page
+ * loads. It is the only key that opens it — a Committee Rep without it does not
+ * see the page at all.
+ *
+ * Statistics is deliberately ABSENT from this map: it is open to every
+ * authenticated member, so it has no gating permission for the guards, the
+ * sidebar or the audit script to look up.
  */
 export const CAMPAIGN_PAGE_PERMISSIONS = {
   applicants: PermissionKey.VIEW_FULL_POOL,
@@ -28,7 +32,6 @@ export const CAMPAIGN_PAGE_PERMISSIONS = {
   "phase1/selection": PermissionKey.SCREEN_PHASE1,
   interviews: PermissionKey.CLAIM_PANEL_SEAT,
   "final-decision": PermissionKey.ENTER_FINAL_DECISION,
-  statistics: PermissionKey.VIEW_STATISTICS,
 } as const satisfies Record<string, PermissionKey | readonly PermissionKey[]>;
 
 export type CampaignPage = keyof typeof CAMPAIGN_PAGE_PERMISSIONS;
@@ -76,7 +79,6 @@ export const CAMPAIGN_ACCESS_PERMISSIONS: readonly PermissionKey[] = [
   PermissionKey.SCREEN_PHASE1,
   PermissionKey.CLAIM_PANEL_SEAT,
   PermissionKey.ENTER_FINAL_DECISION,
-  PermissionKey.VIEW_STATISTICS,
   PermissionKey.MANAGE_CAPACITY,
   PermissionKey.CONFIGURE_SCREENING,
   PermissionKey.MANAGE_ACCOUNTS,

@@ -6,7 +6,11 @@ import { motion } from "motion/react";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
-import { HIGH_CONSEQUENCE_PERMISSIONS, humanizePermission } from "./permission-config";
+import {
+  HIGH_CONSEQUENCE_PERMISSIONS,
+  PERMISSION_DEFINITIONS,
+  humanizePermission,
+} from "./permission-config";
 
 /**
  * A single permission toggle chip. Owns its own confirmation gate: turning OFF
@@ -33,6 +37,11 @@ export function PermissionToggle({
   const [flips, setFlips] = useState(0);
   const reduced = useReducedMotion();
   const label = humanizePermission(permission);
+  const definition = PERMISSION_DEFINITIONS[permission];
+  // Ties the sentence to the switch for screen readers without folding it into
+  // the button's accessible NAME, which would make every toggle announce as a
+  // full paragraph. The id is per-user so two rows expanded at once stay unique.
+  const descriptionId = `perm-def-${userName.replace(/\W+/g, "-")}-${permission}`;
   // Only a turn-OFF of a high-consequence permission needs confirmation.
   const needsConfirm = on && HIGH_CONSEQUENCE_PERMISSIONS.has(permission);
 
@@ -50,12 +59,13 @@ export function PermissionToggle({
   }
 
   return (
-    <>
+    <div>
       <button
         type="button"
         onClick={handleClick}
         disabled={disabled}
         aria-pressed={on}
+        aria-describedby={descriptionId}
         className="flex w-full items-center justify-between gap-3 text-left disabled:opacity-60"
       >
         <span className="text-[13px] text-foreground">{label}</span>
@@ -78,6 +88,16 @@ export function PermissionToggle({
         </span>
       </button>
 
+      {/* The definition sits under the row rather than beside it: at four
+          columns on xl there is no horizontal room for a sentence, and the
+          toggle must stay flush right where the eye scans for switch state. */}
+      <p
+        id={descriptionId}
+        className="mt-1 pr-12 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400"
+      >
+        {definition}
+      </p>
+
       {needsConfirm && (
         <ConfirmDialog
           open={confirmOpen}
@@ -95,6 +115,6 @@ export function PermissionToggle({
           onConfirm={() => commit(false)}
         />
       )}
-    </>
+    </div>
   );
 }

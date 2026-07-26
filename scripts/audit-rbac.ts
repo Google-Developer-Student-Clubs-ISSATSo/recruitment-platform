@@ -129,12 +129,6 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
       u.keys.has(PermissionKey.EDIT_OWN_INTERVIEW_NOTES) &&
       !u.keys.has(PermissionKey.MANAGE_ACCOUNTS),
   );
-  const committeeRep = users.find(
-    (u) =>
-      u.keys.has(PermissionKey.VIEW_COMMITTEE_DASHBOARD) &&
-      !u.keys.has(PermissionKey.EDIT_OWN_INTERVIEW_NOTES) &&
-      !u.keys.has(PermissionKey.MANAGE_ACCOUNTS),
-  );
   if (!lead || !panelist) {
     console.log("SKIP  missing a lead or panelist identity to test with.");
     return;
@@ -186,15 +180,21 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
         !(await canEditInterviewNote(otherPanelist.id, aId)),
         `OPEN  EDIT_OWN holder WITHOUT a seat CANNOT edit (${otherPanelist.email})`,
       );
-    }
-    if (committeeRep) {
+      // The rule that replaced the deleted VIEW_COMMITTEE_DASHBOARD preview:
+      // being off the panel now means no READ either, not just no write. No
+      // permission flag grants a look at someone else's interview note.
       record(
-        await canViewInterviewNote(committeeRep.id, aId),
-        `OPEN  committee rep (VIEW_COMMITTEE_DASHBOARD) CAN view`,
+        !(await canViewInterviewNote(otherPanelist.id, aId)),
+        `OPEN  non-panel member CANNOT view (${otherPanelist.email})`,
       );
+    }
+    // Every non-lead identity that isn't on this panel must be refused a read,
+    // whatever bundle they hold — the exhaustive form of the check above.
+    for (const u of users) {
+      if (u.id === panelist.id || u.keys.has(PermissionKey.MANAGE_ACCOUNTS)) continue;
       record(
-        !(await canEditInterviewNote(committeeRep.id, aId)),
-        `OPEN  committee rep CANNOT edit`,
+        !(await canViewInterviewNote(u.id, aId)),
+        `OPEN  off-panel ${u.email} CANNOT view (no dashboard-style fallback)`,
       );
     }
 
@@ -206,12 +206,6 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
     });
     record(!(await canEditInterviewNote(panelist.id, aId)), `CLOSED panelist CANNOT edit`);
     record(!(await canViewInterviewNote(panelist.id, aId)), `CLOSED panelist CANNOT view`);
-    if (committeeRep) {
-      record(
-        !(await canViewInterviewNote(committeeRep.id, aId)),
-        `CLOSED committee rep CANNOT view`,
-      );
-    }
     record(await canEditInterviewNote(lead.id, aId), `CLOSED lead CAN still edit`);
     record(await canViewInterviewNote(lead.id, aId), `CLOSED lead CAN still view`);
 
