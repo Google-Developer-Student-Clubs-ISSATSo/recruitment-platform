@@ -1,13 +1,13 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Committee, PermissionKey } from "@/generated/prisma/enums";
 import { Icon } from "@/components/app-shell/icon";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { AnimatedList } from "@/components/motion/table-slice";
+import { Pager } from "@/components/ui/pager";
 import {
   type AdminUserRow,
   type TemplateOption,
@@ -437,7 +437,15 @@ export function PermissionTable({
               {matchingCount === 1 ? "" : "s"}
             </span>
             {pageCount > 1 && (
-              <Pagination page={page} pageCount={pageCount} pageHref={pageHref} />
+              <Pager
+                page={page}
+                pageCount={pageCount}
+                total={matchingCount}
+                pageSize={pageSize}
+                rowCount={members.length}
+                pageHref={pageHref}
+                hideSummary
+              />
             )}
           </div>
         </div>
@@ -453,82 +461,6 @@ export function PermissionTable({
           />
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-/** At most this many numbered page links, windowed around the current page. */
-const PAGE_WINDOW = 5;
-
-/**
- * Real links to `?page=N`, so paging re-runs the server query with a new
- * skip/take. Prev/Next become inert spans at the ends — a disabled <a> is still
- * followable, so the element type changes, not just its styling.
- */
-function Pagination({
-  page,
-  pageCount,
-  pageHref,
-}: {
-  page: number;
-  pageCount: number;
-  pageHref: (n: number) => string;
-}) {
-  const windowStart = Math.max(
-    1,
-    Math.min(page - Math.floor(PAGE_WINDOW / 2), pageCount - PAGE_WINDOW + 1),
-  );
-  const windowEnd = Math.min(pageCount, windowStart + PAGE_WINDOW - 1);
-  const pages = Array.from(
-    { length: windowEnd - windowStart + 1 },
-    (_, i) => windowStart + i,
-  );
-
-  const arrowClass =
-    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800";
-  const arrowDisabledClass =
-    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-300 opacity-40 dark:border-neutral-800 dark:text-neutral-600";
-
-  return (
-    <div className="flex items-center gap-1">
-      {page > 1 ? (
-        <Link href={pageHref(page - 1)} aria-label="Previous page" className={arrowClass}>
-          <Icon name="chevron_left" className="text-[20px]" />
-        </Link>
-      ) : (
-        <span aria-hidden className={arrowDisabledClass}>
-          <Icon name="chevron_left" className="text-[20px]" />
-        </span>
-      )}
-      {pages.map((n) =>
-        n === page ? (
-          <span
-            key={n}
-            aria-current="page"
-            className="flex size-8 items-center justify-center rounded bg-primary text-sm font-semibold text-white"
-          >
-            {n}
-          </span>
-        ) : (
-          <Link
-            key={n}
-            href={pageHref(n)}
-            aria-label={`Page ${n}`}
-            className="flex size-8 items-center justify-center rounded border border-neutral-200 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-          >
-            {n}
-          </Link>
-        ),
-      )}
-      {page < pageCount ? (
-        <Link href={pageHref(page + 1)} aria-label="Next page" className={arrowClass}>
-          <Icon name="chevron_right" className="text-[20px]" />
-        </Link>
-      ) : (
-        <span aria-hidden className={arrowDisabledClass}>
-          <Icon name="chevron_right" className="text-[20px]" />
-        </span>
-      )}
     </div>
   );
 }

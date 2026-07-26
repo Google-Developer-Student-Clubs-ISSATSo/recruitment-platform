@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Icon, type IconName } from "@/components/app-shell/icon";
@@ -16,6 +15,7 @@ import {
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { AnimatedCardList, AnimatedTableBody } from "@/components/motion/table-slice";
+import { Pager } from "@/components/ui/pager";
 
 import { RefreshButton } from "./refresh-button";
 import {
@@ -389,131 +389,22 @@ export function ActivityLogList({
           )}
         </div>
 
-        <Pagination
+        <Pager
           pageHref={pageHref}
           page={page}
           pageCount={pageCount}
           pageSize={pageSize}
           total={total}
           rowCount={rows.length}
+          layoutId="activity-log-page-indicator"
+          summary={
+            <>
+              Showing {total === 0 ? 0 : (page - 1) * pageSize + 1} to{" "}
+              {(page - 1) * pageSize + rows.length} of {total} results
+            </>
+          }
         />
       </section>
-    </div>
-  );
-}
-
-/** At most this many numbered page links, windowed around the current page. */
-const PAGE_WINDOW = 5;
-
-/**
- * Server-rendered pager: every control is a real link to `?page=N`, so paging
- * re-runs the server query with a new skip/take rather than filtering rows in
- * the browser. Prev/Next become inert spans at the ends — a disabled <a> is
- * still followable, so the element type changes rather than just its styling.
- */
-function Pagination({
-  pageHref,
-  page,
-  pageCount,
-  pageSize,
-  total,
-  rowCount,
-}: {
-  /** Builds a link to page n, carrying the active filters. */
-  pageHref: (n: number) => string;
-  page: number;
-  pageCount: number;
-  pageSize: number;
-  total: number;
-  rowCount: number;
-}) {
-  const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const last = (page - 1) * pageSize + rowCount;
-
-  // Slide the window so the current page stays inside it, then clamp to the
-  // real range — near either end the window shortens rather than running off.
-  const windowStart = Math.max(1, Math.min(page - Math.floor(PAGE_WINDOW / 2), pageCount - PAGE_WINDOW + 1));
-  const windowEnd = Math.min(pageCount, windowStart + PAGE_WINDOW - 1);
-  const pages = Array.from(
-    { length: windowEnd - windowStart + 1 },
-    (_, i) => windowStart + i,
-  );
-
-  const reduced = useReducedMotion();
-  const arrowClass =
-    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-500 transition-colors duration-150 ease-out hover:bg-neutral-100 motion-reduce:transition-none dark:border-neutral-700 dark:hover:bg-neutral-800";
-  const arrowDisabledClass =
-    "flex size-8 items-center justify-center rounded border border-neutral-200 text-neutral-300 opacity-40 dark:border-neutral-800 dark:text-neutral-600";
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-6 py-4 dark:border-neutral-800 dark:bg-neutral-950/40">
-      <span className="text-sm text-neutral-500 dark:text-neutral-400">
-        Showing {first} to {last} of {total} results
-      </span>
-      <div className="flex items-center gap-1">
-        {page > 1 ? (
-          <Link
-            href={pageHref(page - 1)}
-            aria-label="Previous page"
-            className={arrowClass}
-          >
-            <Icon name="chevron_left" className="text-[20px]" />
-          </Link>
-        ) : (
-          <span aria-hidden className={arrowDisabledClass}>
-            <Icon name="chevron_left" className="text-[20px]" />
-          </span>
-        )}
-
-        {pages.map((n) =>
-          n === page ? (
-            // relative + isolate so the sliding pill sits behind the digit
-            // rather than over it — same shared-element treatment as the
-            // Applicants pager, with its own layoutId so the two never collide.
-            <span
-              key={n}
-              aria-current="page"
-              className="relative isolate flex size-8 items-center justify-center rounded text-sm font-semibold text-white"
-            >
-              <motion.span
-                aria-hidden
-                layoutId="activity-log-page-indicator"
-                layout={!reduced}
-                transition={
-                  reduced
-                    ? { duration: 0 }
-                    : { duration: DURATION.base, ease: EASE.inOut }
-                }
-                className="absolute inset-0 -z-10 rounded bg-primary"
-              />
-              {n}
-            </span>
-          ) : (
-            <Link
-              key={n}
-              href={pageHref(n)}
-              aria-label={`Page ${n}`}
-              className="flex size-8 items-center justify-center rounded border border-neutral-200 text-sm text-neutral-500 transition-colors duration-150 ease-out hover:bg-neutral-100 motion-reduce:transition-none dark:border-neutral-700 dark:hover:bg-neutral-800"
-            >
-              {n}
-            </Link>
-          ),
-        )}
-
-        {page < pageCount ? (
-          <Link
-            href={pageHref(page + 1)}
-            aria-label="Next page"
-            className={arrowClass}
-          >
-            <Icon name="chevron_right" className="text-[20px]" />
-          </Link>
-        ) : (
-          <span aria-hidden className={arrowDisabledClass}>
-            <Icon name="chevron_right" className="text-[20px]" />
-          </span>
-        )}
-      </div>
     </div>
   );
 }

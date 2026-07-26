@@ -46,13 +46,6 @@ export const EASE = {
   inOut: [0.4, 0, 0.2, 1],
 } as const;
 
-/** CSS-ready equivalents, for `style={{ transitionTimingFunction: … }}`. */
-export const EASE_CSS = {
-  out: `cubic-bezier(${EASE.out.join(",")})`,
-  in: `cubic-bezier(${EASE.in.join(",")})`,
-  inOut: `cubic-bezier(${EASE.inOut.join(",")})`,
-} as const;
-
 /**
  * Stagger step between siblings in a list or grid. Small on purpose: with ~7
  * widgets a 0.05s step finishes the whole sequence in under 0.35s, so the last
@@ -70,20 +63,6 @@ export const TRANSITION = {
 } as const;
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-
-/**
- * Whether the OS asks for reduced motion, read straight from
- * `window.matchMedia('(prefers-reduced-motion: reduce)')`.
- *
- * Returns false during SSR, which is the safe direction: the server renders the
- * animated markup, and the first client render corrects it before paint via the
- * hook below. Callers that animate MUST gate on this — it is not optional, and
- * "reduced" here means no movement at all rather than a shorter movement.
- */
-export function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
-  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
-}
 
 function subscribe(onChange: () => void) {
   if (typeof window === "undefined" || !window.matchMedia) return () => {};
