@@ -12,6 +12,59 @@ const LINKEDIN_FIELD = "LinkedIn link";
 // never repeated in the "Other Submitted Answers" section.
 const FULL_NAME_FIELD = "Full name";
 
+// Consent checkbox from the form — a real CSV column, but never useful to a
+// reviewer and not part of the rubric. Excluded from "Other Submitted
+// Answers" the same way FULL_NAME_FIELD is.
+const TERMS_FIELD = "Terms and Conditions";
+
+// A TM-internal judgment call with no CSV column behind it — its rawFormData
+// lookup will never find anything, so its "No answer found" card reads like a
+// data problem when it's actually expected. Scoped to this exact question by
+// TEXT (not "any question with a null sourceField", which would also catch
+// Technical Skills — a different question, not touched here). Hidden from the
+// Answers panel only: the Scoring panel iterates `questions` directly and is
+// untouched, so this question keeps its normal editable score input there.
+const NO_FORM_QUESTION_TEXT = "BIG YES VS BIG NO";
+
+// "Looks like a URL": either an explicit http(s):// protocol, or a bare
+// domain-shaped string. GitHub/LinkedIn/Facebook answers are stored exactly
+// the latter way — e.g. "github.com/username", never "https://…" — so both
+// forms have to be detected, not just one. Anchored at both ends so an
+// ordinary sentence that merely contains something dot-shaped isn't mistaken
+// for a link.
+const URL_LIKE_PATTERN = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/.*)?$/i;
+
+function isLikelyUrl(value: string): boolean {
+  return URL_LIKE_PATTERN.test(value);
+}
+
+// One answer value, rendered as a clickable link when it looks like a URL —
+// normalizing a bare domain to an https:// href the same way the
+// technical-only view's LinkCard already does — or as plain text otherwise.
+// Shared by the per-question cards and "Other Submitted Answers" so a URL
+// reads identically wherever it appears.
+function AnswerValue({ value }: { value: string }) {
+  if (isLikelyUrl(value)) {
+    const href = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1.5 inline-flex items-center gap-1 break-all text-sm font-medium text-primary hover:underline"
+      >
+        {value}
+        <Icon name="open_in_new" className="text-[14px]" />
+      </a>
+    );
+  }
+  return (
+    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+      {value}
+    </p>
+  );
+}
+
 // Reading pane. One component, two modes (STEP 5 — a variant, not a duplicate):
 //   - "full": for each ACTIVE NON-TECHNICAL question, show the question text and
 //     the applicant's answer, falling back to a clear "No answer found" state
@@ -43,6 +96,14 @@ const FULL_NAME_FIELD = "Full name";
 // as the per-question lookup above — a raw key that differs from a question's
 // configured key by even one character (a typo, stray punctuation, a reworded
 // form label) will show up here too, since it genuinely didn't match anything.
+// FULL_NAME_FIELD and TERMS_FIELD are excluded from that section on top of the
+// configured-question keys — identity and consent, never useful to show as a
+// "reference answer." NO_FORM_QUESTION_TEXT is excluded from the per-question
+// cards instead (see its own comment above) — it never had an answer to find.
+//
+// Any answer value — in a per-question card or in "Other Submitted Answers" —
+// that looks like a URL renders as a real link via AnswerValue rather than
+// plain text.
 export function ApplicantAnswerPanel({
   viewMode,
   fullName,
@@ -75,7 +136,9 @@ export function ApplicantAnswerPanel({
     );
   }
 
-  const answered = questions.filter((q) => !q.requiresTechnicalScorer);
+  const answered = questions.filter(
+    (q) => !q.requiresTechnicalScorer && q.text !== NO_FORM_QUESTION_TEXT,
+  );
 
   // Every key ANY active question is configured to read from — technical
   // included, even though it has no card in this reading pane, because its
@@ -86,6 +149,7 @@ export function ApplicantAnswerPanel({
   const extraEntries = Object.entries(rawFormData ?? {}).filter(
     ([key, value]) =>
       key !== FULL_NAME_FIELD &&
+      key !== TERMS_FIELD &&
       !configuredKeys.has(key) &&
       typeof value === "string",
   ) as [string, string][];
@@ -101,9 +165,7 @@ export function ApplicantAnswerPanel({
           >
             <p className="text-sm font-semibold text-foreground">{q.text}</p>
             {answer ? (
-              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-                {answer}
-              </p>
+              <AnswerValue value={answer} />
             ) : (
               <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-[color:var(--status-pending)]">
                 <Icon name="help" className="text-[16px]" />
@@ -136,9 +198,7 @@ export function ApplicantAnswerPanel({
                     {key}
                   </p>
                   {trimmed ? (
-                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-                      {trimmed}
-                    </p>
+                    <AnswerValue value={trimmed} />
                   ) : (
                     <p className="mt-1.5 text-sm italic text-neutral-400">
                       Not provided
