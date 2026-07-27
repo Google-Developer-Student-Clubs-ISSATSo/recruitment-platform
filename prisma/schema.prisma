@@ -215,14 +215,21 @@ model Campaign {
   finalDecisionCompletedAt DateTime?
 
   // External destinations interpolated into the two final-result emails. Kept
-  // per-campaign, like interviewCalendarLink and for the same reason: the
-  // acceptance form and the Discord invite are regenerated every cycle, and a
-  // hardcoded constant would silently mail last year's links. All four are null
-  // until set on the Configuration page; the batch refuses to send without them.
+  // per-campaign, like interviewCalendarLink, so each field can still be
+  // overridden per cycle from the Configuration page — but they split into two
+  // groups:
+  //   - acceptanceFormLink: genuinely regenerated every cycle (a fresh Google
+  //     Form), so a hardcoded/defaulted value would silently mail a stale form.
+  //     Null until someone sets it; the batch refuses to send without it.
+  //   - gdgcProgramLink / gdgcPlatformLink / discordInviteLink: the club's own
+  //     stable destinations, which rarely change year to year. Defaulted below
+  //     so a brand-new campaign (or the first-ever setup) starts pre-filled
+  //     instead of forcing someone to retype the same three URLs every time —
+  //     still freely editable/clearable on the Configuration page afterwards.
   acceptanceFormLink String?
-  gdgcProgramLink    String?
-  gdgcPlatformLink   String?
-  discordInviteLink  String?
+  gdgcProgramLink    String? @default("https://developers.google.com/community")
+  gdgcPlatformLink   String? @default("https://gdg.community.dev/gdg-on-campus-higher-institute-of-applied-science-and-technology-sousse-tunisia/")
+  discordInviteLink  String? @default("https://discord.com/invite/46WDzCFkBT")
 
   applicants          Applicant[]
   phaseOneQuestions   PhaseOneQuestion[]
