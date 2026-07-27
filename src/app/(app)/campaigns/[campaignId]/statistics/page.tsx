@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import {
   formatRate,
   getCampaignStatistics,
@@ -31,7 +31,7 @@ export default async function StatisticsPage({
   params: Promise<{ campaignId: string }>;
 }) {
   const { campaignId } = await params;
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) redirect("/login");
 
   const stats = await getCampaignStatistics(campaignId);

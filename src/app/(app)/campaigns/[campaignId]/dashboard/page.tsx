@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { PermissionGate } from "@/components/permission-gate";
@@ -67,7 +67,7 @@ export default async function CampaignDashboardPage({
   const { campaignId } = await params;
   const { denied } = await searchParams;
 
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
 

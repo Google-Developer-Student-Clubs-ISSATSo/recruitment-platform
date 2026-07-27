@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
@@ -17,7 +17,7 @@ type EntryRow = {
 // unless the current user holds VIEW_ACTIVITY_LOG, so the control is entirely
 // hidden for everyone else (consistent with the rest of the permission-gated UI).
 export async function NotificationBell() {
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
   if (!userId) return null;
 

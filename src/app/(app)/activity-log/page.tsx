@@ -73,8 +73,20 @@ export default async function ActivityLogPage({
       : {}),
   };
 
-  const [entries, total, actionsToday, securityEvents, mostActiveGroup] =
-    await Promise.all([
+  // One wave, not three. These are all independent of each other, so awaiting
+  // the filter-option queries separately afterwards just added a second round
+  // trip to Neon for no reason — and the "most active user" name used to cost a
+  // third, even though `actors` below already carries every id/name pair it
+  // could resolve to.
+  const [
+    entries,
+    total,
+    actionsToday,
+    securityEvents,
+    mostActiveGroup,
+    distinctActions,
+    actors,
+  ] = await Promise.all([
       prisma.activityLogEntry.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -95,26 +107,23 @@ export default async function ActivityLogPage({
         orderBy: { _count: { actorId: "desc" } },
         take: 1,
       }),
+      // Filter options describe the WHOLE log, not the ten rows on this page and
+      // not the current filter — deriving them from `entries` would make the
+      // dropdowns change contents as you page, and deriving them from the
+      // filtered set would strand you on a selection you couldn't undo.
+      prisma.activityLogEntry.findMany({
+        distinct: ["actionType"],
+        select: { actionType: true },
+        orderBy: { actionType: "asc" },
+      }),
+      // Filtering is by id, not name: two members can share a display name, and
+      // an id survives a rename.
+      prisma.user.findMany({
+        where: { activityLogs: { some: {} } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
     ]);
-
-  // Filter options describe the WHOLE log, not the ten rows on this page and not
-  // the current filter — deriving them from `entries` would make the dropdowns
-  // change contents as you page, and deriving them from the filtered set would
-  // strand you on a selection you couldn't undo.
-  const [distinctActions, actors] = await Promise.all([
-    prisma.activityLogEntry.findMany({
-      distinct: ["actionType"],
-      select: { actionType: true },
-      orderBy: { actionType: "asc" },
-    }),
-    // Filtering is by id, not name: two members can share a display name, and an
-    // id survives a rename.
-    prisma.user.findMany({
-      where: { activityLogs: { some: {} } },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
 
   const rows: ActivityLogRow[] = entries.map((e: EntryRow) => ({
     id: e.id,
@@ -125,15 +134,12 @@ export default async function ActivityLogPage({
     details: formatDetails(e.details),
   }));
 
-  let mostActiveUser = "—";
+  // Resolved from `actors`, which is every user who has ever logged an entry —
+  // so the top actor is necessarily in it. That makes the extra findUnique this
+  // used to run pure overhead.
   const topActorId = mostActiveGroup[0]?.actorId;
-  if (topActorId) {
-    const topActor = await prisma.user.findUnique({
-      where: { id: topActorId },
-      select: { name: true },
-    });
-    mostActiveUser = topActor?.name ?? "—";
-  }
+  const mostActiveUser =
+    (topActorId ? actors.find((a) => a.id === topActorId)?.name : null) ?? "—";
 
   const summary: ActivitySummary = {
     actionsToday,

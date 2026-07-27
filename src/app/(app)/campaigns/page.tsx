@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hasAnyPermission } from "@/lib/permissions";
 import {
@@ -31,7 +31,7 @@ export default async function CampaignsPage({
 }) {
   const { denied } = await searchParams;
 
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
 

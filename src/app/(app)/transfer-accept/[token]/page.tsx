@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { Icon } from "@/components/app-shell/icon";
 import { Committee, InviteStatus } from "@/generated/prisma/enums";
@@ -24,7 +24,7 @@ export default async function TransferAcceptPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
 
   const invite = await prisma.adminTransferInvite.findUnique({

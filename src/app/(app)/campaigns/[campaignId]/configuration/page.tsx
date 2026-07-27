@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { PermissionGate } from "@/components/permission-gate";
@@ -24,7 +24,7 @@ export default async function ConfigurationPage({
 }) {
   const { campaignId } = await params;
 
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
 

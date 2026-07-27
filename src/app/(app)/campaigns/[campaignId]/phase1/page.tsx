@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { PermissionKey, ApplicantStatus } from "@/generated/prisma/enums";
@@ -29,7 +29,7 @@ export default async function Phase1Page({
 }) {
   const { campaignId } = await params;
 
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
 

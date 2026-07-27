@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { ROLE_TEMPLATE_LABELS } from "@/app/admin/permissions/permission-config";
@@ -22,7 +22,7 @@ export type ShellUser = {
 // layout so the sidebar/top bar are built the same way everywhere. Redirects
 // to /login if there is no session (defense-in-depth alongside the proxy).
 export async function getShellUser(): Promise<ShellUser> {
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
 

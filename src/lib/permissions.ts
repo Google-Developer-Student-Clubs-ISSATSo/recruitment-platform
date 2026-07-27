@@ -1,24 +1,13 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import type { UserPermission } from "@/generated/prisma/client";
 import type { PermissionKey } from "@/generated/prisma/enums";
 // Value import (not just the type) — the interview-note helpers below compare
 // against specific permission keys at runtime.
 import { PermissionKey as PermissionKeyEnum } from "@/generated/prisma/enums";
-
-export const hasPermission = cache(async function hasPermission(
-  userId: string,
-  permission: PermissionKey,
-): Promise<boolean> {
-  const match = await prisma.userPermission.findFirst({
-    where: { userId, permission },
-    select: { id: true },
-  });
-  return match !== null;
-});
 
 export const getUserPermissions = cache(async function getUserPermissions(
   userId: string,
@@ -28,6 +17,23 @@ export const getUserPermissions = cache(async function getUserPermissions(
     orderBy: { permission: "asc" },
   });
 });
+
+/**
+ * Derived from the request-cached permission LIST rather than querying for the
+ * one key. A single render asks about several different permissions — the page
+ * guard, then each `<PermissionGate>`, then per-section checks — and a
+ * per-key `findFirst` made every one of those its own round trip, since
+ * `cache()` keys on the arguments and the permission differs each time.
+ * Reading the user's whole (small) permission set once means the first check
+ * costs one query and every later check in the same request is free.
+ */
+export async function hasPermission(
+  userId: string,
+  permission: PermissionKey,
+): Promise<boolean> {
+  const permissions = await getUserPermissions(userId);
+  return permissions.some((p) => p.permission === permission);
+}
 
 /**
  * Is this applicant's interview note closed?
@@ -61,24 +67,71 @@ export const isInterviewNoteClosed = cache(async function isInterviewNoteClosed(
  * every interviewer, so without it anyone could write into any candidate's note.
  * "Own" means the interviews you are on, and the seat is what establishes that.
  */
-export const canEditInterviewNote = cache(async function canEditInterviewNote(
+/**
+ * The note-access rules themselves, as a pure function of the four facts they
+ * depend on. This is the single source of truth: the async helpers below gather
+ * those facts from the database for ONE applicant, while a list view that has
+ * already loaded `interviewNote.closedAt` and the panel's seats can call this
+ * directly and decide for every row without another query (see the interviews
+ * board). Keeping the rules here is what stops those two paths from drifting.
+ */
+export function evaluateNoteAccess({
+  canManageAccounts,
+  canEditOwnNotes,
+  noteClosed,
+  holdsSeat,
+}: {
+  canManageAccounts: boolean;
+  canEditOwnNotes: boolean;
+  noteClosed: boolean;
+  holdsSeat: boolean;
+}): { canEdit: boolean; canView: boolean } {
+  // The TM Lead can always edit any note, panel or not, open or closed.
+  if (canManageAccounts) return { canEdit: true, canView: true };
+  // A closed note is off-limits to everyone else — no read access either.
+  if (noteClosed) return { canEdit: false, canView: false };
+  // On an open note: the permission AND a seat on this applicant's panel.
+  const canEdit = canEditOwnNotes && holdsSeat;
+  return { canEdit, canView: canEdit };
+}
+
+/** Does this user hold a seat on this applicant's interview panel? */
+const holdsPanelSeat = cache(async function holdsPanelSeat(
   userId: string,
   applicantId: string,
 ): Promise<boolean> {
-  if (await hasPermission(userId, PermissionKeyEnum.MANAGE_ACCOUNTS)) return true;
-
-  // A closed note is off-limits to everyone except MANAGE_ACCOUNTS (handled above).
-  if (await isInterviewNoteClosed(applicantId)) return false;
-
-  if (!(await hasPermission(userId, PermissionKeyEnum.EDIT_OWN_INTERVIEW_NOTES))) {
-    return false;
-  }
-
   const seat = await prisma.panelSeat.findFirst({
     where: { claimedById: userId, panel: { applicantId } },
     select: { id: true },
   });
   return seat !== null;
+});
+
+/** The four inputs for one applicant, gathered concurrently. */
+const noteAccessFor = cache(async function noteAccessFor(
+  userId: string,
+  applicantId: string,
+) {
+  const [canManageAccounts, canEditOwnNotes, noteClosed, holdsSeat] =
+    await Promise.all([
+      hasPermission(userId, PermissionKeyEnum.MANAGE_ACCOUNTS),
+      hasPermission(userId, PermissionKeyEnum.EDIT_OWN_INTERVIEW_NOTES),
+      isInterviewNoteClosed(applicantId),
+      holdsPanelSeat(userId, applicantId),
+    ]);
+  return evaluateNoteAccess({
+    canManageAccounts,
+    canEditOwnNotes,
+    noteClosed,
+    holdsSeat,
+  });
+});
+
+export const canEditInterviewNote = cache(async function canEditInterviewNote(
+  userId: string,
+  applicantId: string,
+): Promise<boolean> {
+  return (await noteAccessFor(userId, applicantId)).canEdit;
 });
 
 /**
@@ -99,10 +152,7 @@ export const canViewInterviewNote = cache(async function canViewInterviewNote(
   userId: string,
   applicantId: string,
 ): Promise<boolean> {
-  if (await hasPermission(userId, PermissionKeyEnum.MANAGE_ACCOUNTS)) return true;
-  if (await isInterviewNoteClosed(applicantId)) return false;
-
-  return canEditInterviewNote(userId, applicantId);
+  return (await noteAccessFor(userId, applicantId)).canView;
 });
 
 /** True if the user holds at least one of the given permissions. */
@@ -137,7 +187,7 @@ export async function requirePermission(
     redirectTo?: string;
   },
 ): Promise<string> {
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
 
   if (!userId) {

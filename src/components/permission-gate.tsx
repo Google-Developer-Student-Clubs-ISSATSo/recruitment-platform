@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { hasAnyPermission } from "@/lib/permissions";
 import { pageAccessKeys } from "@/lib/route-permissions";
 import type { PermissionKey } from "@/generated/prisma/enums";
@@ -23,7 +23,7 @@ export async function PermissionGate({
   permission: PermissionKey | readonly PermissionKey[];
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  const session = await getSession();
   const userId = session?.user?.id;
   if (!userId) return null;
 

@@ -2,8 +2,7 @@ import { prisma } from "@/lib/prisma";
 import {
   requirePermission,
   hasPermission,
-  canEditInterviewNote,
-  canViewInterviewNote,
+  evaluateNoteAccess,
 } from "@/lib/permissions";
 import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
 import { INTERVIEW_TEMPLATE } from "@/lib/interview-email-templates";
@@ -42,6 +41,7 @@ export default async function InterviewsPage({
     canSendEmails,
     canEnterSlot,
     canOverrideRelease,
+    canEditOwnNotes,
     currentUser,
     scheduled,
   ] = await Promise.all([
@@ -74,6 +74,7 @@ export default async function InterviewsPage({
     hasPermission(userId, PermissionKey.SEND_EMAILS),
     hasPermission(userId, PermissionKey.ENTER_INTERVIEW_SLOT),
     hasPermission(userId, PermissionKey.MANAGE_ACCOUNTS),
+    hasPermission(userId, PermissionKey.EDIT_OWN_INTERVIEW_NOTES),
     prisma.user.findUnique({
       where: { id: userId },
       select: { committee: true },
@@ -139,14 +140,26 @@ export default async function InterviewsPage({
 
   // Note access is per applicant: edit rights depend on holding a seat on that
   // specific panel, so it genuinely differs card to card for the same viewer.
-  // Both helpers are request-cached, so this is a handful of queries at most.
-  const accessEntries = await Promise.all(
-    scheduled.map(async (a): Promise<[string, NoteAccess]> => {
-      if (await canEditInterviewNote(userId, a.id)) return [a.id, "edit"];
-      if (await canViewInterviewNote(userId, a.id)) return [a.id, "view"];
-      return [a.id, "none"];
-    }),
-  );
+  //
+  // Computed in memory rather than by asking the permission helpers per row.
+  // Those helpers cache on (userId, applicantId), so a distinct applicant per
+  // card meant no reuse at all — every card cost its own note lookup and seat
+  // lookup, i.e. 2 queries per scheduled applicant. The `scheduled` query above
+  // already selects `interviewNote.closedAt` and every seat's `claimedById`, so
+  // the same decision falls out of data we have in hand for zero extra queries.
+  // The rules themselves stay in evaluateNoteAccess, shared with the
+  // single-applicant helpers used by the notes page.
+  const accessEntries: [string, NoteAccess][] = scheduled.map((a) => {
+    const { canEdit, canView } = evaluateNoteAccess({
+      canManageAccounts: canOverrideRelease,
+      canEditOwnNotes,
+      noteClosed: a.interviewNote?.closedAt != null,
+      holdsSeat: (a.interviewPanel?.seats ?? []).some(
+        (s) => s.claimedById === userId,
+      ),
+    });
+    return [a.id, canEdit ? "edit" : canView ? "view" : "none"];
+  });
   const boardDays = groupScheduledIntoDays(scheduled, new Map(accessEntries));
 
   // Which sections this user will actually see. Drives only the description
