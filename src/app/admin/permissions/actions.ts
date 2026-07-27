@@ -293,6 +293,135 @@ export async function bulkSetPermission(
   };
 }
 
+export type BulkDeletePreviewUser = { id: string; name: string; email: string };
+
+export type BulkDeletePreview = {
+  /** Users that would actually be deleted, for the confirmation dialog to list by name. */
+  eligible: BulkDeletePreviewUser[];
+  /** Selected users dropped because they are the TM Lead. */
+  skippedLeadCount: number;
+  /** Selected users dropped because it's the acting admin's own account. */
+  skippedSelfCount: number;
+};
+
+/**
+ * Re-reads the current selection from the database so the confirmation dialog
+ * can list exactly who will be deleted by name/email — never trusting
+ * client-held rows, which may be stale or (for a cross-page "select all
+ * matching" selection) not held by the client at all.
+ */
+export async function previewBulkDelete(
+  userIds: string[],
+): Promise<BulkDeletePreview> {
+  const actorId = await requirePermission(ADMIN);
+
+  const requested = [...new Set(userIds)].filter(Boolean);
+  if (requested.length === 0) {
+    return { eligible: [], skippedLeadCount: 0, skippedSelfCount: 0 };
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: requested } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      roleTemplate: { select: { name: true } },
+    },
+  });
+
+  const skippedSelfCount = users.filter((u) => u.id === actorId).length;
+  const withoutSelf = users.filter((u) => u.id !== actorId);
+  const eligible = withoutSelf.filter(
+    (u) => u.roleTemplate?.name !== RoleTemplateName.TM_LEAD,
+  );
+  const skippedLeadCount = withoutSelf.length - eligible.length;
+
+  return {
+    eligible: eligible.map((u) => ({
+      id: u.id,
+      name: u.name ?? u.email,
+      email: u.email,
+    })),
+    skippedLeadCount,
+    skippedSelfCount,
+  };
+}
+
+export type BulkDeleteResult = {
+  deletedCount: number;
+  skippedLeadCount: number;
+  skippedSelfCount: number;
+};
+
+/**
+ * Permanently remove many members in one batch. Mirrors {@link deleteUser}'s
+ * FK cleanup (ActivityLogEntry.actor and AdminTransferInvite.initiator are
+ * NOT cascaded) but does it once for the whole batch via deleteMany, not in a
+ * loop of individual deletes. The acting admin's own account and the TM
+ * Lead's are always dropped server-side regardless of what the client sent —
+ * the same rules {@link assertNotLead} and the self-guard in {@link deleteUser}
+ * enforce for a single delete.
+ *
+ * Exactly one activity entry is written for the whole operation.
+ */
+export async function bulkDeleteUsers(
+  userIds: string[],
+): Promise<BulkDeleteResult> {
+  const actorId = await requirePermission(ADMIN);
+
+  const requested = [...new Set(userIds)].filter(Boolean);
+  if (requested.length === 0) {
+    return { deletedCount: 0, skippedLeadCount: 0, skippedSelfCount: 0 };
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: requested } },
+    select: {
+      id: true,
+      email: true,
+      roleTemplate: { select: { name: true } },
+    },
+  });
+
+  const skippedSelfCount = users.filter((u) => u.id === actorId).length;
+  const withoutSelf = users.filter((u) => u.id !== actorId);
+  const eligible = withoutSelf.filter(
+    (u) => u.roleTemplate?.name !== RoleTemplateName.TM_LEAD,
+  );
+  const skippedLeadCount = withoutSelf.length - eligible.length;
+  const deletedUserIds = eligible.map((u) => u.id);
+
+  if (deletedUserIds.length > 0) {
+    await prisma.$transaction([
+      prisma.activityLogEntry.deleteMany({
+        where: { actorId: { in: deletedUserIds } },
+      }),
+      prisma.adminTransferInvite.deleteMany({
+        where: { initiatedBy: { in: deletedUserIds } },
+      }),
+      prisma.user.deleteMany({ where: { id: { in: deletedUserIds } } }),
+    ]);
+
+    await logActivity({
+      actorId,
+      actionType: "BULK_USER_DELETED",
+      targetType: "User",
+      details: {
+        deletedEmails: eligible.map((u) => u.email),
+        deletedCount: deletedUserIds.length,
+      },
+    });
+  }
+
+  revalidatePath(PATH);
+  return {
+    deletedCount: deletedUserIds.length,
+    skippedLeadCount,
+    skippedSelfCount,
+  };
+}
+
 // Reset a user's permissions to the defaults of the template they were
 // originally assigned. The user's stored roleTemplateId is the source of
 // truth — we do not trust a template passed from the client or infer one.

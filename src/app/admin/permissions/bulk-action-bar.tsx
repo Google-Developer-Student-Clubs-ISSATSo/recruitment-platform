@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
+import { Trash2 } from "lucide-react";
 
 import { PermissionKey } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
@@ -24,11 +25,17 @@ export function BulkActionBar({
   pending,
   onApply,
   onClear,
+  onDeleteSelected,
+  deletePreviewLoading,
 }: {
   selectedCount: number;
   pending: boolean;
   onApply: (permission: PermissionKey, grant: boolean) => void;
   onClear: () => void;
+  /** Kicks off the delete confirmation flow (loads a name/email preview, then opens the dialog) in the parent. */
+  onDeleteSelected: () => void;
+  /** True while the preview for the delete dialog is loading. */
+  deletePreviewLoading: boolean;
 }) {
   const [permission, setPermission] = useState<PermissionKey | "">("");
   const [confirming, setConfirming] = useState<null | "grant" | "revoke">(null);
@@ -90,6 +97,16 @@ export function BulkActionBar({
       >
         <Icon name="do_not_disturb_on" className="text-[16px]" />
         Revoke
+      </Button>
+
+      <Button
+        size="sm"
+        variant="destructive"
+        disabled={pending || deletePreviewLoading}
+        onClick={onDeleteSelected}
+      >
+        <Trash2 className="size-[16px]" aria-hidden />
+        {deletePreviewLoading ? "Loading…" : "Delete Selected"}
       </Button>
 
       <button

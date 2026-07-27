@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 
 import { Committee, PermissionKey } from "@/generated/prisma/enums";
 import { Icon } from "@/components/app-shell/icon";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { AnimatedList } from "@/components/motion/table-slice";
 import { Pager } from "@/components/ui/pager";
@@ -13,11 +14,14 @@ import {
   type TemplateOption,
 } from "./permission-config";
 import {
+  bulkDeleteUsers,
   bulkSetPermission,
   createUser,
   deleteUser,
+  previewBulkDelete,
   resetToTemplate,
   togglePermission,
+  type BulkDeletePreviewUser,
   type CreateUserState,
 } from "./actions";
 import { UserRow } from "./user-row";
@@ -64,6 +68,11 @@ export function PermissionTable({
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const [deletePreview, setDeletePreview] = useState<
+    BulkDeletePreviewUser[] | null
+  >(null);
+  const [deletePreviewLoading, setDeletePreviewLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [createState, createAction, creating] = useActionState(
     createUser,
@@ -163,6 +172,35 @@ export function PermissionTable({
   function remove(userId: string) {
     startTransition(async () => {
       await deleteUser(userId);
+    });
+  }
+
+  // Re-reads the current selection from the database before opening the
+  // confirm dialog, so it lists exactly who will be deleted by name/email —
+  // reliable even for a cross-page "select all matching" selection, which the
+  // client never holds full member records for.
+  function startBulkDelete() {
+    setBulkNotice(null);
+    const ids = [...selected];
+    setDeletePreviewLoading(true);
+    startTransition(async () => {
+      const res = await previewBulkDelete(ids);
+      setDeletePreviewLoading(false);
+      setDeletePreview(res.eligible);
+      setDeleteConfirmOpen(true);
+    });
+  }
+
+  function confirmBulkDelete() {
+    const ids = (deletePreview ?? []).map((u) => u.id);
+    startTransition(async () => {
+      const res = await bulkDeleteUsers(ids);
+      setSelected(new Set());
+      setDeletePreview(null);
+      setDeleteConfirmOpen(false);
+      setBulkNotice(
+        `Deleted ${res.deletedCount} member${res.deletedCount === 1 ? "" : "s"}.`,
+      );
     });
   }
 
@@ -458,9 +496,42 @@ export function PermissionTable({
             pending={pending}
             onApply={applyBulk}
             onClear={() => setSelected(new Set())}
+            onDeleteSelected={startBulkDelete}
+            deletePreviewLoading={deletePreviewLoading}
           />
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          setDeleteConfirmOpen(open);
+          if (!open) setDeletePreview(null);
+        }}
+        title={`Delete ${deletePreview?.length ?? 0} member${
+          (deletePreview?.length ?? 0) === 1 ? "" : "s"
+        }?`}
+        description={
+          <>
+            This permanently removes the following members and all of their
+            permissions and active sessions. This can&rsquo;t be undone.
+            <span className="mt-3 block max-h-48 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-950/40">
+              {(deletePreview ?? []).map((u) => (
+                <span key={u.id} className="block text-foreground">
+                  <strong>{u.name}</strong>{" "}
+                  <span className="text-neutral-500 dark:text-neutral-400">
+                    ({u.email})
+                  </span>
+                </span>
+              ))}
+            </span>
+          </>
+        }
+        confirmLabel="Delete Members"
+        cancelLabel="Keep Members"
+        destructive
+        onConfirm={confirmBulkDelete}
+      />
     </div>
   );
 }

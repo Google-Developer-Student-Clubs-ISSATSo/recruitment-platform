@@ -125,6 +125,11 @@ export function TransferForm({ pending }: { pending: PendingInvite[] }) {
                   className="w-full rounded-lg border border-neutral-300 bg-white py-3 pl-12 pr-4 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
                 />
               </div>
+              <p className="mt-2 text-[11px] text-neutral-500 dark:text-neutral-400">
+                Must be an existing member of the TM committee — the
+                Administrator runs Talent Management, so the role can&rsquo;t
+                leave that committee.
+              </p>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <p className="max-w-xs text-[11px] text-neutral-500 dark:text-neutral-400">
