@@ -76,18 +76,32 @@ export async function previewImport(
 
 // Commit the import. Re-parses and re-classifies from the raw text (so the
 // duplicate check runs against the CURRENT database, not a stale preview), then
-// creates only "import" and "auto_reject" rows in a single transaction:
+// creates only "import" and "auto_reject" rows:
 //   - import      → status SUBMITTED + a PhaseOneResult (PENDING) to score
 //   - auto_reject → status REJECTED_PHASE1, NO PhaseOneResult (nothing to score)
 // One APPLICANTS_IMPORTED activity entry summarizes the whole run.
+//
+// Batched into a small, fixed number of round trips regardless of row count —
+// this used to be prisma.applicant.create() looped inside a $transaction, one
+// round trip per row, which blew past Prisma's 5000ms interactive-transaction
+// timeout on Neon once there were enough rows. createMany() can't return the
+// created rows, so getting PhaseOneResult ids to attach requires one read-back
+// query in between; that data dependency (step 4 needs ids step 3 produces) is
+// also why this isn't wrapped in an array-form $transaction — the array form
+// needs every query built up front, before any result is known. Each step
+// already touches only campaignId-scoped rows.
 export async function confirmImport(
   campaignId: string,
   csvText: string,
 ): Promise<ConfirmResult> {
+  console.time("confirmImport:total");
   const actorId = await requirePermission(IMPORT);
   if (tooLarge(csvText)) return { ok: false, error: TOO_LARGE_MESSAGE };
 
+  console.time("confirmImport:existingEmails");
   const existing = await existingEmailsFor(campaignId);
+  console.timeEnd("confirmImport:existingEmails");
+
   const { rows, headerError } = classifyCsv(csvText, existing);
   if (headerError) return { ok: false, error: headerError };
 
@@ -95,31 +109,46 @@ export async function confirmImport(
     (r) => r.status === "import" || r.status === "auto_reject",
   );
 
-  const creates = toCreate.map((r) => {
-    const data: Prisma.ApplicantCreateInput = {
-      campaign: { connect: { id: campaignId } },
-      fullName: r.fullName,
-      email: r.email,
-      isIssatsoStudent: r.isIssatsoStudent!,
-      preferredCommittee: r.preferredCommittee!,
-      rawFormData: r.rawFormData as Prisma.InputJsonValue,
-      status:
-        r.status === "auto_reject"
-          ? ApplicantStatus.REJECTED_PHASE1
-          : ApplicantStatus.SUBMITTED,
-      // Only scoreable (imported) applicants get a PhaseOneResult row.
-      ...(r.status === "import"
-        ? {
-            phaseOneResult: {
-              create: { classification: PhaseOneClassification.PENDING },
-            },
-          }
-        : {}),
-    };
-    return prisma.applicant.create({ data });
-  });
+  if (toCreate.length > 0) {
+    console.time("confirmImport:createApplicants");
+    await prisma.applicant.createMany({
+      data: toCreate.map((r) => ({
+        campaignId,
+        fullName: r.fullName,
+        email: r.email,
+        isIssatsoStudent: r.isIssatsoStudent!,
+        preferredCommittee: r.preferredCommittee!,
+        rawFormData: r.rawFormData as Prisma.InputJsonValue,
+        status:
+          r.status === "auto_reject"
+            ? ApplicantStatus.REJECTED_PHASE1
+            : ApplicantStatus.SUBMITTED,
+      })),
+    });
+    console.timeEnd("confirmImport:createApplicants");
 
-  await prisma.$transaction(creates);
+    const scoreableEmails = toCreate
+      .filter((r) => r.status === "import")
+      .map((r) => r.email);
+
+    if (scoreableEmails.length > 0) {
+      console.time("confirmImport:readBackIds");
+      const created = await prisma.applicant.findMany({
+        where: { campaignId, email: { in: scoreableEmails } },
+        select: { id: true },
+      });
+      console.timeEnd("confirmImport:readBackIds");
+
+      console.time("confirmImport:createPhaseOneResults");
+      await prisma.phaseOneResult.createMany({
+        data: created.map((a) => ({
+          applicantId: a.id,
+          classification: PhaseOneClassification.PENDING,
+        })),
+      });
+      console.timeEnd("confirmImport:createPhaseOneResults");
+    }
+  }
 
   const summary = summarize(rows);
   await logActivity({
@@ -137,5 +166,6 @@ export async function confirmImport(
   });
 
   revalidatePath(`/campaigns/${campaignId}/applicants`);
+  console.timeEnd("confirmImport:total");
   return { ok: true, summary };
 }
