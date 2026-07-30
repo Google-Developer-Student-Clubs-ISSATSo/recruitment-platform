@@ -10,6 +10,8 @@ import type { Phase1Applicant, Phase1Question, ViewMode } from "./types";
 // Exact rawFormData keys the technical-only view is allowed to see.
 const GITHUB_FIELD = "GitHub link";
 const LINKEDIN_FIELD = "LinkedIn link";
+const SOFT_SKILLS_FIELD = "Soft skills";
+const OTHER_SKILLS_FIELD = "Other skills";
 
 // Phase 1 Scoring Queue. Data entry only — reviewers and the Technical Scorer
 // enter scores; ranking/auto-classification is a later stage. Everything is
@@ -20,8 +22,9 @@ const LINKEDIN_FIELD = "LinkedIn link";
 //   - "full"           — holds SCREEN_PHASE1 (regardless of ENTER_TECHNICAL_SCORE)
 //   - "technical-only" — holds ENTER_TECHNICAL_SCORE but NOT SCREEN_PHASE1
 // The technical-only payload is stripped ON THE SERVER to name + GitHub +
-// LinkedIn and the single Technical question — the other 8 answers/questions
-// never reach that client. A user with neither permission is bounced.
+// LinkedIn + Soft skills + Other skills and the single Technical question —
+// the other answers/questions never reach that client. A user with neither
+// permission is bounced.
 export default async function Phase1Page({
   params,
 }: {
@@ -104,6 +107,10 @@ export default async function Phase1Page({
       [GITHUB_FIELD]: typeof raw[GITHUB_FIELD] === "string" ? raw[GITHUB_FIELD] : null,
       [LINKEDIN_FIELD]:
         typeof raw[LINKEDIN_FIELD] === "string" ? raw[LINKEDIN_FIELD] : null,
+      [SOFT_SKILLS_FIELD]:
+        typeof raw[SOFT_SKILLS_FIELD] === "string" ? raw[SOFT_SKILLS_FIELD] : null,
+      [OTHER_SKILLS_FIELD]:
+        typeof raw[OTHER_SKILLS_FIELD] === "string" ? raw[OTHER_SKILLS_FIELD] : null,
     };
     const scores: Record<string, number> = {};
     if (technical) {

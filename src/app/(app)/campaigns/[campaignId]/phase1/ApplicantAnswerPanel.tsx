@@ -3,10 +3,12 @@
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import type { Phase1Question, ViewMode } from "./types";
 
-// Exact rawFormData keys for the two profile links shown in the technical-only
+// Exact rawFormData keys for the reference fields shown in the technical-only
 // view. These match the CSV headers.
 const GITHUB_FIELD = "GitHub link";
 const LINKEDIN_FIELD = "LinkedIn link";
+const SOFT_SKILLS_FIELD = "Soft skills";
+const OTHER_SKILLS_FIELD = "Other skills";
 
 // Identity field, already shown as the page header / applicant name elsewhere —
 // never repeated in the "Other Submitted Answers" section.
@@ -75,9 +77,11 @@ function AnswerValue({ value }: { value: string }) {
 //     cards, so a reviewer sees the complete submission rather than a filtered
 //     subset. This is purely additive: it never changes what the per-question
 //     cards above it show or whether their scoring input is editable.
-//   - "technical-only": show ONLY name + GitHub + LinkedIn as clickable links.
-//     The other questions' text/answers aren't rendered here because the server
-//     never sends them to this viewer (rawFormData is pre-stripped).
+//   - "technical-only": show ONLY name, GitHub + LinkedIn as clickable links,
+//     and Soft skills + Other skills as plain-text reference fields (not run
+//     through link detection). The other questions' text/answers aren't
+//     rendered here because the server never sends them to this viewer
+//     (rawFormData is pre-stripped).
 //
 // The answer key is the question's sourceField when it has one, else the
 // question text. Filtering the panel on `sourceField !== null` was the old bug:
@@ -129,8 +133,11 @@ export function ApplicantAnswerPanel({
           icon="link"
           url={readString(rawFormData, LINKEDIN_FIELD)}
         />
+        <TextCard label="Soft skills" value={readString(rawFormData, SOFT_SKILLS_FIELD)} />
+        <TextCard label="Other skills" value={readString(rawFormData, OTHER_SKILLS_FIELD)} />
         <p className="text-xs text-neutral-400">
-          Technical scorers only see identifying details and profile links.
+          Technical scorers only see identifying details, profile links, and
+          skills.
         </p>
       </div>
     );
@@ -230,6 +237,31 @@ function InfoCard({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
+// Plain-text reference field for the technical-only view (Soft skills, Other
+// skills) — same card chrome as LinkCard, but the value is never run through
+// link detection: these are free-text answers, not URLs. Falls back to the
+// same "No answer found for this field" treatment the full view's
+// per-question cards use, rather than LinkCard's "Not provided".
+function TextCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+        {label}
+      </p>
+      {value ? (
+        <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+          {value}
+        </p>
+      ) : (
+        <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-[color:var(--status-pending)]">
+          <Icon name="help" className="text-[16px]" />
+          No answer found for this field
+        </p>
+      )}
     </div>
   );
 }

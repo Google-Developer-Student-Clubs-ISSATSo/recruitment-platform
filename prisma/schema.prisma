@@ -42,6 +42,8 @@ model User {
   interviewSlotsEntered InterviewSlot[]
   panelSeatsClaimed     PanelSeat[]
   interviewNotesClosed  InterviewNote[]
+  campaignLeadsHeld     CampaignLead[]        @relation("CampaignLeadHolder")
+  campaignLeadsAssigned CampaignLead[]        @relation("CampaignLeadAssignedBy")
 }
 
 model Account {
@@ -130,15 +132,28 @@ model RoleTemplatePermission {
   @@unique([roleTemplateId, permission])
 }
 
+// Where a UserPermission row came from. MANUAL is any direct admin action
+// (Permission Management toggle/bulk-set, template application, admin
+// transfer). LEAD_ROLE means it exists solely because the holder currently
+// holds a CampaignLead role that auto-grants it (e.g. Technical Lead ->
+// ENTER_TECHNICAL_SCORE) — such a row is auto-revoked when that lead
+// assignment ends, unless a manual toggle has since overridden it back to
+// MANUAL (see togglePermission/bulkSetPermission in admin/permissions/actions.ts).
+enum PermissionSource {
+  MANUAL
+  LEAD_ROLE
+}
+
 // The actual source of truth for what a user can do. Permissions are global
 // flags; where data must be scoped to a committee, that comes from the
 // holder's own User.committee, not from the permission row.
 model UserPermission {
-  id         String        @id @default(cuid())
+  id         String           @id @default(cuid())
   userId     String
   permission PermissionKey
   grantedBy  String?
-  grantedAt  DateTime      @default(now())
+  grantedAt  DateTime         @default(now())
+  source     PermissionSource @default(MANUAL)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -236,6 +251,38 @@ model Campaign {
   phaseOneConfig      PhaseOneConfig?
   emailLogs           EmailLog[]
   committeeCapacities CommitteeCapacity[]
+  leads               CampaignLead[]
+}
+
+// One of the four appointable per-campaign lead titles. MKT/EER/Club Lead are
+// currently just a tracked title with no auto-granted capabilities — only
+// TECHNICAL_LEAD drives the ENTER_TECHNICAL_SCORE auto-grant/auto-revoke (see
+// assignCampaignLead in the leads config actions).
+enum LeadRole {
+  MKT_LEAD
+  EER_LEAD
+  CLUB_LEAD
+  TECHNICAL_LEAD
+}
+
+// Who currently holds each of the four lead titles for a campaign. Reassigning
+// a role updates the existing row's userId (see the @@unique below) rather
+// than creating a second row — there is exactly one holder per (campaign,
+// role) at a time, same "one holder" shape as the sole Administrator, just
+// scoped to a campaign instead of global.
+model CampaignLead {
+  id           String   @id @default(cuid())
+  campaignId   String
+  role         LeadRole
+  userId       String
+  assignedAt   DateTime @default(now())
+  assignedById String
+
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User     @relation("CampaignLeadHolder", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User     @relation("CampaignLeadAssignedBy", fields: [assignedById], references: [id])
+
+  @@unique([campaignId, role])
 }
 
 // How many seats a committee is recruiting for on one campaign. One row per

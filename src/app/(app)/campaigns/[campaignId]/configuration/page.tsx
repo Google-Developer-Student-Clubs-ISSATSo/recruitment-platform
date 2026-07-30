@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { PermissionGate } from "@/components/permission-gate";
 import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
+import { CampaignLeadsSection } from "./CampaignLeadsSection";
 import { CapacityConfigSection } from "./CapacityConfigSection";
 import { FinalEmailLinksSection } from "./FinalEmailLinksSection";
 import { ScoringConfigSection } from "./ScoringConfigSection";
@@ -31,12 +32,14 @@ export default async function ConfigurationPage({
   // Used only to decide whether to show the empty state. The sections
   // themselves re-check via PermissionGate; hasPermission is request-cached, so
   // this adds no extra queries.
-  const [canCapacity, canScreening, canSendEmails] = await Promise.all([
+  const [canCapacity, canScreening, canSendEmails, canManageAccounts] = await Promise.all([
     hasPermission(userId, PermissionKey.MANAGE_CAPACITY),
     hasPermission(userId, PermissionKey.CONFIGURE_SCREENING),
     hasPermission(userId, PermissionKey.SEND_EMAILS),
+    hasPermission(userId, PermissionKey.MANAGE_ACCOUNTS),
   ]);
-  const hasAnyConfigAccess = canCapacity || canScreening || canSendEmails;
+  const hasAnyConfigAccess =
+    canCapacity || canScreening || canSendEmails || canManageAccounts;
 
   return (
     // Widened from max-w-3xl to match the activity log and the Stitch reference's
@@ -69,6 +72,12 @@ export default async function ConfigurationPage({
           <StaggerItem>
             <PermissionGate permission={PermissionKey.CONFIGURE_SCREENING}>
               <ScoringConfigSection campaignId={campaignId} />
+            </PermissionGate>
+          </StaggerItem>
+
+          <StaggerItem>
+            <PermissionGate permission={PermissionKey.MANAGE_ACCOUNTS}>
+              <CampaignLeadsSection campaignId={campaignId} />
             </PermissionGate>
           </StaggerItem>
         </StaggerGroup>

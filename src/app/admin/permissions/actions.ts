@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activity-log";
 import {
   Committee,
   PermissionKey,
+  PermissionSource,
   RoleTemplateName,
 } from "@/generated/prisma/enums";
 import { ROLE_TEMPLATE_LABELS } from "./permission-config";
@@ -166,11 +167,20 @@ export async function togglePermission(
   if (grant) {
     const existing = await prisma.userPermission.findFirst({
       where: { userId, permission },
-      select: { id: true },
+      select: { id: true, source: true },
     });
     if (!existing) {
       await prisma.userPermission.create({
         data: { userId, permission, grantedBy: actorId },
+      });
+    } else if (existing.source === PermissionSource.LEAD_ROLE) {
+      // A direct admin action on an already-held, lead-role-granted
+      // permission is an explicit re-confirmation: it overrides the
+      // automatic marker so a later lead reassignment can no longer
+      // auto-revoke it. See assignCampaignLead in lib/campaign-leads.ts.
+      await prisma.userPermission.update({
+        where: { id: existing.id },
+        data: { source: PermissionSource.MANUAL, grantedBy: actorId },
       });
     }
   } else {
@@ -236,7 +246,7 @@ export async function bulkSetPermission(
     select: {
       id: true,
       roleTemplate: { select: { name: true } },
-      permissions: { where: { permission }, select: { id: true } },
+      permissions: { where: { permission }, select: { id: true, source: true } },
     },
   });
 
@@ -249,13 +259,24 @@ export async function bulkSetPermission(
   const targets = eligible.filter((u) =>
     grant ? u.permissions.length === 0 : u.permissions.length > 0,
   );
-  const affectedUserIds = targets.map((u) => u.id);
+  // Users who already hold the permission, but only via an auto-grant from a
+  // lead role: an explicit bulk grant is still a direct admin action on them,
+  // so it overrides the automatic marker the same way a single toggle does
+  // (see togglePermission above), even though the permission itself doesn't
+  // change.
+  const sourceUpgradeTargets = grant
+    ? eligible.filter((u) => u.permissions[0]?.source === PermissionSource.LEAD_ROLE)
+    : [];
+  const affectedUserIds = [
+    ...targets.map((u) => u.id),
+    ...sourceUpgradeTargets.map((u) => u.id),
+  ];
 
   if (affectedUserIds.length > 0) {
     if (grant) {
       await prisma.userPermission.createMany({
-        data: affectedUserIds.map((userId) => ({
-          userId,
+        data: targets.map((u) => ({
+          userId: u.id,
           permission,
           grantedBy: actorId,
         })),
@@ -264,6 +285,15 @@ export async function bulkSetPermission(
         // @@unique([userId, permission]) constraint and fail the whole batch.
         skipDuplicates: true,
       });
+      if (sourceUpgradeTargets.length > 0) {
+        await prisma.userPermission.updateMany({
+          where: {
+            userId: { in: sourceUpgradeTargets.map((u) => u.id) },
+            permission,
+          },
+          data: { source: PermissionSource.MANUAL, grantedBy: actorId },
+        });
+      }
     } else {
       await prisma.userPermission.deleteMany({
         where: { userId: { in: affectedUserIds }, permission },
