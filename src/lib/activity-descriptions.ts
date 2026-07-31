@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   PHASE1_FINALIZED: "finalized Phase 1 selection",
   GDG_DAY_DETAILS_SET: "set the GDG Day details",
   PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
+  PHASE2_ENTRY_ADDED: "added a Phase 2 note or flag",
   INTERVIEW_NOTE_UPDATED: "updated an interview note",
   INTERVIEW_NOTE_CLOSED: "closed an interview note",
   INTERVIEW_NOTE_REOPENED: "reopened an interview note",
@@ -96,6 +97,9 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   PHASE1_MARKED_TO_DISCUSS: "pending",
   PHASE1_FINALIZED: "accepted",
   GDG_DAY_DETAILS_SET: "primary",
+  // A red or green flag can swing the final decision, and the entry can never
+  // be edited or withdrawn — worth standing out, like the other judgment calls.
+  PHASE2_ENTRY_ADDED: "pending",
   INTERVIEW_NOTE_UPDATED: "primary",
   // Closing/reopening a note changes who can see it — sensitive but reversible.
   INTERVIEW_NOTE_CLOSED: "pending",

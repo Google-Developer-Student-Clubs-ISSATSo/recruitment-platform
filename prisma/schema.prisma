@@ -42,6 +42,7 @@ model User {
   interviewSlotsEntered InterviewSlot[]
   panelSeatsClaimed     PanelSeat[]
   interviewNotesClosed  InterviewNote[]
+  phase2EntriesWritten  Phase2Entry[]
   campaignLeadsHeld     CampaignLead[]        @relation("CampaignLeadHolder")
   campaignLeadsAssigned CampaignLead[]        @relation("CampaignLeadAssignedBy")
 }
@@ -336,6 +337,7 @@ model Applicant {
   interviewSlot  InterviewSlot?
   interviewPanel InterviewPanel?
   interviewNote  InterviewNote?
+  phase2Entries  Phase2Entry[]
 
   @@unique([campaignId, email])
 }
@@ -406,6 +408,45 @@ model PhaseOneConfig {
   targetCount     Int?
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+// ============ PHASE 2 ============
+
+enum Phase2EntryType {
+  NOTE
+  RED_FLAG
+  GREEN_FLAG
+}
+
+// One observation written about an applicant who passed Phase 1, on the Phase 2
+// page. Three kinds share this table because they differ only in `type` — the
+// UI groups them into Notes / Red Flag / Green Flag columns from that.
+//
+// APPEND-ONLY, deliberately: there is no update path and no delete path, in the
+// store, the actions or the UI. Red and green flags feed the Final Decision
+// meeting, and the club's reason for wanting them recorded at all is an honest
+// paper trail of who said what. A mistaken entry is corrected by writing a NEW
+// entry saying so, never by editing or removing the original — an erased flag
+// would leave a decision that was influenced by it with no trace of why.
+// `updatedAt` is absent for the same reason: nothing here is ever updated.
+//
+// Campaign scoping comes through Applicant.campaignId rather than a
+// denormalized column, matching PhaseOneScore / PhaseOneResult / InterviewNote.
+// Callers that take a campaignId from a URL must re-read the applicant's own
+// campaignId and compare — see the actions' authorize().
+model Phase2Entry {
+  id          String          @id @default(cuid())
+  applicantId String
+  type        Phase2EntryType
+  authorId    String
+  text        String
+  createdAt   DateTime        @default(now())
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  // The page reads one applicant's entries at a time, oldest first.
+  @@index([applicantId, createdAt])
 }
 
 // ============ EMAIL LOG ============

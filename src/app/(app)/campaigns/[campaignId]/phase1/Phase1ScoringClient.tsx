@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 
 import { Icon } from "@/components/app-shell/icon";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
+import { computeWeightedTotal, totalCoefficient } from "@/lib/phase1-score";
 import { savePhaseOneScore } from "./actions";
 import { ApplicantQueueList, type QueueEntry } from "./ApplicantQueueList";
 import { ApplicantAnswerPanel } from "./ApplicantAnswerPanel";
@@ -41,8 +42,8 @@ export function Phase1ScoringClient({
 
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
 
-  const totalCoefficient = useMemo(
-    () => questions.reduce((s, q) => s + q.coefficient, 0),
+  const coefficientTotal = useMemo(
+    () => totalCoefficient(questions),
     [questions],
   );
 
@@ -69,13 +70,7 @@ export function Phase1ScoringClient({
   // never receives the other questions' scores to compute it from.
   const selectedTotal =
     selected && viewMode === "full"
-      ? questions.reduce(
-          (sum, q) =>
-            q.id in selected.scores
-              ? sum + selected.scores[q.id] * q.coefficient
-              : sum,
-          0,
-        )
+      ? computeWeightedTotal(questions, (id) => selected.scores[id]).total
       : 0;
   const selectedComplete = selected
     ? selected.scoredCount === totalQuestions
@@ -203,7 +198,7 @@ export function Phase1ScoringClient({
               {viewMode === "full" && (
                 <WeightedTotalDisplay
                   total={selectedTotal}
-                  max={totalCoefficient}
+                  max={coefficientTotal}
                   complete={selectedComplete}
                 />
               )}

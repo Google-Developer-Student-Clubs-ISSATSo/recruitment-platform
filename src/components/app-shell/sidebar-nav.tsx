@@ -61,6 +61,14 @@ const CAMPAIGN_NAV: {
     permission: CAMPAIGN_PAGE_PERMISSIONS["phase1/selection"],
   },
   {
+    icon: "forum",
+    label: "Phase 2",
+    segment: "phase2",
+    // Open to every member — no gate on the page, so no gate on the link, the
+    // same as Statistics below.
+    permission: null,
+  },
+  {
     icon: "video_chat",
     label: "Interviews",
     segment: "interviews",

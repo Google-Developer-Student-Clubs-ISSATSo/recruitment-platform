@@ -1,6 +1,11 @@
 "use client";
 
 import { Icon, type IconName } from "@/components/app-shell/icon";
+import {
+  answerKey,
+  answerQuestions,
+  configuredAnswerKeys,
+} from "@/lib/phase1-answers";
 import type { Phase1Question, ViewMode } from "./types";
 
 // Exact rawFormData keys for the reference fields shown in the technical-only
@@ -19,14 +24,9 @@ const FULL_NAME_FIELD = "Full name";
 // Answers" the same way FULL_NAME_FIELD is.
 const TERMS_FIELD = "Terms and Conditions";
 
-// A TM-internal judgment call with no CSV column behind it — its rawFormData
-// lookup will never find anything, so its "No answer found" card reads like a
-// data problem when it's actually expected. Scoped to this exact question by
-// TEXT (not "any question with a null sourceField", which would also catch
-// Technical Skills — a different question, not touched here). Hidden from the
-// Answers panel only: the Scoring panel iterates `questions` directly and is
-// untouched, so this question keeps its normal editable score input there.
-const NO_FORM_QUESTION_TEXT = "BIG YES VS BIG NO";
+// Which questions get an answer card, and the rawFormData key each answer is
+// read from, both live in @/lib/phase1-answers — shared with the Phase 2 page so
+// the two panes can't drift apart on what counts as a configured question.
 
 // "Looks like a URL": either an explicit http(s):// protocol, or a bare
 // domain-shaped string. GitHub/LinkedIn/Facebook answers are stored exactly
@@ -143,16 +143,8 @@ export function ApplicantAnswerPanel({
     );
   }
 
-  const answered = questions.filter(
-    (q) => !q.requiresTechnicalScorer && q.text !== NO_FORM_QUESTION_TEXT,
-  );
-
-  // Every key ANY active question is configured to read from — technical
-  // included, even though it has no card in this reading pane, because its
-  // answer is still genuinely accounted for elsewhere (the Scoring panel).
-  const configuredKeys = new Set(
-    questions.map((q) => q.sourceField ?? q.text),
-  );
+  const answered = answerQuestions(questions);
+  const configuredKeys = configuredAnswerKeys(questions);
   const extraEntries = Object.entries(rawFormData ?? {}).filter(
     ([key, value]) =>
       key !== FULL_NAME_FIELD &&
@@ -164,7 +156,7 @@ export function ApplicantAnswerPanel({
   return (
     <div className="space-y-4">
       {answered.map((q) => {
-        const answer = readString(rawFormData, q.sourceField ?? q.text);
+        const answer = readString(rawFormData, answerKey(q));
         return (
           <div
             key={q.id}

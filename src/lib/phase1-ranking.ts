@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { computeWeightedTotal } from "@/lib/phase1-score";
 import {
   ApplicantStatus,
   PhaseOneClassification,
@@ -33,6 +34,51 @@ export function phaseOneCohortWhere(campaignId: string) {
         phaseOneResult: { isNot: null },
       },
     ],
+  };
+}
+
+/**
+ * The classifications that mean "passed Phase 1".
+ *
+ * AUTO_ACCEPT is the algorithm's top-N cut; MANUAL_ACCEPT is a human resolving
+ * a case by hand (a PENDING or TO_DISCUSS row someone accepted) and is exactly
+ * how a manual accept is distinguished in the data — `manualOverrideAction`
+ * writes it, and it is sticky, so recalculation never reverts it. Bare PENDING
+ * is NOT a pass: it means "above the threshold but outside the top N, awaiting
+ * human review", or "not fully scored yet".
+ *
+ * Typed as the full enum so `.includes()` accepts any classification — the
+ * inferred literal-union element type would reject everything else.
+ */
+export const PHASE_ONE_ACCEPTED: readonly PhaseOneClassification[] = [
+  PhaseOneClassification.AUTO_ACCEPT,
+  PhaseOneClassification.MANUAL_ACCEPT,
+];
+
+/** The mirror image: the two ways an applicant is out after Phase 1. */
+export const PHASE_ONE_REJECTED: readonly PhaseOneClassification[] = [
+  PhaseOneClassification.AUTO_REJECT,
+  PhaseOneClassification.MANUAL_REJECT,
+];
+
+/**
+ * "Passed Phase 1", as a Prisma `where` fragment — the Phase 2 population.
+ *
+ * Keyed on the CLASSIFICATION, not on Applicant.status. Finalizing writes
+ * SHORTLISTED for exactly this set, but status keeps moving forward afterwards
+ * (INTERVIEW_SCHEDULED, ACCEPTED, REJECTED_FINAL), so a status-based filter
+ * would empty this page the moment interviews begin. The classification is the
+ * durable record of the Phase 1 outcome itself.
+ *
+ * Note this intentionally does NOT require finalization to have run: an
+ * AUTO_ACCEPT/MANUAL_ACCEPT applicant is someone Phase 1 passed whether or not
+ * the commit button has been pressed yet.
+ */
+export function passedPhaseOneWhere(campaignId: string) {
+  return {
+    campaignId,
+    // Spread because Prisma's generated `in` filter wants a mutable array.
+    phaseOneResult: { is: { classification: { in: [...PHASE_ONE_ACCEPTED] } } },
   };
 }
 
@@ -145,22 +191,22 @@ export async function recalculatePhaseOneRanking(
   }
 
   const { rejectThreshold, targetCount } = config;
-  const coeffById = new Map(activeQuestions.map((q) => [q.id, q.coefficient]));
-  const activeIds = new Set(activeQuestions.map((q) => q.id));
 
-  // Derive completeness + weighted total from the active questions only. A
-  // score row for a since-deactivated question counts for neither.
+  // Derive completeness + weighted total from the active questions only, via the
+  // shared formula in phase1-score.ts. A score row for a since-deactivated
+  // question is never looked up, so it counts for neither.
   const derived = applicants.map((a) => {
-    const activeScores = a.phaseOneScores.filter((s) => activeIds.has(s.questionId));
-    const weightedTotal = activeScores.reduce(
-      (sum, s) => sum + s.value * (coeffById.get(s.questionId) ?? 0),
-      0,
+    const byQuestion = new Map(
+      a.phaseOneScores.map((s) => [s.questionId, s.value]),
+    );
+    const { total, scoredCount } = computeWeightedTotal(activeQuestions, (id) =>
+      byQuestion.get(id),
     );
     return {
       applicantId: a.id,
       fullName: a.fullName,
-      complete: activeScores.length === activeQuestions.length,
-      weightedTotal,
+      complete: scoredCount === activeQuestions.length,
+      weightedTotal: total,
       existing: a.phaseOneResult?.classification ?? PhaseOneClassification.PENDING,
     };
   });

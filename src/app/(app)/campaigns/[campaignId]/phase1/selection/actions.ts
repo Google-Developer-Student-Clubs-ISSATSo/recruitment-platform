@@ -12,6 +12,8 @@ import {
   type SendFailure,
 } from "@/lib/phase1-email-batch";
 import {
+  PHASE_ONE_ACCEPTED as ACCEPTED,
+  PHASE_ONE_REJECTED as REJECTED,
   phaseOneCohortWhere,
   recalculatePhaseOneRanking,
 } from "@/lib/phase1-ranking";
@@ -28,16 +30,9 @@ import {
 
 export type ActionResult<T> = ({ ok: true } & T) | { ok: false; error: string };
 
-// Typed as the full enum so `.includes()` accepts any classification — the
-// inferred literal-union element type would reject everything else.
-const ACCEPTED: readonly PhaseOneClassification[] = [
-  PhaseOneClassification.AUTO_ACCEPT,
-  PhaseOneClassification.MANUAL_ACCEPT,
-];
-const REJECTED: readonly PhaseOneClassification[] = [
-  PhaseOneClassification.AUTO_REJECT,
-  PhaseOneClassification.MANUAL_REJECT,
-];
+// ACCEPTED / REJECTED now live in phase1-ranking.ts, so the Phase 2 page's
+// "passed Phase 1" population and this file's finalize step read the same
+// definition of the outcome rather than each keeping their own list.
 
 /** SCREEN_PHASE1 + campaign exists. Returns the actor's id. */
 async function authorize(
