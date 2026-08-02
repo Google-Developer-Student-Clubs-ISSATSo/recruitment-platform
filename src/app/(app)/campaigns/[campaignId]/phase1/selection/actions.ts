@@ -69,6 +69,7 @@ export async function recalculateRankingAction(
     actionType: "PHASE1_RANKING_RECALCULATED",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: {
       complete: result.completeCount,
       incomplete: result.incompleteCount,
@@ -133,6 +134,7 @@ export async function manualOverrideAction(
     actionType: "PHASE1_MANUAL_OVERRIDE",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: {
       previousClassification,
       newClassification: classification,
@@ -188,6 +190,7 @@ export async function markToDiscussAction(
     actionType: "PHASE1_MARKED_TO_DISCUSS",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: { previousClassification },
   });
 
@@ -263,6 +266,7 @@ export async function revertOverrideAction(
     actionType: "PHASE1_OVERRIDE_REVERTED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: {
       previousClassification: result.classification,
       newClassification: classification,
@@ -332,6 +336,7 @@ export async function finalizePhaseOneAction(
     actionType: "PHASE1_FINALIZED",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: {
       shortlisted: toShortlist.length,
       rejected: toReject.length,
@@ -407,6 +412,7 @@ export async function setGdgDayDetailsAction(
     actionType: "GDG_DAY_DETAILS_SET",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { gdgDayDateTime: dateTime.toISOString(), location: trimmedLocation },
   });
 

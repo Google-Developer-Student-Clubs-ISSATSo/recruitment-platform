@@ -31,6 +31,7 @@ export async function updateCommitteeCapacity(
     actionType: "CAPACITY_UPDATED",
     targetType: "CommitteeCapacity",
     targetId: campaignId,
+    campaignId,
     details: saved,
   });
 

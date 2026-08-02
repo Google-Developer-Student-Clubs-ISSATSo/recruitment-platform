@@ -216,6 +216,7 @@ export async function POST(request: Request) {
       actionType: "APPLICANT_SUBMITTED_VIA_FORM",
       targetType: "Applicant",
       targetId: applicantId,
+      campaignId,
       details: {
         source: "google_form_webhook",
         email: row.email,

@@ -99,6 +99,7 @@ export async function assignCampaignLead({
     actionType: previousUserId ? "CAMPAIGN_LEAD_REASSIGNED" : "CAMPAIGN_LEAD_ASSIGNED",
     targetType: "CampaignLead",
     targetId: userId,
+    campaignId,
     details: { campaignId, role, userId, previousUserId: previousUserId ?? null },
   });
 
@@ -119,6 +120,7 @@ export async function assignCampaignLead({
         actionType: "PERMISSION_AUTO_REVOKED",
         targetType: "User",
         targetId: previousUserId,
+        campaignId,
         details: {
           permission: autoPermission,
           reason: `Automatically revoked: no longer ${LEAD_ROLE_LABELS[role]} for this campaign.`,
@@ -148,6 +150,7 @@ export async function assignCampaignLead({
       actionType: "PERMISSION_AUTO_GRANTED",
       targetType: "User",
       targetId: userId,
+      campaignId,
       details: {
         permission: autoPermission,
         reason: `Automatically granted: assigned as ${LEAD_ROLE_LABELS[role]} for this campaign.`,

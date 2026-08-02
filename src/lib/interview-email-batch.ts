@@ -163,6 +163,7 @@ export async function runInterviewInviteBatch(
     actionType: "INTERVIEW_BOOKING_INVITES_SENT",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { sent, failed, skipped },
   });
 
@@ -229,6 +230,7 @@ export async function runInterviewReminderBatch(
     actionType: "INTERVIEW_BOOKING_REMINDERS_SENT",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { sent, failed },
   });
 

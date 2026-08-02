@@ -145,6 +145,7 @@ export async function confirmImport(
     actionType: "APPLICANTS_IMPORTED",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: {
       totalRows: summary.totalRows,
       imported: summary.imported,

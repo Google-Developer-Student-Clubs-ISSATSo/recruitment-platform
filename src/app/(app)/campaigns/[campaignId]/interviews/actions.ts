@@ -91,6 +91,7 @@ export async function setInterviewCalendarLinkAction(
     actionType: "INTERVIEW_CALENDAR_LINK_SET",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { link: trimmed },
   });
 

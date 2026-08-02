@@ -10,6 +10,14 @@ export type LogActivityInput = {
   targetType?: string;
   /** Optional id of the thing acted upon. */
   targetId?: string;
+  /**
+   * The campaign this action belongs to, for actions that are inherently
+   * campaign-scoped (Phase 1 scoring, interview notes, campaign email
+   * batches, etc.). Omit entirely for genuinely global actions (account
+   * creation, permission grants, admin transfer) — never pass one just
+   * because the caller happens to be running inside a campaign page.
+   */
+  campaignId?: string;
   /** Optional structured context (kept generic on purpose). */
   details?: Prisma.InputJsonValue;
 };
@@ -19,6 +27,7 @@ export async function logActivity({
   actionType,
   targetType,
   targetId,
+  campaignId,
   details,
 }: LogActivityInput) {
   return prisma.activityLogEntry.create({
@@ -27,6 +36,7 @@ export async function logActivity({
       actionType,
       targetType,
       targetId,
+      campaignId,
       details,
     },
   });

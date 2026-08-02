@@ -74,6 +74,7 @@ export async function recordDecisionAction(
     actionType: "FINAL_DECISION_RECORDED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: { decision, assignedCommittee, previousStatus },
   });
 
@@ -116,6 +117,7 @@ export async function assignCommitteeAction(
     actionType: "FINAL_DECISION_RECORDED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: {
       decision: "ACCEPT",
       assignedCommittee: committee,
@@ -185,6 +187,7 @@ export async function completeFinalDecisionsAction(
     actionType: "FINAL_DECISIONS_COMPLETED",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { totalAccepted, totalRejected, byCommittee },
   });
 

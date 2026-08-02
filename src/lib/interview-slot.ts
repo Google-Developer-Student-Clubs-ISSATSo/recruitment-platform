@@ -122,6 +122,7 @@ export async function saveInterviewSlot(
     actionType: "INTERVIEW_SLOT_ENTERED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: {
       scheduledTime: scheduledTime?.toISOString() ?? null,
       room: roomValue,

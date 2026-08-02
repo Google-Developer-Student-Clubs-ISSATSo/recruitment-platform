@@ -95,6 +95,7 @@ export async function createPhaseOneQuestion(
     actionType: "PHASE1_QUESTION_CREATED",
     targetType: "PhaseOneQuestion",
     targetId: created.id,
+    campaignId,
     details: { campaignId, order: created.order },
   });
 
@@ -155,6 +156,7 @@ export async function updatePhaseOneQuestion(
     actionType: "PHASE1_QUESTION_UPDATED",
     targetType: "PhaseOneQuestion",
     targetId: questionId,
+    campaignId,
     details: { campaignId, changed: Object.keys(data) },
   });
 
@@ -183,6 +185,7 @@ export async function deletePhaseOneQuestion(
     actionType: "PHASE1_QUESTION_DELETED",
     targetType: "PhaseOneQuestion",
     targetId: questionId,
+    campaignId,
     details: { campaignId, text: owned.text, scoresDeleted: scoreCount },
   });
 
@@ -232,6 +235,7 @@ export async function reorderPhaseOneQuestions(
     actionType: "PHASE1_QUESTIONS_REORDERED",
     targetType: "PhaseOneQuestion",
     targetId: campaignId,
+    campaignId,
     details: { campaignId, order: orderedIds },
   });
 
@@ -267,6 +271,7 @@ export async function updatePhaseOneConfig(
     actionType: "PHASE1_CONFIG_UPDATED",
     targetType: "PhaseOneConfig",
     targetId: campaignId,
+    campaignId,
     details: { campaignId, rejectThreshold: reject, targetCount: target },
   });
 

@@ -48,6 +48,7 @@ export async function createCampaign(
     actionType: "CAMPAIGN_CREATED",
     targetType: "Campaign",
     targetId: campaign.id,
+    campaignId: campaign.id,
     details: { name },
   });
 
@@ -96,6 +97,7 @@ export async function setCampaignStatus(
     actionType: "CAMPAIGN_STATUS_CHANGED",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { name: campaign.name, newStatus: isOpen ? "OPEN" : "CLOSED" },
   });
 
@@ -157,6 +159,7 @@ export async function deleteCampaign(
     actionType: "CAMPAIGN_DELETED",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { name: campaign.name, applicantCount },
   });
 

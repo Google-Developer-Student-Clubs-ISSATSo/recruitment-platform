@@ -91,6 +91,7 @@ export async function addPhase2EntryAction(
     actionType: "PHASE2_ENTRY_ADDED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     // The entry text itself stays out of the log: it's already stored, with its
     // author, on the row this points at. Only the kind is worth summarising.
     details: { type },

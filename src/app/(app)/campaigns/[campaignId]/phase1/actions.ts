@@ -127,6 +127,7 @@ export async function savePhaseOneScore(
       : "PHASE1_SCORE_ENTERED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: { questionId, value },
   });
 

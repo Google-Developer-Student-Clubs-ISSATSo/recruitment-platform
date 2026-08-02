@@ -153,6 +153,7 @@ export async function runPhaseOneEmailBatch(
     actionType: "PHASE1_EMAILS_SENT",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { sent, failed },
   });
 

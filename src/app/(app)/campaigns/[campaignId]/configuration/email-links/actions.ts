@@ -59,6 +59,7 @@ export async function updateFinalEmailLinksAction(
     actionType: "FINAL_EMAIL_LINKS_UPDATED",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     // The URLs themselves are logged: they are what actually reached applicants,
     // and "which link did we send that cycle?" is the question this row answers.
     details: saved,

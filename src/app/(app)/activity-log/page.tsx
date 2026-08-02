@@ -40,6 +40,7 @@ export default async function ActivityLogPage({
     page?: string;
     actor?: string;
     action?: string;
+    campaign?: string;
     from?: string;
     to?: string;
   }>;
@@ -57,6 +58,7 @@ export default async function ActivityLogPage({
 
   const actorId = params.actor?.trim() || null;
   const actionType = params.action?.trim() || null;
+  const campaignId = params.campaign?.trim() || null;
   const from = parseDate(params.from, false);
   // Inclusive: filtering "to 2026-07-18" must include everything logged that
   // day, so the bound is the end of it rather than midnight at its start.
@@ -65,9 +67,15 @@ export default async function ActivityLogPage({
   // The one `where` used by BOTH the page query and the count that derives
   // pageCount. Building it once is what keeps the two from disagreeing — a
   // filtered list paired with an unfiltered total would page into empty results.
+  //
+  // Filtering to a campaign shows that campaign's scoped entries PLUS every
+  // global entry (campaignId null) — a global action (a permission grant, an
+  // admin transfer) isn't "about" any campaign, so it can't be excluded by
+  // picking one; it stays visible under every filter value.
   const where = {
     ...(actorId ? { actorId } : {}),
     ...(actionType ? { actionType } : {}),
+    ...(campaignId ? { OR: [{ campaignId }, { campaignId: null }] } : {}),
     ...(from || to
       ? { createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
       : {}),
@@ -86,6 +94,7 @@ export default async function ActivityLogPage({
     mostActiveGroup,
     distinctActions,
     actors,
+    loggedCampaignIds,
   ] = await Promise.all([
       prisma.activityLogEntry.findMany({
         where,
@@ -123,7 +132,31 @@ export default async function ActivityLogPage({
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       }),
+      // Which campaigns have ANY scoped entry, independent of the current
+      // filter — same reasoning as distinctActions above. campaignId has no FK
+      // relation (entries must survive a deleted campaign), so this is a bare
+      // scalar distinct, resolved to names in a second, dependent query below.
+      prisma.activityLogEntry.findMany({
+        where: { campaignId: { not: null } },
+        distinct: ["campaignId"],
+        select: { campaignId: true },
+      }),
     ]);
+
+  // Dependent on loggedCampaignIds, so it can't join the wave above. A deleted
+  // campaign's id can appear here with no matching row — its entries still
+  // exist (by design, see the schema comment on ActivityLogEntry.campaignId),
+  // so the dropdown falls back to a label rather than silently dropping it.
+  const campaignNames = await prisma.campaign.findMany({
+    where: { id: { in: loggedCampaignIds.map((c) => c.campaignId!) } },
+    select: { id: true, name: true },
+  });
+  const campaignOptions = loggedCampaignIds
+    .map((c) => ({
+      id: c.campaignId!,
+      name: campaignNames.find((n) => n.id === c.campaignId)?.name ?? "Deleted campaign",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const rows: ActivityLogRow[] = entries.map((e: EntryRow) => ({
     id: e.id,
@@ -160,9 +193,11 @@ export default async function ActivityLogPage({
       pageSize={PAGE_SIZE}
       actorOptions={actors.map((a) => ({ id: a.id, name: a.name ?? "Unnamed" }))}
       actionOptions={distinctActions.map((a) => a.actionType)}
+      campaignOptions={campaignOptions}
       filters={{
         actor: actorId ?? "",
         action: actionType ?? "",
+        campaign: campaignId ?? "",
         from: params.from ?? "",
         to: params.to ?? "",
       }}

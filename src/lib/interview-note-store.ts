@@ -18,6 +18,7 @@ export type SaveNoteResult = { ok: true } | { ok: false; error: string };
  */
 export async function saveNoteRating(
   applicantId: string,
+  campaignId: string,
   field: NoteFieldKey,
   value: number | null,
   userId: string,
@@ -37,6 +38,7 @@ export async function saveNoteRating(
     actionType: "INTERVIEW_NOTE_UPDATED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: { field, value },
   });
 
@@ -46,6 +48,7 @@ export async function saveNoteRating(
 /** Write the free-text remarks. Empty input clears the field back to null. */
 export async function saveNoteRemarks(
   applicantId: string,
+  campaignId: string,
   remarks: string,
   userId: string,
 ): Promise<SaveNoteResult> {
@@ -63,6 +66,7 @@ export async function saveNoteRemarks(
     actionType: "INTERVIEW_NOTE_UPDATED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
     details: { field: "remarks", value },
   });
 
@@ -77,6 +81,7 @@ export async function saveNoteRemarks(
  */
 export async function closeInterviewNote(
   applicantId: string,
+  campaignId: string,
   userId: string,
 ): Promise<SaveNoteResult> {
   await prisma.interviewNote.upsert({
@@ -90,6 +95,7 @@ export async function closeInterviewNote(
     actionType: "INTERVIEW_NOTE_CLOSED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
   });
 
   return { ok: true };
@@ -101,6 +107,7 @@ export async function closeInterviewNote(
  */
 export async function reopenInterviewNote(
   applicantId: string,
+  campaignId: string,
   userId: string,
 ): Promise<SaveNoteResult> {
   await prisma.interviewNote.update({
@@ -113,6 +120,7 @@ export async function reopenInterviewNote(
     actionType: "INTERVIEW_NOTE_REOPENED",
     targetType: "Applicant",
     targetId: applicantId,
+    campaignId,
   });
 
   return { ok: true };

@@ -22,6 +22,7 @@ import {
   ActivityLogFilters,
   type ActivityFilters,
   type ActorOption,
+  type CampaignOption,
 } from "./activity-log-filters";
 
 // Pill colour per action tone, mapped onto the app's status/brand tokens.
@@ -60,6 +61,7 @@ export function ActivityLogList({
   pageSize,
   actorOptions,
   actionOptions,
+  campaignOptions,
   filters,
 }: {
   rows: ActivityLogRow[];
@@ -72,6 +74,7 @@ export function ActivityLogList({
   /** Derived from the whole log server-side, not from the current page. */
   actorOptions: ActorOption[];
   actionOptions: string[];
+  campaignOptions: CampaignOption[];
   /** Current filter values, echoed back from the URL. */
   filters: ActivityFilters;
 }) {
@@ -86,6 +89,7 @@ export function ActivityLogList({
     () =>
       Boolean(filters.actor) ||
       Boolean(filters.action) ||
+      Boolean(filters.campaign) ||
       Boolean(filters.from) ||
       Boolean(filters.to),
   );
@@ -95,23 +99,26 @@ export function ActivityLogList({
   const anyFilterActive =
     Boolean(filters.actor) ||
     Boolean(filters.action) ||
+    Boolean(filters.campaign) ||
     Boolean(filters.from) ||
     Boolean(filters.to);
   const activeFilterCount = [
     filters.actor,
     filters.action,
+    filters.campaign,
     filters.from,
     filters.to,
   ].filter(Boolean).length;
 
   // Identifies the currently rendered slice — both layouts re-run their fade
   // exactly when paging or filtering produced new rows.
-  const sliceSignature = `${page}|${filters.actor}|${filters.action}|${filters.from}|${filters.to}`;
+  const sliceSignature = `${page}|${filters.actor}|${filters.action}|${filters.campaign}|${filters.from}|${filters.to}`;
 
   const pageHref = (n: number) => {
     const params = new URLSearchParams();
     if (filters.actor) params.set("actor", filters.actor);
     if (filters.action) params.set("action", filters.action);
+    if (filters.campaign) params.set("campaign", filters.campaign);
     if (filters.from) params.set("from", filters.from);
     if (filters.to) params.set("to", filters.to);
     if (n > 1) params.set("page", String(n));
@@ -171,6 +178,7 @@ export function ActivityLogList({
           filters={filters}
           actorOptions={actorOptions}
           actionOptions={actionOptions}
+          campaignOptions={campaignOptions}
         />
       </div>
 
@@ -223,6 +231,7 @@ export function ActivityLogList({
                   filters={filters}
                   actorOptions={actorOptions}
                   actionOptions={actionOptions}
+                  campaignOptions={campaignOptions}
                   idSuffix="-mobile"
                 />
               </div>

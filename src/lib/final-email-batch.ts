@@ -241,6 +241,7 @@ export async function runFinalResultsBatch(
     actionType: "FINAL_EMAILS_SENT",
     targetType: "Campaign",
     targetId: campaignId,
+    campaignId,
     details: { sent, failed },
   });
 

@@ -93,6 +93,7 @@ export async function claimPanelSeat(
     actionType: "PANEL_SEAT_CLAIMED",
     targetType: "Applicant",
     targetId: applicant.id,
+    campaignId,
     details: { committee: seat.committee, applicantName: applicant.fullName },
   });
 
@@ -164,6 +165,7 @@ export async function releasePanelSeat(
     actionType: "PANEL_SEAT_RELEASED",
     targetType: "Applicant",
     targetId: applicant.id,
+    campaignId,
     details: {
       committee: seat.committee,
       applicantName: applicant.fullName,

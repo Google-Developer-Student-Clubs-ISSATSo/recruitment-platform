@@ -66,7 +66,13 @@ export async function saveNoteRatingAction(
     return { ok: false, error: "Unknown rating field." };
   }
 
-  const result = await saveNoteRating(applicantId, field, value, gate.userId);
+  const result = await saveNoteRating(
+    applicantId,
+    campaignId,
+    field,
+    value,
+    gate.userId,
+  );
   if (!result.ok) return result;
 
   revalidatePath(`/campaigns/${campaignId}/interviews/${applicantId}/notes`);
@@ -82,7 +88,12 @@ export async function saveNoteRemarksAction(
   const gate = await authorize(campaignId, applicantId);
   if (!gate.ok) return gate;
 
-  const result = await saveNoteRemarks(applicantId, remarks, gate.userId);
+  const result = await saveNoteRemarks(
+    applicantId,
+    campaignId,
+    remarks,
+    gate.userId,
+  );
   if (!result.ok) return result;
 
   revalidatePath(`/campaigns/${campaignId}/interviews/${applicantId}/notes`);
@@ -103,7 +114,7 @@ export async function closeInterviewNoteAction(
   const gate = await authorize(campaignId, applicantId);
   if (!gate.ok) return gate;
 
-  const result = await closeInterviewNote(applicantId, gate.userId);
+  const result = await closeInterviewNote(applicantId, campaignId, gate.userId);
   if (!result.ok) return result;
 
   revalidatePath(`/campaigns/${campaignId}/interviews/${applicantId}/notes`);
@@ -135,7 +146,7 @@ export async function reopenInterviewNoteAction(
     return { ok: false, error: "Only account managers can reopen a closed note." };
   }
 
-  const result = await reopenInterviewNote(applicantId, userId);
+  const result = await reopenInterviewNote(applicantId, campaignId, userId);
   if (!result.ok) return result;
 
   revalidatePath(`/campaigns/${campaignId}/interviews/${applicantId}/notes`);

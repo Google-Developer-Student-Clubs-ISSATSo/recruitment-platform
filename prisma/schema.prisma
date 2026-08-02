@@ -190,6 +190,18 @@ model ActivityLogEntry {
   actionType String
   targetType String?
   targetId   String?
+  // Which campaign this action belongs to, for actions that are inherently
+  // campaign-scoped (Phase 1 scoring, interview notes, campaign-scoped email
+  // batches, etc.). Null for genuinely global actions (account creation,
+  // permission grants, admin transfer) — never set just because the actor
+  // happened to be inside a campaign page at the time.
+  //
+  // Deliberately a bare scalar, no relation — same pattern as targetId. A
+  // deleted campaign's log entries must survive and stay filterable by this
+  // now-orphaned id, consistent with the rest of this table's
+  // survive-deletion philosophy; an onDelete-cascading FK would erase them
+  // instead.
+  campaignId String?
   details    Json?
   createdAt  DateTime @default(now())
 
