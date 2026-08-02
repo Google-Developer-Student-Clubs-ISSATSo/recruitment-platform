@@ -1,30 +1,25 @@
-import { Committee } from "@/generated/prisma/enums";
-import { COMMITTEE_LABEL } from "@/lib/committee";
+import {
+  HEADER,
+  classifyApplicantRow,
+  type ClassifiedRow,
+  type PreviewRow,
+} from "@/lib/applicant-intake";
 
-// Pure CSV parsing + row classification for the applicant import. No database
-// access and no "use server" — the server actions call these, passing in the
-// set of emails that already exist in the campaign so duplicate detection stays
+// CSV-specific parsing for the applicant import: turn a responses file into
+// rows and hand each one to the shared classifier in @/lib/applicant-intake,
+// which the Google Form webhook calls too — so the validation and the
+// auto-reject rule exist in exactly one place. No database access and no
+// "use server" — the server actions call these, passing in the set of emails
+// that already exist in the campaign so duplicate detection stays
 // campaign-scoped. Kept dependency-free (small, known format) with a strict
 // RFC-4180-style parser that respects quoted fields and embedded newlines.
 
-// --- Exact CSV headers (authoritative wording from the responses file) ------
-export const HEADER = {
-  email: "Email",
-  fullName: "Full name",
-  isIssatso: "Are you an ISSATSO student?",
-  committee:
-    "Which one of our three committees do you think is most suitable for you ?",
-} as const;
-
-// Committee answer → enum. Anything not listed is an error row, never guessed.
-// Derived from COMMITTEE_LABEL rather than restated, so the answers accepted
-// here and the committee names the outbound emails print stay one and the same.
-const COMMITTEE_MAP: Record<string, Committee> = Object.fromEntries(
-  Object.entries(COMMITTEE_LABEL).map(([value, label]) => [
-    label,
-    value as Committee,
-  ]),
-);
+export { HEADER };
+export type {
+  ClassifiedRow,
+  PreviewRow,
+  RowStatus,
+} from "@/lib/applicant-intake";
 
 // Hard ceiling on an uploaded file. The whole CSV is read into memory as a
 // string and parsed in one pass, so an unbounded upload is a memory-exhaustion
@@ -33,26 +28,6 @@ const COMMITTEE_MAP: Record<string, Committee> = Object.fromEntries(
 // Enforced on BOTH sides: the client rejects early for a good error, the server
 // re-checks because the client can be bypassed.
 export const MAX_CSV_BYTES = 5 * 1024 * 1024;
-
-export type RowStatus = "import" | "auto_reject" | "duplicate" | "error";
-
-// What the preview table renders per row (light — no rawFormData).
-export type PreviewRow = {
-  rowNumber: number;
-  fullName: string;
-  email: string;
-  issatsoAnswer: string;
-  committeeLabel: string;
-  status: RowStatus;
-  reason?: string;
-};
-
-// Everything the commit step needs, per row. PreviewRow ⊂ ClassifiedRow.
-export type ClassifiedRow = PreviewRow & {
-  isIssatsoStudent: boolean | null;
-  preferredCommittee: Committee | null;
-  rawFormData: Record<string, string>;
-};
 
 export type ImportSummary = {
   totalRows: number;
@@ -107,8 +82,6 @@ export function parseCSV(text: string): string[][] {
   return rows;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /**
  * Parse and classify the whole file. `existingEmails` is the lowercased set of
  * emails already in this campaign; rows matching it (or an earlier row in the
@@ -143,9 +116,10 @@ export function classifyCsv(
     };
   }
 
-  // Lowercased emails seen earlier in THIS file, so an in-file repeat is also a
-  // duplicate (the first occurrence wins).
-  const seenInFile = new Set<string>();
+  // Emails already taken, grown as the file is walked so an in-file repeat is a
+  // duplicate too (the first occurrence wins). Copied rather than mutated in
+  // place — the caller's set stays its own.
+  const taken = new Set(existingEmails);
   const rows: ClassifiedRow[] = [];
 
   for (let r = 1; r < parsed.length; r++) {
@@ -153,7 +127,6 @@ export function classifyCsv(
     // Skip completely blank lines (e.g. a trailing newline).
     if (cells.every((c) => c.trim() === "")) continue;
 
-    const rowNumber = rows.length + 1;
     const get = (i: number) => (i < cells.length ? cells[i] : "");
 
     const rawFormData: Record<string, string> = {};
@@ -161,60 +134,24 @@ export function classifyCsv(
       rawFormData[h] = get(i);
     });
 
-    const fullName = get(iName).trim();
-    const email = get(iEmail).trim().toLowerCase();
-    const issatsoAnswer = get(iIss).trim();
-    const committeeAnswer = get(iCom).trim();
+    const row = classifyApplicantRow(
+      {
+        rowNumber: rows.length + 1,
+        fullName: get(iName),
+        email: get(iEmail),
+        issatsoAnswer: get(iIss),
+        committeeAnswer: get(iCom),
+        rawFormData,
+      },
+      taken,
+    );
 
-    // Resolve the two mapped/validated fields up front.
-    const isIssatsoStudent =
-      issatsoAnswer === "Yes"
-        ? true
-        : issatsoAnswer === "No"
-          ? false
-          : null;
-    const preferredCommittee = COMMITTEE_MAP[committeeAnswer] ?? null;
-    const committeeLabel = preferredCommittee ?? committeeAnswer;
-
-    const base = {
-      rowNumber,
-      fullName,
-      email,
-      issatsoAnswer,
-      committeeLabel,
-      isIssatsoStudent,
-      preferredCommittee,
-      rawFormData,
-    };
-
-    // 1) Hard data errors — never guess or import.
-    const errors: string[] = [];
-    if (!fullName) errors.push("missing full name");
-    if (!email) errors.push("missing email");
-    else if (!EMAIL_RE.test(email)) errors.push("invalid email");
-    if (isIssatsoStudent === null)
-      errors.push(`unrecognized ISSATSO answer "${issatsoAnswer || "(blank)"}"`);
-    if (preferredCommittee === null)
-      errors.push(`unrecognized committee "${committeeAnswer || "(blank)"}"`);
-
-    if (errors.length > 0) {
-      rows.push({ ...base, status: "error", reason: errors.join("; ") });
-      continue;
+    // Only a row that actually gets created claims its email, matching the
+    // pre-extraction behaviour: an error row never blocks a later good one.
+    if (row.status === "import" || row.status === "auto_reject") {
+      taken.add(row.email);
     }
-
-    // 2) Duplicate — already in the campaign, or repeated earlier in the file.
-    if (existingEmails.has(email) || seenInFile.has(email)) {
-      rows.push({ ...base, status: "duplicate" });
-      continue;
-    }
-    seenInFile.add(email);
-
-    // 3) Auto-reject non-ISSATSO students; everything else imports.
-    if (isIssatsoStudent === false) {
-      rows.push({ ...base, status: "auto_reject" });
-    } else {
-      rows.push({ ...base, status: "import" });
-    }
+    rows.push(row);
   }
 
   return { rows, headerError: null };

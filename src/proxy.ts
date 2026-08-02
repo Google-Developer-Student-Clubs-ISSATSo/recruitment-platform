@@ -50,10 +50,21 @@ export default function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Skip NextAuth API routes and static assets; everything else runs the proxy.
+  // Skip NextAuth API routes, machine webhooks, and static assets; everything
+  // else runs the proxy.
+  //
+  // `api/webhooks` is excluded because those routes are called by external
+  // services that have no session cookie and cannot follow a redirect to a
+  // login page — the Google Form's Apps Script, for one. They are NOT
+  // unprotected: each authenticates its caller itself (a constant-time shared
+  // secret comparison, see api/webhooks/applicant-submission), which is the
+  // only mechanism available to a caller that isn't a person in a browser.
+  //
   // The trailing `.*\\..*` also excludes any path with a file extension (e.g.
   // /LOGO.png and other files in /public) so the auth gate never redirects a
   // static asset — otherwise next/image's optimizer fetches a redirect instead
   // of the image and fails with a 400.
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  matcher: [
+    "/((?!api/auth|api/webhooks|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+  ],
 };

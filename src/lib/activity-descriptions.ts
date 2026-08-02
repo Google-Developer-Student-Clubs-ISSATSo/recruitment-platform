@@ -18,6 +18,11 @@ const ACTION_LABELS: Record<string, string> = {
   CAMPAIGN_CREATED: "created a campaign",
   CAMPAIGN_DELETED: "deleted a campaign",
   CAMPAIGN_STATUS_CHANGED: "changed a campaign's status",
+  APPLICANTS_IMPORTED: "imported applicants from a CSV file",
+  // Deliberately distinct wording from the CSV import above: the actor on these
+  // is the Administrator standing in for the Form webhook, not someone who sat
+  // down and uploaded a file, and the log should not imply otherwise.
+  APPLICANT_SUBMITTED_VIA_FORM: "received an application from the Google Form",
   PHASE1_SCORE_ENTERED: "entered a Phase 1 score",
   PHASE1_TECHNICAL_SCORE_ENTERED: "entered a technical score",
   PHASE1_RANKING_RECALCULATED: "recalculated the Phase 1 ranking",
@@ -86,6 +91,9 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   SIGNED_IN: "primary",
   SIGNED_OUT: "primary",
   MAGIC_LINK_REQUESTED: "primary",
+  // Routine intake, not a judgment about anyone — the quiet end of the log.
+  APPLICANTS_IMPORTED: "primary",
+  APPLICANT_SUBMITTED_VIA_FORM: "primary",
   PHASE1_SCORE_ENTERED: "primary",
   PHASE1_TECHNICAL_SCORE_ENTERED: "primary",
   PHASE1_RANKING_RECALCULATED: "pending",

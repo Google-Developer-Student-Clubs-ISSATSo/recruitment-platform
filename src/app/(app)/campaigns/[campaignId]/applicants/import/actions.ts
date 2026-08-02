@@ -5,12 +5,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permissions";
 import { logActivity } from "@/lib/activity-log";
-import {
-  ApplicantStatus,
-  PermissionKey,
-  PhaseOneClassification,
-} from "@/generated/prisma/enums";
+import { PermissionKey, PhaseOneClassification } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
+import { applicantCreateData } from "@/lib/applicant-intake";
 import {
   classifyCsv,
   summarize,
@@ -113,16 +110,8 @@ export async function confirmImport(
     console.time("confirmImport:createApplicants");
     await prisma.applicant.createMany({
       data: toCreate.map((r) => ({
-        campaignId,
-        fullName: r.fullName,
-        email: r.email,
-        isIssatsoStudent: r.isIssatsoStudent!,
-        preferredCommittee: r.preferredCommittee!,
+        ...applicantCreateData(r, campaignId),
         rawFormData: r.rawFormData as Prisma.InputJsonValue,
-        status:
-          r.status === "auto_reject"
-            ? ApplicantStatus.REJECTED_PHASE1
-            : ApplicantStatus.SUBMITTED,
       })),
     });
     console.timeEnd("confirmImport:createApplicants");
