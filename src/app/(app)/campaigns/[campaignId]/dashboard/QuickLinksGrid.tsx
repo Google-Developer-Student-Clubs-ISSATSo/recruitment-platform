@@ -27,7 +27,8 @@ type QuickLink = {
   icon: IconName;
   /**
    * A single key, or "any of these grants access". Null means the destination
-   * has no permission gate at all, so the card is always offered (Statistics).
+   * has no permission gate at all, so the card is always offered (Statistics,
+   * Interviews).
    */
   permission: PermissionKey | readonly PermissionKey[] | null;
   /** Marks a destination that lives outside the campaign. */
@@ -54,7 +55,8 @@ const CAMPAIGN_LINKS: Omit<QuickLink, "platformWide">[] = [
     label: "Interviews",
     description: "Booking emails, slots, and the panel board.",
     icon: "video_chat",
-    permission: CAMPAIGN_PAGE_PERMISSIONS["interviews"],
+    // Ungated — every member can open the Interviews page and read the board.
+    permission: null,
   },
   {
     href: "final-decision",

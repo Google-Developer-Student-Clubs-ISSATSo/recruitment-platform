@@ -7,12 +7,19 @@ import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/app-shell/icon";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
-import type { Committee } from "@/generated/prisma/enums";
+import { committeeLabel } from "@/lib/committee";
+import { seatKindLabel } from "@/lib/panel-seat-kind";
+import type { PanelCandidate } from "@/lib/panel-candidates";
 import type { BoardDay, BoardCard, BoardSeat } from "@/lib/panel-board";
 
 export type { BoardDay, BoardCard, BoardSeat };
-import { claimPanelSeatAction, releasePanelSeatAction } from "./actions";
-
+import {
+  assignPanelSeatAction,
+  reassignPanelSeatAction,
+  unassignPanelSeatAction,
+  respondToSeatApprovalAction,
+  cancelSeatApprovalAction,
+} from "./actions";
 
 /** "Amine Hammami" → "AH". Falls back to one letter for single-word names. */
 function initialsOf(name: string): string {
@@ -23,35 +30,37 @@ function initialsOf(name: string): string {
 }
 
 /**
- * The interviewer panel-claiming board — a card per scheduled applicant, each
- * holding one seat per committee.
+ * The interview panel board — a card per scheduled applicant, each holding one
+ * seat per kind (the three committees, plus a floating seat on 4-seat panels).
  *
- * Layout follows the Stitch "Interviewer Panel Board" screen (header strip with
- * initials tile + time, three seat rows, a completion footer), but every colour
- * comes from our own tokens rather than Stitch's raw hex.
+ * Read-only by default. Seats are staffed by the lead who owns them, not
+ * claimed by whoever gets there first: a committee's lead rosters their own
+ * members onto that committee's seat. An ordinary member sees the board exactly
+ * as it stands and has no controls at all — which is the point of the rework.
  *
- * One deliberate departure from the mock: Stitch tints each committee chip a
- * different hue (green/blue/red). Our palette has no committee colours — the
- * only semantic colours we own are status-accepted / status-rejected /
- * status-pending — so borrowing them here would paint the EER chip in the exact
- * red that means "rejected" everywhere else in the app. Committee chips are
- * therefore neutral, and colour is reserved strictly for seat *state*: green for
- * claimed and for a complete panel, amber for a panel still short of
- * interviewers. Seats always render in the fixed MKT → TM → EER order, so
- * position rather than hue is what makes a card scannable.
+ * The one exception is the Club Lead, who may ask another committee's lead for
+ * their seat; that request appears here for both parties until it is answered.
+ *
+ * Colour is reserved strictly for seat *state*: green for filled and for a
+ * complete panel, amber for a panel still short of interviewers or a request
+ * awaiting an answer. Committee chips stay neutral — the palette's only
+ * semantic colours are accepted/rejected/pending, and tinting an EER chip red
+ * would collide with "rejected" everywhere else in the app.
  */
 export function PanelBoard({
   campaignId,
   days,
   currentUserId,
-  currentUserCommittee,
-  canOverrideRelease,
+  assignableByKind,
+  isReadOnly,
 }: {
   campaignId: string;
   days: BoardDay[];
   currentUserId: string;
-  currentUserCommittee: Committee;
-  canOverrideRelease: boolean;
+  /** Members this viewer may put in each seat kind they own. */
+  assignableByKind: Record<string, PanelCandidate[]>;
+  /** True when this viewer owns no seats and holds no pending request. */
+  isReadOnly: boolean;
 }) {
   const allCards = days.flatMap((d) => d.cards);
   const totalSeats = allCards.reduce((n, c) => n + c.seats.length, 0);
@@ -69,11 +78,12 @@ export function PanelBoard({
           </span>
           <div>
             <h2 className="text-lg font-semibold text-foreground">
-              Interviewer Panel Board
+              Interview Panel Board
             </h2>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              Claim open interview seats. You can only take your own
-              committee&apos;s seat ({currentUserCommittee}).
+              {isReadOnly
+                ? "Who is sitting on each interview panel. Your committee's lead assigns these seats."
+                : "Assign your committee's members to their seat on each panel."}
             </p>
           </div>
         </div>
@@ -95,7 +105,7 @@ export function PanelBoard({
       {allCards.length === 0 ? (
         <p className="rounded-lg border border-dashed border-neutral-300 px-4 py-8 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
           No interviews scheduled yet. Once a slot time is entered, that
-          applicant&apos;s panel opens for claiming here.
+          applicant&apos;s panel appears here to be staffed.
         </p>
       ) : (
         <div className="space-y-5">
@@ -105,8 +115,7 @@ export function PanelBoard({
               campaignId={campaignId}
               day={day}
               currentUserId={currentUserId}
-              currentUserCommittee={currentUserCommittee}
-              canOverrideRelease={canOverrideRelease}
+              assignableByKind={assignableByKind}
             />
           ))}
         </div>
@@ -128,14 +137,12 @@ function DaySection({
   campaignId,
   day,
   currentUserId,
-  currentUserCommittee,
-  canOverrideRelease,
+  assignableByKind,
 }: {
   campaignId: string;
   day: BoardDay;
   currentUserId: string;
-  currentUserCommittee: Committee;
-  canOverrideRelease: boolean;
+  assignableByKind: Record<string, PanelCandidate[]>;
 }) {
   const [open, setOpen] = useState(!day.isPast);
   const reduced = useReducedMotion();
@@ -223,8 +230,7 @@ function DaySection({
                   campaignId={campaignId}
                   card={card}
                   currentUserId={currentUserId}
-                  currentUserCommittee={currentUserCommittee}
-                  canOverrideRelease={canOverrideRelease}
+                  assignableByKind={assignableByKind}
                 />
               ))}
             </div>
@@ -239,30 +245,41 @@ function PanelCard({
   campaignId,
   card,
   currentUserId,
-  currentUserCommittee,
-  canOverrideRelease,
+  assignableByKind,
 }: {
   campaignId: string;
   card: BoardCard;
   currentUserId: string;
-  currentUserCommittee: Committee;
-  canOverrideRelease: boolean;
+  assignableByKind: Record<string, PanelCandidate[]>;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // The one success worth saying out loud: a Club Lead's assignment that became
+  // a request. Every other action shows its result in the seat itself.
+  const [notice, setNotice] = useState<string | null>(null);
 
   const filled = card.seats.filter((s) => s.claimedById !== null).length;
   const complete = filled === card.seats.length && card.seats.length > 0;
   // Note the two distinct meanings of "complete" on this card: `complete` is
-  // seat staffing (all three claimed), `card.interviewDone` is the interview
+  // seat staffing (every seat filled), `card.interviewDone` is the interview
   // itself having happened and been written up. They move independently.
   const done = card.interviewDone;
 
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(
+    action: () => Promise<{
+      ok: boolean;
+      error?: string;
+      awaitingApproval?: boolean;
+    }>,
+  ) {
     setError(null);
+    setNotice(null);
     startTransition(async () => {
       const res = await action();
       if (!res.ok) setError(res.error ?? "Something went wrong.");
+      else if (res.awaitingApproval) {
+        setNotice("Sent to that seat's lead to approve.");
+      }
     });
   }
 
@@ -294,6 +311,23 @@ function PanelCard({
                 Completed
               </span>
             )}
+            {/* The committee this applicant applied to. Shown to every viewer,
+                because it is what makes the seats below readable: it names which
+                seat is the applicant's own committee and which are the
+                cross-committee check the panel exists to provide.
+
+                Deliberately neutral, not tinted — the palette's only semantic
+                colours are accepted/rejected/pending, and an EER chip in red
+                would read as "rejected" everywhere else in the app. The short
+                code keeps the card legible at thirds-width; the full name is on
+                the tooltip rather than wrapping the header to three lines. */}
+            <p
+              className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400"
+              title={committeeLabel(card.preferredCommittee)}
+            >
+              <Icon name="groups" className="text-[14px]" />
+              Applied to {card.preferredCommittee}
+            </p>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
               <Icon name="schedule" className="text-[14px]" />
               {card.scheduledTimeLabel}
@@ -307,10 +341,10 @@ function PanelCard({
           </div>
         </div>
 
-        {/* One pip per seat, filled in the same MKT → TM → EER order as the rows
-            below. The footer already states the count in words; this is for
-            scanning a grid of cards for the half-empty one without reading any of
-            them, which is the whole reason this section is a board. */}
+        {/* One pip per seat, filled in the same order as the rows below. The
+            footer already states the count in words; this is for scanning a grid
+            of cards for the half-empty one without reading any of them, which is
+            the whole reason this section is a board. */}
         <span
           className="flex shrink-0 items-center gap-1"
           aria-label={`${filled} of ${card.seats.length} seats filled`}
@@ -329,7 +363,7 @@ function PanelCard({
         </span>
       </div>
 
-      {/* Seats, always MKT → TM → EER */}
+      {/* Seats, always MKT → TM → EER → Floating */}
       <div className="flex-1 space-y-2 p-4">
         {card.seats.map((seat) => (
           <SeatRow
@@ -337,20 +371,37 @@ function PanelCard({
             seat={seat}
             pending={pending}
             isMine={seat.claimedById === currentUserId}
-            isMyCommittee={seat.committee === currentUserCommittee}
-            canOverrideRelease={canOverrideRelease}
-            interviewDone={done}
-            onClaim={() =>
-              run(() => claimPanelSeatAction(campaignId, seat.seatId))
+            currentUserId={currentUserId}
+            assignable={assignableByKind[seat.kind] ?? []}
+            onAssign={(assigneeId) =>
+              run(() => assignPanelSeatAction(campaignId, seat.seatId, assigneeId))
             }
-            onRelease={() =>
-              run(() => releasePanelSeatAction(campaignId, seat.seatId))
+            onReassign={(assigneeId) =>
+              run(() =>
+                reassignPanelSeatAction(campaignId, seat.seatId, assigneeId),
+              )
+            }
+            onUnassign={() =>
+              run(() => unassignPanelSeatAction(campaignId, seat.seatId))
+            }
+            onRespond={(requestId, approve) =>
+              run(() =>
+                respondToSeatApprovalAction(campaignId, requestId, approve),
+              )
+            }
+            onWithdraw={(requestId) =>
+              run(() => cancelSeatApprovalAction(campaignId, requestId))
             }
           />
         ))}
         {error && (
           <p className="rounded-lg bg-status-rejected/10 px-3 py-2 text-xs text-status-rejected">
             {error}
+          </p>
+        )}
+        {notice && (
+          <p className="rounded-lg bg-status-pending/10 px-3 py-2 text-xs text-[color:var(--status-pending)]">
+            {notice}
           </p>
         )}
       </div>
@@ -392,59 +443,70 @@ function SeatRow({
   seat,
   pending,
   isMine,
-  isMyCommittee,
-  canOverrideRelease,
-  interviewDone,
-  onClaim,
-  onRelease,
+  currentUserId,
+  assignable,
+  onAssign,
+  onReassign,
+  onUnassign,
+  onRespond,
+  onWithdraw,
 }: {
   seat: BoardSeat;
   pending: boolean;
   isMine: boolean;
-  isMyCommittee: boolean;
-  canOverrideRelease: boolean;
-  /** This applicant's interview is done — the panel is frozen. */
-  interviewDone: boolean;
-  onClaim: () => void;
-  onRelease: () => void;
+  currentUserId: string;
+  assignable: PanelCandidate[];
+  onAssign: (assigneeId: string) => void;
+  onReassign: (assigneeId: string) => void;
+  onUnassign: () => void;
+  onRespond: (requestId: string, approve: boolean) => void;
+  onWithdraw: (requestId: string) => void;
 }) {
   const reduced = useReducedMotion();
-  const claimed = seat.claimedById !== null;
-  // Whoever holds it may hand it back; MANAGE_ACCOUNTS may free anyone's seat.
-  // Once the interview is done, neither can: the seats have stopped being a
-  // staffing plan and become the record of who conducted it. That applies to
-  // the override too — `releasePanelSeat` refuses both cases server-side, and a
-  // button that only ever returned an error would be worse than no button.
-  const canRelease = claimed && !interviewDone && (isMine || canOverrideRelease);
+  const [picking, setPicking] = useState(false);
+  const filled = seat.claimedById !== null;
+  // One picker, two meanings: on an empty seat it fills, on a filled one it
+  // swaps the occupant. Kept as a single control because the choice being made
+  // — which member sits here — is the same either way.
+  const mayStaff = seat.canAssign || seat.canRequest;
 
   /**
-   * A one-shot wash of colour over the seat after you act on it.
+   * A one-shot wash of colour over the seat after it changes.
    *
-   * Claiming a seat is a server round-trip that changes one row inside a grid of
-   * cards, and the resulting difference — a name where "Awaiting interviewer"
-   * used to be — is easy to miss when you are looking at the button you just
-   * pressed. The flash draws the eye to the row that changed.
+   * Staffing a seat is a server round-trip that changes one row inside a grid of
+   * cards, and the resulting difference — a name where "Unassigned" used to be —
+   * is easy to miss when you are looking at the control you just used. The flash
+   * draws the eye to the row that changed.
    *
-   * Driven by the CLICK rather than by watching `seat.claimedById`, deliberately:
-   * a prop-watching flash would also fire for every already-claimed seat on first
-   * paint, lighting up the whole board on page load. `nonce` lets a repeated
-   * claim/release re-trigger it. Green for claiming, amber for releasing — the
+   * Driven by the ACTION rather than by watching `seat.claimedById`,
+   * deliberately: a prop-watching flash would also fire for every already-filled
+   * seat on first paint, lighting up the whole board on page load. `nonce` lets
+   * a repeated action re-trigger it. Green for filling, amber for emptying — the
    * same tokens those two states mean everywhere else in the app.
    */
   const [flash, setFlash] = useState<{
-    kind: "claim" | "release";
+    kind: "fill" | "empty";
     nonce: number;
   } | null>(null);
 
-  const trigger = (kind: "claim" | "release") => {
+  const trigger = (kind: "fill" | "empty") => {
     if (reduced) return;
     setFlash((f) => ({ kind, nonce: (f?.nonce ?? 0) + 1 }));
   };
 
+  const request = seat.pendingRequest;
+  const isMyRequest = request?.requestedById === currentUserId;
+
+  // Swapping a seat's occupant shouldn't offer the person already in it — the
+  // server refuses that anyway, so it would only be a dead entry in the list.
+  const choices = filled
+    ? assignable.filter((m) => m.id !== seat.claimedById)
+    : assignable;
+
   return (
     <div
-      className={`relative isolate flex items-center justify-between gap-2 overflow-hidden rounded-lg px-3 py-2 transition-colors duration-200 ease-out motion-reduce:transition-none ${
-        claimed
+      className={`relative isolate overflow-hidden rounded-lg px-3 py-2 transition-colors duration-200 ease-out motion-reduce:transition-none ${
+        filled
           ? "bg-status-accepted/5"
           : "border border-dashed border-neutral-300 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800/40"
       }`}
@@ -460,84 +522,192 @@ function SeatRow({
             transition={{ duration: DURATION.slow, ease: EASE.out }}
             onAnimationComplete={() => setFlash(null)}
             className={`pointer-events-none absolute inset-0 -z-10 ${
-              flash.kind === "claim"
-                ? "bg-status-accepted"
-                : "bg-status-pending"
+              flash.kind === "fill" ? "bg-status-accepted" : "bg-status-pending"
             }`}
           />
         )}
       </AnimatePresence>
 
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-          {seat.committee}
-        </span>
-        {claimed ? (
-          <span className="flex min-w-0 items-center gap-2">
-            {/* An initials chip for the holder, so a filled seat reads as "a
-                person is in it" at a glance — the board equivalent of an
-                assignee avatar. Tinted with primary rather than the seat's
-                status green, so it identifies rather than restating "claimed". */}
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary">
-              {initialsOf(seat.claimedByName ?? "?")}
-            </span>
-            <span className="truncate text-sm font-medium text-foreground">
-              {seat.claimedByName}
-              {isMine && (
-                <span className="ml-1.5 text-xs font-normal text-neutral-500 dark:text-neutral-400">
-                  (you)
-                </span>
-              )}
-            </span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+            {seatKindLabel(seat.kind)}
           </span>
-        ) : (
-          <span className="truncate text-sm italic text-neutral-500 dark:text-neutral-400">
-            Awaiting interviewer
-          </span>
-        )}
-      </div>
-
-      {claimed ? (
-        <div className="flex shrink-0 items-center gap-1.5">
-          {/* The padlock only earns its space when there is no Release button:
-              with one present, the button already says the seat is taken, and the
-              row is tight enough at two-up that ~22px of redundant chrome is what
-              pushes the interviewer's name into an ellipsis. */}
-          {!canRelease && (
-            <Icon name="lock" className="text-[16px] text-status-accepted" />
+          {filled ? (
+            <span className="flex min-w-0 items-center gap-2">
+              {/* An initials chip for the holder, so a filled seat reads as "a
+                  person is in it" at a glance — the board equivalent of an
+                  assignee avatar. Tinted with primary rather than the seat's
+                  status green, so it identifies rather than restating "filled". */}
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary">
+                {initialsOf(seat.claimedByName ?? "?")}
+              </span>
+              <span className="truncate text-sm font-medium text-foreground">
+                {seat.claimedByName}
+                {isMine && (
+                  <span className="ml-1.5 text-xs font-normal text-neutral-500 dark:text-neutral-400">
+                    (you)
+                  </span>
+                )}
+              </span>
+            </span>
+          ) : seat.awaitingApproval ? (
+            /* Spoken for but not filled. Shown to everyone, so no second lead
+               assigns over the top of a request already in flight. */
+            <span className="truncate text-sm font-medium text-[color:var(--status-pending)]">
+              Pending approval
+            </span>
+          ) : (
+            <span className="truncate text-sm italic text-neutral-500 dark:text-neutral-400">
+              Unassigned
+            </span>
           )}
-          {canRelease && (
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {filled && seat.canAssign && !picking && (
             <Button
               size="sm"
               variant="ghost"
               disabled={pending}
-              title={isMine ? "Release your seat" : "Release this seat (override)"}
-              onClick={() => {
-                trigger("release");
-                onRelease();
-              }}
+              title="Put a different interviewer in this seat"
+              onClick={() => setPicking(true)}
             >
-              Release
+              Change
             </Button>
           )}
+          {filled && seat.canAssign && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending}
+              title="Remove this interviewer from the panel"
+              onClick={() => {
+                trigger("empty");
+                onUnassign();
+              }}
+            >
+              Remove
+            </Button>
+          )}
+          {/* The padlock only earns its space when there is no button beside it:
+              with one present, the control already says the seat is settled, and
+              the row is tight enough at two-up that ~22px of redundant chrome is
+              what pushes the interviewer's name into an ellipsis. */}
+          {filled && !seat.canAssign && (
+            <Icon name="lock" className="text-[16px] text-status-accepted" />
+          )}
+          {!filled && mayStaff && !picking && (
+            <Button
+              size="sm"
+              variant={seat.canAssign ? "default" : "ghost"}
+              disabled={pending}
+              title={
+                seat.canAssign
+                  ? undefined
+                  : "Propose someone for this seat — this committee's lead has to approve it"
+              }
+              onClick={() => setPicking(true)}
+            >
+              {seat.canAssign ? "Assign" : "Request"}
+            </Button>
+          )}
+          {/* Nothing to offer this viewer: shown as open so the card reads
+              honestly, but with no affordance. */}
+          {!filled && !mayStaff && !request && !seat.awaitingApproval && (
+            <span className="text-xs font-medium text-neutral-400">Open</span>
+          )}
         </div>
-      ) : isMyCommittee ? (
-        <Button
-          size="sm"
-          disabled={pending}
-          onClick={() => {
-            trigger("claim");
-            onClaim();
-          }}
-        >
-          Claim
-        </Button>
-      ) : (
-        // Another committee's seat: shown as open so the card reads honestly,
-        // but with no affordance — this user can never claim it.
-        <span className="shrink-0 text-xs font-medium text-neutral-400">
-          Open
-        </span>
+      </div>
+
+      {/* Member picker — a plain select of the members this lead may seat here,
+          rather than a modal: the choice is short and the row is already the
+          context, so a dialog would be more ceremony than the action needs. */}
+      {picking && (filled ? seat.canAssign : mayStaff) && (
+        <div className="mt-2 flex items-center gap-2">
+          <select
+            autoFocus
+            defaultValue=""
+            disabled={pending}
+            aria-label={`Choose a member for the ${seatKindLabel(seat.kind)} seat`}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (!value) return;
+              setPicking(false);
+              trigger("fill");
+              if (filled) onReassign(value);
+              else onAssign(value);
+            }}
+            className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
+          >
+            <option value="" disabled>
+              {choices.length === 0
+                ? "No eligible members"
+                : "Choose a member…"}
+            </option>
+            {choices.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={pending}
+            onClick={() => setPicking(false)}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      {/* A pending Club Lead request. Rendered for both sides: the lead who has
+          to answer it, and the requester waiting on it — so neither is left
+          guessing whether it went anywhere. Amber, like everything else in the
+          app that means "waiting on a human". */}
+      {request && !filled && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-status-pending/10 px-2.5 py-1.5">
+          <span className="text-xs text-[color:var(--status-pending)]">
+            {isMyRequest
+              ? `Your request to seat ${request.assigneeName} is awaiting this seat's lead.`
+              : `${request.requestedByName} is asking for this seat for ${request.assigneeName}.`}
+          </span>
+          <span className="flex items-center gap-1.5">
+            {seat.canRespond && (
+              <>
+                <Button
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => {
+                    trigger("fill");
+                    onRespond(request.requestId, true);
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => onRespond(request.requestId, false)}
+                >
+                  Decline
+                </Button>
+              </>
+            )}
+            {isMyRequest && !seat.canRespond && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={pending}
+                onClick={() => onWithdraw(request.requestId)}
+              >
+                Withdraw
+              </Button>
+            )}
+          </span>
+        </div>
       )}
     </div>
   );

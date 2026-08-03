@@ -1,7 +1,6 @@
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
-import { PANEL_COMMITTEES } from "@/lib/interview-slot";
 import {
   countInterviewed,
   getCampaignCounts,
@@ -90,9 +89,11 @@ export type InterviewSnapshot = {
  * otherwise be counted against the wrong date. Same reasoning as the panel
  * board's day grouping, and the same helper.
  *
- * A panel is full when every committee holds a seat, so the threshold is
- * PANEL_COMMITTEES.length rather than a hardcoded 3 — one definition of how
- * wide a panel is, shared with the code that creates the seats.
+ * A panel is full when every seat IT HAS is filled — measured against the
+ * panel's own seats rather than a global panel-size constant. Panel size is
+ * per-campaign now (InterviewConfig.panelSize), and panels created before a
+ * size change keep the shape they were built with, so the only honest
+ * denominator is the one on the row.
  */
 export const getInterviewSnapshot = cache(async function getInterviewSnapshot(
   campaignId: string,
@@ -118,12 +119,12 @@ export const getInterviewSnapshot = cache(async function getInterviewSnapshot(
 
     if (tunisDateKey(at) === todayKey) today += 1;
 
-    const claimed = (applicant.interviewPanel?.seats ?? []).filter(
-      (seat) => seat.claimedById !== null,
-    ).length;
-    // An applicant scheduled before panels existed has no panel at all, which
-    // reads as zero claimed seats — understaffed, which is exactly right.
-    if (claimed < PANEL_COMMITTEES.length) needingPanel += 1;
+    const seats = applicant.interviewPanel?.seats ?? [];
+    const filled = seats.filter((seat) => seat.claimedById !== null).length;
+    // An applicant scheduled before panels existed has no panel at all. That is
+    // understaffed — checked explicitly, because `filled < seats.length` would
+    // read 0 < 0 and quietly call an absent panel complete.
+    if (seats.length === 0 || filled < seats.length) needingPanel += 1;
   }
 
   return { today, needingPanel, scheduled: scheduled.length };

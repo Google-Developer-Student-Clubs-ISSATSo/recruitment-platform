@@ -10,7 +10,7 @@ import {
 } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { formatTunisDateTime } from "@/lib/tunis-time";
-import { PANEL_COMMITTEES } from "@/lib/interview-slot";
+import { buildJury, seatKindLabel } from "@/lib/panel-seat-kind";
 import type { NoteScores } from "@/lib/interview-note";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
 import { Icon, type IconName } from "@/components/app-shell/icon";
@@ -55,7 +55,7 @@ export default async function InterviewNotesPage({
         select: {
           seats: {
             select: {
-              committee: true,
+              kind: true,
               claimedBy: { select: { name: true, email: true } },
             },
           },
@@ -102,19 +102,9 @@ export default async function InterviewNotesPage({
     teamWork: note?.teamWork ?? null,
   };
 
-  // Jury, in the board's fixed MKT → TM → EER order. An unclaimed seat reads
-  // "Open" so the panel's gaps are visible here too, not just on the board.
-  const seatByCommittee = new Map(
-    (applicant.interviewPanel?.seats ?? []).map((s) => [s.committee, s]),
-  );
-  const jury = PANEL_COMMITTEES.map((committee) => {
-    const seat = seatByCommittee.get(committee);
-    const holder = seat?.claimedBy;
-    return {
-      committee,
-      name: holder ? (holder.name ?? holder.email) : null,
-    };
-  });
+  // Jury, in the board's fixed seat order. An unfilled seat reads "Open" so the
+  // panel's gaps are visible here too, not just on the board.
+  const jury = buildJury(applicant.interviewPanel?.seats ?? []);
 
   const formScore = applicant.phaseOneResult?.weightedTotal ?? null;
   const yearOfStudy = readYearOfStudy(applicant.rawFormData);
@@ -174,12 +164,9 @@ export default async function InterviewNotesPage({
               </p>
               <ul className="mt-1 space-y-0.5">
                 {jury.map((j) => (
-                  <li
-                    key={j.committee}
-                    className="flex items-center gap-2 text-sm"
-                  >
+                  <li key={j.kind} className="flex items-center gap-2 text-sm">
                     <span className="inline-flex min-w-10 shrink-0 justify-center rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                      {j.committee}
+                      {seatKindLabel(j.kind)}
                     </span>
                     {j.name ? (
                       <span className="truncate text-foreground">{j.name}</span>

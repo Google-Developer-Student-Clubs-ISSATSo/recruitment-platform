@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import { CAPACITY_COMMITTEES } from "@/lib/committee-capacity";
 import { NOTE_FIELDS } from "@/lib/interview-note";
+import { seatKindLabel } from "@/lib/panel-seat-kind";
 import {
   capacityLevel,
   compareByFormScore,
@@ -742,19 +743,25 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
             className="overflow-hidden"
           >
         <div className="space-y-5 border-t border-neutral-200 px-4 py-4 dark:border-neutral-800">
-          {/* Jury — the 3 panel seats, "Open" for any unclaimed one */}
+          {/* Jury — this panel's seats, "Open" for any still unfilled. Columns
+              track the panel's own size, so a 4-seat panel doesn't wrap one
+              lonely seat onto a second row. */}
           <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
               Jury
             </p>
-            <ul className="grid gap-2 sm:grid-cols-3">
+            <ul
+              className={`grid gap-2 ${
+                row.jury.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"
+              }`}
+            >
               {row.jury.map((j) => (
                 <li
-                  key={j.committee}
+                  key={j.kind}
                   className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-800"
                 >
                   <span className="inline-flex min-w-10 justify-center rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                    {j.committee}
+                    {seatKindLabel(j.kind)}
                   </span>
                   {j.name ? (
                     <span className="truncate text-sm text-foreground">

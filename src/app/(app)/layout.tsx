@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell/app-shell";
 import { getShellUser } from "@/components/app-shell/shell-user";
+import { SeatApprovalPrompt } from "@/components/seat-approval/seat-approval-prompt";
 
 // Shell layout for the member-facing routes (/campaigns, the campaign-scoped
 // pages under /campaigns/[campaignId]/…, and /activity-log). Any signed-in user
@@ -21,6 +22,10 @@ export default async function AppLayout({
       permissions={shell.permissions}
     >
       {children}
+      {/* A panel seat request has no email behind it — it finds its approver
+          here, wherever in the app they happen to be. Renders nothing at all
+          unless one is actually waiting on this user. */}
+      <SeatApprovalPrompt />
     </AppShell>
   );
 }

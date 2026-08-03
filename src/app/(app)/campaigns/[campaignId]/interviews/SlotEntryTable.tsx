@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pager } from "@/components/ui/pager";
 import { Icon } from "@/components/app-shell/icon";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import type { ClearImpact } from "@/lib/interview-slot";
 import { BookingStatusBadge, type BookingState } from "./booking-status-badge";
 import { saveInterviewSlotAction } from "./actions";
 
@@ -158,6 +160,10 @@ function Th({
  * drift apart between the two layouts.
  */
 function useSlotDraft(campaignId: string, row: SlotRow) {
+  // The staffed-panel warning the server sent back, held until the user answers
+  // it. Non-null is exactly "the dialog is open", so there is no second piece of
+  // state that could disagree with it about whether we are waiting on an answer.
+  const [clearImpact, setClearImpact] = useState<ClearImpact | null>(null);
   // `saved` is what's committed to the database, `time`/`room` are the draft in
   // the inputs. The badge reads `saved` so it only flips to "Scheduled" once the
   // write actually lands, never merely because someone typed into the field.
@@ -182,7 +188,10 @@ function useSlotDraft(campaignId: string, row: SlotRow) {
         ? "NOT_BOOKED"
         : "NOT_INVITED";
 
-  function save() {
+  // `confirmClear` is only ever true on the second attempt, after the user
+  // answered the dialog — the first save always asks the server, and the server
+  // is what decides whether there is anything to warn about.
+  function save(confirmClear = false) {
     setError(null);
     setJustSaved(false);
     startTransition(async () => {
@@ -191,8 +200,15 @@ function useSlotDraft(campaignId: string, row: SlotRow) {
         row.applicantId,
         time,
         room,
+        confirmClear,
       );
       if (!res.ok) {
+        // A refusal carrying an impact isn't an error the user did anything
+        // about — it's a question. Raise the dialog instead of the red text.
+        if (res.clearImpact) {
+          setClearImpact(res.clearImpact);
+          return;
+        }
         setError(res.error);
         return;
       }
@@ -212,7 +228,82 @@ function useSlotDraft(campaignId: string, row: SlotRow) {
     dirty,
     state,
     save,
+    clearImpact,
+    dismissClearWarning: () => setClearImpact(null),
+    confirmClear: () => {
+      setClearImpact(null);
+      save(true);
+    },
   };
+}
+
+/** The two layouts' shared confirmation for clearing a staffed panel's time. */
+function ClearSlotConfirm({
+  fullName,
+  impact,
+  onDismiss,
+  onConfirm,
+}: {
+  fullName: string;
+  impact: ClearImpact | null;
+  onDismiss: () => void;
+  onConfirm: () => void;
+}) {
+  // Both counts are worth stating separately: an assigned seat is someone who
+  // thinks they are interviewing this applicant, a pending request is a lead
+  // waiting to answer something they will no longer be able to reach. They also
+  // have different outcomes — the seat survives the clear, the request does not
+  // — so the copy branches on each rather than lumping them together.
+  const seatCount = impact?.assignedSeats ?? 0;
+  const requestCount = impact?.pendingRequests ?? 0;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  const parts: string[] = [];
+  if (seatCount > 0) parts.push(plural(seatCount, "assigned seat"));
+  if (requestCount > 0) parts.push(plural(requestCount, "pending seat request"));
+
+  return (
+    <ConfirmDialog
+      open={impact !== null}
+      onOpenChange={(open) => {
+        if (!open) onDismiss();
+      }}
+      title="Clear this interview time?"
+      description={
+        <>
+          {fullName}&apos;s panel already has {parts.join(" and ")}. Clearing the
+          time takes them off the panel board, so nobody can see or change that
+          staffing until a new time is entered.
+          {seatCount > 0 && (
+            <>
+              {" "}
+              The {seatCount === 1 ? "interviewer keeps their seat" : "interviewers keep their seats"}
+              {" "}— re-entering a time brings the panel back exactly as it is now.
+            </>
+          )}
+          {/* Stated outright, because it is the one thing here that does not
+              come back: a request can only be answered from the card that is
+              about to disappear, so it is closed out rather than left to sit
+              PENDING forever, blocking its seat. */}
+          {requestCount > 0 && (
+            <>
+              <br />
+              <br />
+              {requestCount === 1
+                ? "The pending request will be declined automatically"
+                : "The pending requests will be declined automatically"}
+              , since {requestCount === 1 ? "it" : "they"} could no longer be
+              answered. The {requestCount === 1 ? "seat" : "seats"} can be asked
+              for again once the interview is rescheduled.
+            </>
+          )}
+        </>
+      }
+      confirmLabel="Clear the time"
+      destructive
+      onConfirm={onConfirm}
+    />
+  );
 }
 
 /** The save button plus its inline error / "Saved" acknowledgement. */
@@ -238,11 +329,14 @@ function SaveCell({
           Saved
         </span>
       )}
+      {/* Wrapped, not passed by reference: `save` takes a confirmClear flag,
+          and handing it straight to onClick would feed it the MouseEvent —
+          truthy, so every save would silently claim to be confirmed. */}
       <Button
         size="sm"
         variant="outline"
         disabled={pending || !dirty}
-        onClick={onSave}
+        onClick={() => onSave()}
       >
         Save
       </Button>
@@ -293,6 +387,12 @@ function SlotTableRow({
           dirty={d.dirty}
           pending={d.pending}
           onSave={d.save}
+        />
+        <ClearSlotConfirm
+          fullName={row.fullName}
+          impact={d.clearImpact}
+          onDismiss={d.dismissClearWarning}
+          onConfirm={d.confirmClear}
         />
       </td>
     </tr>
@@ -349,6 +449,13 @@ function SlotCard({ campaignId, row }: { campaignId: string; row: SlotRow }) {
         dirty={d.dirty}
         pending={d.pending}
         onSave={d.save}
+      />
+
+      <ClearSlotConfirm
+        fullName={row.fullName}
+        impact={d.clearImpact}
+        onDismiss={d.dismissClearWarning}
+        onConfirm={d.confirmClear}
       />
     </li>
   );

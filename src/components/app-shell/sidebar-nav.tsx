@@ -72,7 +72,9 @@ const CAMPAIGN_NAV: {
     icon: "video_chat",
     label: "Interviews",
     segment: "interviews",
-    permission: CAMPAIGN_PAGE_PERMISSIONS["interviews"],
+    // Open to every member — no gate on the page, so no gate on the link. The
+    // board is a roster anyone may read; its controls gate themselves per seat.
+    permission: null,
   },
   {
     icon: "emoji_events",

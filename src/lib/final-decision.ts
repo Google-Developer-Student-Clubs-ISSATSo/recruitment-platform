@@ -1,5 +1,6 @@
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import { computeAverage, type NoteScores } from "@/lib/interview-note";
+import type { JurySeat } from "@/lib/panel-seat-kind";
 
 // Pure final-decision helpers. Imports NOTHING from the database layer — the
 // dashboard client component pulls this in, and importing prisma here would
@@ -74,10 +75,11 @@ export type CommitteeUsage = {
 };
 
 /**
- * One panel seat as the Final Decision drill-in shows it: the committee and who
- * claimed it, or null for an unclaimed ("Open") seat.
+ * One panel seat as the Final Decision drill-in shows it. Re-exported from the
+ * seat-kind vocabulary rather than redefined, so this page and the interview
+ * pages describe a jury the same way.
  */
-export type JurySeat = { committee: Committee; name: string | null };
+export type { JurySeat };
 
 /**
  * The dashboard's per-applicant row. Interview scores arrive as the raw 7
@@ -99,7 +101,7 @@ export type DecisionRow = {
   formScore: number | null;
   /** Null when the applicant has no InterviewNote row at all. */
   noteScores: NoteScores | null;
-  /** The three panel seats in MKT → TM → EER order; name null = unclaimed. */
+  /** This panel's seats in fixed kind order; name null = seat unfilled. */
   jury: JurySeat[];
   /** Free-text panel remarks, or null. */
   remarks: string | null;

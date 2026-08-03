@@ -13,9 +13,17 @@ import { PermissionKey } from "@/generated/prisma/enums";
  * loads. It is the only key that opens it — a Committee Rep without it does not
  * see the page at all.
  *
- * Statistics is deliberately ABSENT from this map: it is open to every
- * authenticated member, so it has no gating permission for the guards, the
- * sidebar or the audit script to look up.
+ * Statistics and Interviews are deliberately ABSENT from this map: both are open
+ * to every authenticated member, so neither has a gating permission for the
+ * guards, the sidebar or the audit script to look up.
+ *
+ * Interviews earns its place in that company because the panel board is a
+ * roster — who is interviewing whom, and when. That is something every member
+ * has a legitimate reason to read, and reading it is all an ordinary member can
+ * do: the board renders without a single control for them. The page's *writable*
+ * sections keep their own gates (SEND_EMAILS, ENTER_INTERVIEW_SLOT), and which
+ * seats a viewer may touch is decided per-seat from the live lead holders, which
+ * is a far narrower bar than any page-level permission could express.
  */
 export const CAMPAIGN_PAGE_PERMISSIONS = {
   applicants: PermissionKey.VIEW_FULL_POOL,
@@ -30,7 +38,6 @@ export const CAMPAIGN_PAGE_PERMISSIONS = {
   // the technical-only viewer is never shown (they score one question and see
   // no aggregate), so ENTER_TECHNICAL_SCORE must not open this page.
   "phase1/selection": PermissionKey.SCREEN_PHASE1,
-  interviews: PermissionKey.CLAIM_PANEL_SEAT,
   "final-decision": PermissionKey.ENTER_FINAL_DECISION,
 } as const satisfies Record<string, PermissionKey | readonly PermissionKey[]>;
 

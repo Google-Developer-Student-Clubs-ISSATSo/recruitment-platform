@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { Icon } from "@/components/app-shell/icon";
 import { getInterviewSnapshot } from "@/lib/campaign-dashboard";
-import { PANEL_COMMITTEES } from "@/lib/interview-slot";
 import { WidgetPanel } from "./WidgetPanel";
 
 // Today's interview load, for anyone who can sit on a panel. Rendered only for
@@ -82,7 +81,7 @@ export async function InterviewsTodayCard({
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
             {needingPanel === 0
               ? "Every panel is fully staffed."
-              : `Fewer than ${PANEL_COMMITTEES.length} seats claimed.`}
+              : "Some seats are still unassigned."}
           </p>
         </div>
       </div>

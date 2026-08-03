@@ -3,15 +3,47 @@ import {
   formatTunisDayLabel,
   formatTunisTimeOfDay,
 } from "@/lib/tunis-time";
-import { PANEL_COMMITTEES } from "@/lib/interview-slot";
+import { SEAT_KIND_COMMITTEE, SEAT_KIND_ORDER } from "@/lib/panel-seat-kind";
 import { isInterviewDone } from "@/lib/interview-note";
-import type { Committee } from "@/generated/prisma/enums";
+import type { Committee, PanelSeatKind } from "@/generated/prisma/enums";
+
+/** A Club Lead's still-open request for a seat, as the board renders it. */
+export type BoardSeatRequest = {
+  requestId: string;
+  requestedById: string;
+  requestedByName: string;
+  /** Who would take the seat. Their own name when they asked for themselves. */
+  assigneeName: string;
+};
 
 export type BoardSeat = {
   seatId: string;
-  committee: Committee;
+  kind: PanelSeatKind;
   claimedById: string | null;
   claimedByName: string | null;
+  /**
+   * The pending request for this seat, if one is open. Only ever populated for
+   * a viewer allowed to see it (the requester or the seat's current lead) —
+   * resolved by the caller, since it depends on live lead resolution.
+   */
+  pendingRequest: BoardSeatRequest | null;
+  /**
+   * A request is open on this seat, so it is spoken for but not filled. Shown
+   * to EVERY viewer — an empty-looking seat that another lead is already
+   * waiting on would otherwise invite a second, conflicting assignment. Who
+   * asked and for whom stays in `pendingRequest`, which is need-to-know.
+   */
+  awaitingApproval: boolean;
+  /** This viewer may fill/empty this seat outright (they are its lead). */
+  canAssign: boolean;
+  /**
+   * This viewer may propose someone for this seat, subject to its lead's
+   * approval (they are the Club Lead). Same control as `canAssign` in the UI —
+   * the difference is only what the server does with it.
+   */
+  canRequest: boolean;
+  /** This viewer may answer the pending request above. */
+  canRespond: boolean;
 };
 
 export type BoardCard = {
@@ -20,6 +52,13 @@ export type BoardCard = {
   /** Just the time ("2:30 PM") — the day is already in the group header. */
   scheduledTimeLabel: string;
   room: string | null;
+  /**
+   * The committee this applicant applied to, shown on every card for every
+   * viewer. It is the context that makes the panel legible: it says which of
+   * the seats below is the applicant's own committee judging them and which are
+   * the cross-committee check, and it is the seat the Club Lead may never take.
+   */
+  preferredCommittee: Committee;
   seats: BoardSeat[];
   /**
    * This viewer's access to this applicant's interview note. Resolved per card
@@ -29,9 +68,9 @@ export type BoardCard = {
   noteAccess: "edit" | "view" | "none";
   /**
    * The interview happened and its note was closed — see {@link isInterviewDone}.
-   * Freezes the panel: seats can no longer be released, because the seats are
-   * the record of who actually conducted the interview. Recomputed from the
-   * note's current `closedAt` on every render, so a reopen unfreezes it.
+   * Freezes the panel: seats can no longer be changed, because they are the
+   * record of who actually conducted the interview. Recomputed from the note's
+   * current `closedAt` on every render, so a reopen unfreezes it.
    */
   interviewDone: boolean;
 };
@@ -56,20 +95,43 @@ export type BoardDay = {
 export type ScheduledApplicant = {
   id: string;
   fullName: string;
+  /** The seat for this committee is off-limits to the Club Lead entirely. */
+  preferredCommittee: Committee;
   interviewSlot: { scheduledTime: Date | null; room: string | null } | null;
   /** Null when no note row exists yet — which counts as not-done. */
   interviewNote: { closedAt: Date | null } | null;
   interviewPanel: {
     seats: {
       id: string;
-      committee: Committee;
+      kind: PanelSeatKind;
       claimedById: string | null;
       claimedBy: { name: string | null; email: string } | null;
+      approvalRequests: {
+        id: string;
+        requestedById: string;
+        requestedBy: { name: string | null; email: string };
+        assignee: { name: string | null; email: string } | null;
+      }[];
     }[];
   } | null;
 };
 
 export type NoteAccess = "edit" | "view" | "none";
+
+/**
+ * What the viewer may do, resolved live from the current lead holders before
+ * this is called. Passed in rather than derived here so this module stays pure
+ * and the (async, database-backed) authority resolution happens once per page
+ * rather than once per seat.
+ */
+export type ViewerPowers = {
+  userId: string;
+  /** Seat kinds this viewer owns as their lead — they may fill/empty these. */
+  ownedKinds: readonly PanelSeatKind[];
+  isClubLead: boolean;
+  /** MANAGE_ACCOUNTS: may fill/empty any seat and answer any request. */
+  isAdministrator: boolean;
+};
 
 /**
  * Turn the scheduled-applicant rows into the board's day groups.
@@ -89,41 +151,92 @@ export type NoteAccess = "edit" | "view" | "none";
 export function groupScheduledIntoDays(
   scheduled: ScheduledApplicant[],
   noteAccess: Map<string, NoteAccess> = new Map(),
+  powers: ViewerPowers | null = null,
   now: Date = new Date(),
 ): BoardDay[] {
   // Seats are ordered here, not in the query: the board must always read
-  // MKT → TM → EER regardless of the order rows happen to come back in.
-  const seatOrder = new Map(PANEL_COMMITTEES.map((c, i) => [c, i]));
+  // MKT → TM → EER → Floating regardless of the order rows come back in.
+  const seatOrder = new Map(SEAT_KIND_ORDER.map((k, i) => [k, i]));
   const todayKey = tunisDateKey(now);
   const byDay = new Map<string, { at: Date; card: BoardCard }[]>();
+
+  const owns = (kind: PanelSeatKind) =>
+    powers !== null &&
+    (powers.isAdministrator || powers.ownedKinds.includes(kind));
 
   for (const a of scheduled) {
     const at = a.interviewSlot?.scheduledTime;
     // Callers filter to scheduled applicants; this also narrows the type.
     if (!at) continue;
 
+    const frozen = isInterviewDone(a.interviewNote);
+
     const card: BoardCard = {
       applicantId: a.id,
       fullName: a.fullName,
       scheduledTimeLabel: formatTunisTimeOfDay(at),
       room: a.interviewSlot?.room ?? null,
+      preferredCommittee: a.preferredCommittee,
       noteAccess: noteAccess.get(a.id) ?? "none",
-      interviewDone: isInterviewDone(a.interviewNote),
+      interviewDone: frozen,
       seats: [...(a.interviewPanel?.seats ?? [])]
         .sort(
-          (x, y) =>
-            (seatOrder.get(x.committee) ?? 0) - (seatOrder.get(y.committee) ?? 0),
+          (x, y) => (seatOrder.get(x.kind) ?? 0) - (seatOrder.get(y.kind) ?? 0),
         )
-        .map((s) => ({
-          seatId: s.id,
-          committee: s.committee,
-          claimedById: s.claimedById,
-          // Seed users may have no display name; fall back to the email so a
-          // claimed seat never renders as blank.
-          claimedByName: s.claimedById
-            ? (s.claimedBy?.name ?? s.claimedBy?.email ?? "Unknown")
-            : null,
-        })),
+        .map((s) => {
+          const open = s.approvalRequests[0] ?? null;
+          const canAssign = !frozen && owns(s.kind) && open === null;
+          // The Club Lead may propose someone for a committee seat they don't
+          // own — but never for the floating seat, which is already theirs to
+          // fill, and never for the seat of the committee this applicant
+          // actually applied to, which no approval can unlock.
+          const canRequest =
+            !frozen &&
+            powers !== null &&
+            powers.isClubLead &&
+            !owns(s.kind) &&
+            s.kind !== "FLOATING" &&
+            SEAT_KIND_COMMITTEE[s.kind] !== a.preferredCommittee &&
+            s.claimedById === null &&
+            open === null;
+          const canRespond = !frozen && open !== null && owns(s.kind);
+          const maySeeRequest =
+            open !== null &&
+            powers !== null &&
+            (owns(s.kind) || open.requestedById === powers.userId);
+
+          return {
+            seatId: s.id,
+            kind: s.kind,
+            claimedById: s.claimedById,
+            // Seed users may have no display name; fall back to the email so a
+            // filled seat never renders as blank.
+            claimedByName: s.claimedById
+              ? (s.claimedBy?.name ?? s.claimedBy?.email ?? "Unknown")
+              : null,
+            pendingRequest:
+              maySeeRequest && open
+                ? {
+                    requestId: open.id,
+                    requestedById: open.requestedById,
+                    requestedByName:
+                      open.requestedBy.name ?? open.requestedBy.email,
+                    // No assignee row means a request from before seats could
+                    // be asked for on someone else's behalf — those were always
+                    // the requester asking for themselves.
+                    assigneeName:
+                      open.assignee?.name ??
+                      open.assignee?.email ??
+                      open.requestedBy.name ??
+                      open.requestedBy.email,
+                  }
+                : null,
+            awaitingApproval: open !== null,
+            canAssign,
+            canRequest,
+            canRespond,
+          };
+        }),
     };
 
     const key = tunisDateKey(at);

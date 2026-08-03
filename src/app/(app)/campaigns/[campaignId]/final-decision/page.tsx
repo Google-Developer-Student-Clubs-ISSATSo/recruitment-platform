@@ -7,7 +7,7 @@ import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
 import { FINAL_TEMPLATE } from "@/lib/final-email-templates";
 import { missingLinkLabels } from "@/lib/final-email-links";
 import { getCapacityUsage } from "@/lib/committee-capacity-store";
-import { PANEL_COMMITTEES } from "@/lib/interview-slot";
+import { buildJury } from "@/lib/panel-seat-kind";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
 import { DASHBOARD_STATUSES, type DecisionRow } from "@/lib/final-decision";
 import { PermissionGate } from "@/components/permission-gate";
@@ -78,7 +78,7 @@ export default async function FinalDecisionPage({
           select: {
             seats: {
               select: {
-                committee: true,
+                kind: true,
                 claimedBy: { select: { name: true, email: true } },
               },
             },
@@ -116,17 +116,8 @@ export default async function FinalDecisionPage({
 
   const rows: DecisionRow[] = applicants.map((a) => {
     const note = a.interviewNote;
-    // Jury in the board's fixed MKT → TM → EER order; an unclaimed seat is null.
-    const seatByCommittee = new Map(
-      (a.interviewPanel?.seats ?? []).map((s) => [s.committee, s]),
-    );
-    const jury = PANEL_COMMITTEES.map((committee) => {
-      const holder = seatByCommittee.get(committee)?.claimedBy;
-      return {
-        committee,
-        name: holder ? (holder.name ?? holder.email) : null,
-      };
-    });
+    // Jury in the board's fixed seat order; an unfilled seat's name is null.
+    const jury = buildJury(a.interviewPanel?.seats ?? []);
     return {
       id: a.id,
       fullName: a.fullName,

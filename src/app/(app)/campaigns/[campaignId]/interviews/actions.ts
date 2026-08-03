@@ -6,11 +6,14 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { logActivity } from "@/lib/activity-log";
-import { saveInterviewSlot } from "@/lib/interview-slot";
+import { saveInterviewSlot, type SaveSlotResult } from "@/lib/interview-slot";
 import { parseCalendarLink } from "@/lib/interview-calendar-link";
 import {
-  claimPanelSeat,
-  releasePanelSeat,
+  assignPanelSeat,
+  reassignPanelSeat,
+  unassignPanelSeat,
+  respondToSeatApproval,
+  cancelSeatApproval,
   type SeatResult,
 } from "@/lib/panel-seat";
 import {
@@ -20,11 +23,12 @@ import {
 } from "@/lib/interview-email-batch";
 import { PermissionKey } from "@/generated/prisma/enums";
 
-// Interview scheduling actions. The page itself opens for CLAIM_PANEL_SEAT, but
-// each action re-checks the permission its *own* operation needs — sending is
-// SEND_EMAILS, entering a slot is ENTER_INTERVIEW_SLOT. Actions are reachable by
-// POST without going through the UI, so the render-time gating on the page is
-// never the security boundary.
+// Interview scheduling actions. The page itself is open to any signed-in member,
+// so every action here carries its own check for what its *own* operation needs
+// — sending is SEND_EMAILS, entering a slot is ENTER_INTERVIEW_SLOT, and the
+// panel actions resolve the acting lead per seat. Actions are reachable by POST
+// without going through the UI, so the render-time gating on the page is never
+// the security boundary.
 
 export type ActionResult<T> = ({ ok: true } & T) | { ok: false; error: string };
 export type SendSummary = {
@@ -34,19 +38,19 @@ export type SendSummary = {
   failures: SendFailure[];
 };
 
-/** Checks one permission + that the campaign exists. Returns the actor's id. */
-async function authorize(
-  campaignId: string,
-  permission: PermissionKey,
-  denial: string,
-): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+type Gate = { ok: true; userId: string } | { ok: false; error: string };
+
+/**
+ * Establishes a signed-in caller and a real campaign, and nothing more.
+ *
+ * The floor under every action here. On its own it is the whole check only for
+ * the panel actions, whose real authorization is per-seat and lives in
+ * panel-seat.ts — see the note above that section.
+ */
+async function authenticate(campaignId: string): Promise<Gate> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return { ok: false, error: "You are signed out." };
-
-  if (!(await hasPermission(userId, permission))) {
-    return { ok: false, error: denial };
-  }
 
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -55,6 +59,22 @@ async function authorize(
   if (!campaign) return { ok: false, error: "That campaign doesn't exist." };
 
   return { ok: true, userId };
+}
+
+/** Checks one permission + that the campaign exists. Returns the actor's id. */
+async function authorize(
+  campaignId: string,
+  permission: PermissionKey,
+  denial: string,
+): Promise<Gate> {
+  const gate = await authenticate(campaignId);
+  if (!gate.ok) return gate;
+
+  if (!(await hasPermission(gate.userId, permission))) {
+    return { ok: false, error: denial };
+  }
+
+  return gate;
 }
 
 /**
@@ -147,13 +167,18 @@ export async function sendInterviewRemindersAction(
  * here; the write itself — campaign/status checks, time parsing, the upsert and
  * the activity entry — lives in {@link saveInterviewSlot} so it can be exercised
  * outside a request too.
+ *
+ * `confirmClear` carries the user's answer to the one question this write asks:
+ * clearing a time out from under a staffed panel comes back refused with a
+ * `clearImpact` the first time, and goes through when re-sent with this set.
  */
 export async function saveInterviewSlotAction(
   campaignId: string,
   applicantId: string,
   scheduledTimeLocal: string,
   room: string,
-): Promise<ActionResult<{ scheduledTimeISO: string | null; room: string | null }>> {
+  confirmClear = false,
+): Promise<SaveSlotResult> {
   const gate = await authorize(
     campaignId,
     PermissionKey.ENTER_INTERVIEW_SLOT,
@@ -167,6 +192,7 @@ export async function saveInterviewSlotAction(
     scheduledTimeLocal,
     room,
     gate.userId,
+    confirmClear,
   );
   if (!result.ok) return result;
 
@@ -174,25 +200,71 @@ export async function saveInterviewSlotAction(
   return result;
 }
 
-// ============ PANEL SEAT CLAIMING ============
+// ============ PANEL STAFFING ============
+//
+// These actions check only that the caller is signed in. That is deliberate and
+// is NOT a missing gate: WHO may touch a given seat is resolved inside the
+// panel-seat helpers from the live lead holders, and every one of them refuses a
+// caller who isn't that seat's current lead, the Administrator, or the Club Lead
+// on the request path. That resolution is the authorization, and it is a far
+// narrower bar than any permission key could express.
+//
+// They used to require CLAIM_PANEL_SEAT as a coarse "belongs on this page"
+// door. That door is gone with the page-level gate, and the permission would be
+// the wrong lock to reuse regardless: CLAIM_PANEL_SEAT now marks who may BE
+// SEATED on a panel (it is the pool a lead picks from — see panel-candidates.ts),
+// not who may do the seating. Requiring it here would lock a committee lead out
+// of staffing their own seat for the unrelated reason that they don't sit on
+// panels themselves.
 
 /**
- * Claim the seat matching the caller's own committee. CLAIM_PANEL_SEAT-gated
- * here; the committee match and the race-safe conditional update live in
- * {@link claimPanelSeat}.
+ * Put a member in an empty seat. Only the lead who owns that seat kind (or the
+ * Administrator) may do this outright; a Club Lead's attempt on someone else's
+ * committee seat turns into an approval request — see {@link assignPanelSeat}.
  */
-export async function claimPanelSeatAction(
+export async function assignPanelSeatAction(
+  campaignId: string,
+  seatId: string,
+  assigneeId: string,
+): Promise<SeatResult> {
+  const gate = await authenticate(campaignId);
+  if (!gate.ok) return gate;
+
+  const result = await assignPanelSeat(campaignId, seatId, assigneeId, gate.userId);
+  if (!result.ok) return result;
+
+  revalidatePath(`/campaigns/${campaignId}/interviews`);
+  return result;
+}
+
+/**
+ * Swap a seat's occupant for another member, without the seat passing through
+ * empty. Same authority as assigning it — see {@link reassignPanelSeat}.
+ */
+export async function reassignPanelSeatAction(
+  campaignId: string,
+  seatId: string,
+  assigneeId: string,
+): Promise<SeatResult> {
+  const gate = await authenticate(campaignId);
+  if (!gate.ok) return gate;
+
+  const result = await reassignPanelSeat(campaignId, seatId, assigneeId, gate.userId);
+  if (!result.ok) return result;
+
+  revalidatePath(`/campaigns/${campaignId}/interviews`);
+  return { ok: true };
+}
+
+/** Empty a seat. Same authority as filling it — see {@link unassignPanelSeat}. */
+export async function unassignPanelSeatAction(
   campaignId: string,
   seatId: string,
 ): Promise<SeatResult> {
-  const gate = await authorize(
-    campaignId,
-    PermissionKey.CLAIM_PANEL_SEAT,
-    "You don't have permission to claim panel seats.",
-  );
+  const gate = await authenticate(campaignId);
   if (!gate.ok) return gate;
 
-  const result = await claimPanelSeat(campaignId, seatId, gate.userId);
+  const result = await unassignPanelSeat(campaignId, seatId, gate.userId);
   if (!result.ok) return result;
 
   revalidatePath(`/campaigns/${campaignId}/interviews`);
@@ -200,22 +272,39 @@ export async function claimPanelSeatAction(
 }
 
 /**
- * Give up a seat — your own, or anyone's if you hold MANAGE_ACCOUNTS. Gated on
- * CLAIM_PANEL_SEAT to reach the board at all; who may release *which* seat is
- * decided in {@link releasePanelSeat}.
+ * Answer a Club Lead's seat request. The approver is re-derived live inside
+ * {@link respondToSeatApproval} — the request's stored approverUserId is
+ * history, not the permission check.
  */
-export async function releasePanelSeatAction(
+export async function respondToSeatApprovalAction(
   campaignId: string,
-  seatId: string,
+  requestId: string,
+  approve: boolean,
 ): Promise<SeatResult> {
-  const gate = await authorize(
-    campaignId,
-    PermissionKey.CLAIM_PANEL_SEAT,
-    "You don't have permission to manage panel seats.",
-  );
+  const gate = await authenticate(campaignId);
   if (!gate.ok) return gate;
 
-  const result = await releasePanelSeat(campaignId, seatId, gate.userId);
+  const result = await respondToSeatApproval(
+    campaignId,
+    requestId,
+    approve,
+    gate.userId,
+  );
+  if (!result.ok) return result;
+
+  revalidatePath(`/campaigns/${campaignId}/interviews`);
+  return { ok: true };
+}
+
+/** Withdraw your own pending seat request. */
+export async function cancelSeatApprovalAction(
+  campaignId: string,
+  requestId: string,
+): Promise<SeatResult> {
+  const gate = await authenticate(campaignId);
+  if (!gate.ok) return gate;
+
+  const result = await cancelSeatApproval(campaignId, requestId, gate.userId);
   if (!result.ok) return result;
 
   revalidatePath(`/campaigns/${campaignId}/interviews`);

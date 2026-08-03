@@ -45,6 +45,10 @@ model User {
   phase2EntriesWritten  Phase2Entry[]
   campaignLeadsHeld     CampaignLead[]        @relation("CampaignLeadHolder")
   campaignLeadsAssigned CampaignLead[]        @relation("CampaignLeadAssignedBy")
+
+  seatApprovalsRequested PanelSeatApprovalRequest[] @relation("SeatApprovalRequester")
+  seatApprovalsAsAssignee PanelSeatApprovalRequest[] @relation("SeatApprovalAssignee")
+  seatApprovalsToAnswer  PanelSeatApprovalRequest[] @relation("SeatApprovalApprover")
 }
 
 model Account {
@@ -262,6 +266,7 @@ model Campaign {
   applicants          Applicant[]
   phaseOneQuestions   PhaseOneQuestion[]
   phaseOneConfig      PhaseOneConfig?
+  interviewConfig     InterviewConfig?
   emailLogs           EmailLog[]
   committeeCapacities CommitteeCapacity[]
   leads               CampaignLead[]
@@ -484,6 +489,21 @@ model EmailLog {
 
 // ============ INTERVIEW SCHEDULING ============
 
+// Per-campaign interview settings. One row per campaign, same shape as
+// PhaseOneConfig (campaignId @unique rather than a composite — there is only
+// ever one row), upserted from the Configuration page.
+//
+// panelSize is how many seats each panel gets: 3 (one per committee) or 4 (the
+// three committees plus a FLOATING seat). Defaulted to 3 so a campaign that
+// never touches the setting behaves exactly as before this existed.
+model InterviewConfig {
+  id         String @id @default(cuid())
+  campaignId String @unique
+  panelSize  Int    @default(3)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
 // One row per shortlisted applicant invited to book an interview. Created empty
 // (scheduledTime null) at booking-invite send time, then filled in by hand from
 // the external booking calendar — the club books through a bit.ly calendar link,
@@ -511,20 +531,92 @@ model InterviewPanel {
   seats     PanelSeat[]
 }
 
-// One seat per committee on a panel, claimed by at most one user. The
-// @@unique([panelId, committee]) is what enforces "one seat per committee per
-// panel"; an unclaimed seat is a row with claimedById still null.
+// What a panel seat is FOR. Deliberately its own enum rather than reusing
+// `Committee`: three of the values mirror the recruiting committees, but
+// FLOATING is a fourth seat that belongs to no committee at all. Widening
+// `Committee` instead would have implied a fourth committee everywhere that
+// enum is genuinely about recruiting — Applicant.preferredCommittee,
+// Applicant.assignedCommittee, CommitteeCapacity — where no such committee
+// exists. The overlap in value names is intentional and load-bearing: the MKT
+// seat is filled by the MKT committee's lead, and so on.
+enum PanelSeatKind {
+  MKT
+  TM
+  EER
+  FLOATING
+}
+
+// One seat of a given kind on a panel, held by at most one user. The
+// @@unique([panelId, kind]) is what enforces "one seat per kind per panel"; an
+// unfilled seat is a row with claimedById still null.
 model PanelSeat {
-  id          String    @id @default(cuid())
+  id          String        @id @default(cuid())
   panelId     String
-  committee   Committee
+  kind        PanelSeatKind
   claimedById String?
   claimedAt   DateTime?
 
-  panel     InterviewPanel @relation(fields: [panelId], references: [id], onDelete: Cascade)
-  claimedBy User?          @relation(fields: [claimedById], references: [id])
+  panel            InterviewPanel             @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  claimedBy        User?                      @relation(fields: [claimedById], references: [id])
+  approvalRequests PanelSeatApprovalRequest[]
 
-  @@unique([panelId, committee])
+  @@unique([panelId, kind])
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+// A Club Lead asking to seat someone in a seat that isn't theirs to fill
+// unilaterally.
+//
+// The Club Lead is the one person who may put someone on any committee's seat,
+// but not silently: they raise a request, and the person who owns that seat
+// actively approves or declines it. Nothing about the seat changes until then —
+// the same "nothing happens until the recipient acts" shape as
+// AdminTransferInvite.
+//
+// `assigneeUserId` is who would take the seat if this is approved — usually the
+// Club Lead themselves, but they may also be rostering one of their own
+// members onto another committee's panel. Nullable only so rows written before
+// the column existed still read; a null is treated as "the requester", which is
+// exactly what those rows meant.
+//
+// `approverUserId` records who was the right approver AT REQUEST TIME. It is
+// deliberately NOT the authorization check when responding: who may approve is
+// re-derived live at that moment (see resolveSeatApprover). If a Lead is
+// replaced while a request sits pending, authority moves with the role — the
+// outgoing Lead must not keep approval power over old requests just because
+// they were snapshotted into one, and the incoming Lead must not be locked out
+// of them. Same reasoning as every other live-computed value in this schema
+// (InterviewNote's AVG, CommitteeCapacity's accepted count): a stored copy of
+// something that should track current state is a copy that can be wrong.
+// This column stays for the audit trail — "who was asked" is a real question
+// the log should be able to answer, separately from "who may answer".
+//
+// Approver resolution (applied both at request time and, freshly, at response
+// time):
+//   - MKT / EER seat → that committee's current CampaignLead holder
+//   - TM seat        → the current Administrator (the sole TM_LEAD holder),
+//                      since TM has no CampaignLead row by design
+//   - FLOATING seat  → never reaches this model; it is the Club Lead's own
+//                      seat and needs nobody's approval
+model PanelSeatApprovalRequest {
+  id             String         @id @default(cuid())
+  seatId         String
+  requestedById  String
+  assigneeUserId String?
+  approverUserId String
+  status         ApprovalStatus @default(PENDING)
+  createdAt      DateTime       @default(now())
+  respondedAt    DateTime?
+
+  seat        PanelSeat @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  requestedBy User      @relation("SeatApprovalRequester", fields: [requestedById], references: [id])
+  assignee    User?     @relation("SeatApprovalAssignee", fields: [assigneeUserId], references: [id])
+  approver    User      @relation("SeatApprovalApprover", fields: [approverUserId], references: [id])
 }
 
 // The panel's scoring sheet for one applicant. "Jury" (who sat on the panel) is

@@ -12,7 +12,18 @@ import {
   CAMPAIGN_CREATE_PERMISSIONS,
   pageAccessKeys,
 } from "../src/lib/route-permissions";
-import { PermissionKey, Committee } from "../src/generated/prisma/enums";
+import {
+  assignPanelSeat,
+  reassignPanelSeat,
+  respondToSeatApproval,
+} from "../src/lib/panel-seat";
+import {
+  PermissionKey,
+  ApprovalStatus,
+  Committee,
+  LeadRole,
+  PanelSeatKind,
+} from "../src/generated/prisma/enums";
 
 /**
  * RBAC verification pass — the proportionate equivalent of a pen test for this
@@ -30,8 +41,10 @@ import { PermissionKey, Committee } from "../src/generated/prisma/enums";
  *   - a user who holds ≥1 required key must be ALLOWED (positive control, so a
  *     gate that denies everyone can't masquerade as "secure").
  *
- * A second section exercises the interview-note seat/closed-state logic with
- * throwaway fixtures (cleaned up at the end).
+ * Two further sections exercise authorization that is NOT a permission grant, so
+ * Section 1's matrix cannot express it, using throwaway fixtures cleaned up at
+ * the end: the interview-note seat/closed-state logic, and panel-seat authority
+ * (which lead currently holds which title, resolved live).
  *
  * Run: npx tsx --env-file=.env scripts/audit-rbac.ts
  */
@@ -80,7 +93,12 @@ function buildGates(): Gate[] {
     ["action final-decision send emails", [K.SEND_EMAILS]],
     ["action interview booking invite/reminder send", [K.SEND_EMAILS]],
     ["action interview slot entry", [K.ENTER_INTERVIEW_SLOT]],
-    ["action claim/release panel seat", [K.CLAIM_PANEL_SEAT]],
+    // The panel-staffing actions are deliberately ABSENT from this matrix, and
+    // so is the Interviews page: neither checks a permission key any more. The
+    // page is open to every signed-in member (like Statistics), and which seats
+    // a caller may touch is resolved per-seat from the live CampaignLead rows —
+    // authority this section has no way to express, since it is not a permission
+    // grant at all. Section 3 covers it directly instead.
     ["action createUser / deleteUser / togglePermission / bulk / reset", [K.MANAGE_ACCOUNTS]],
     ["action transfer admin role", [K.MANAGE_ACCOUNTS]],
     ["action reopen closed interview note", [K.MANAGE_ACCOUNTS]],
@@ -158,7 +176,7 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
   await prisma.panelSeat.create({
     data: {
       panelId: panel.id,
-      committee: Committee.TM,
+      kind: PanelSeatKind.TM,
       claimedById: panelist.id,
     },
   });
@@ -225,6 +243,250 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
   }
 }
 
+// --- Section 3: panel-seat authority (live lead resolution) ------------------
+
+/**
+ * The lock that replaced the panel actions' old CLAIM_PANEL_SEAT gate.
+ *
+ * Section 1 can't cover this: the authority is not a permission grant at all,
+ * it is "are you the current holder of this campaign's MKT/EER/Club lead title",
+ * resolved live from CampaignLead on every call. So it is exercised here against
+ * the real helpers with a throwaway campaign, the same way Section 2 does for
+ * interview notes.
+ *
+ * The applicant is deliberately an EER applicant, because two of the rules only
+ * exist relative to the committee they applied to.
+ */
+async function auditPanelSeatAuthority(users: SeededUser[]) {
+  console.log("\n=== SECTION 3: panel-seat authority (live lead holders) ===\n");
+
+  const admin = users.find((u) => u.keys.has(PermissionKey.MANAGE_ACCOUNTS));
+  const eligible = await prisma.user.findMany({
+    where: {
+      permissions: { some: { permission: PermissionKey.CLAIM_PANEL_SEAT } },
+    },
+    select: { id: true, email: true, committee: true },
+    orderBy: { email: "asc" },
+  });
+  const pick = (committee: Committee, exclude: string[]) =>
+    eligible.find((u) => u.committee === committee && !exclude.includes(u.id));
+
+  // Everyone here must be a distinct identity, or an assertion could pass for
+  // the wrong reason (e.g. "the outsider was refused" when they were the lead).
+  const mktLead = pick(Committee.MKT, admin ? [admin.id] : []);
+  const mktMember = pick(Committee.MKT, [admin?.id ?? "", mktLead?.id ?? ""]);
+  const eerLead = pick(Committee.EER, [admin?.id ?? ""]);
+  const clubLead = pick(Committee.TM, [admin?.id ?? ""]);
+  const tmMember = pick(Committee.TM, [admin?.id ?? "", clubLead?.id ?? ""]);
+
+  if (!admin || !mktLead || !mktMember || !eerLead || !clubLead || !tmMember) {
+    console.log("SKIP  need an admin plus 2 MKT, 1 EER and 2 TM panel-eligible users.");
+    return;
+  }
+
+  const campaign = await prisma.campaign.create({
+    data: { name: `__rbac_seats_${Date.now()}`, isOpen: true },
+    select: { id: true },
+  });
+  const applicant = await prisma.applicant.create({
+    data: {
+      campaignId: campaign.id,
+      fullName: "RBAC Seat Fixture",
+      email: `rbac_seat_${Date.now()}@example.test`,
+      isIssatsoStudent: true,
+      preferredCommittee: Committee.EER,
+      rawFormData: {},
+      status: "SHORTLISTED",
+    },
+    select: { id: true },
+  });
+  // A four-seat panel, so the floating seat's rules are covered too.
+  const panel = await prisma.interviewPanel.create({
+    data: {
+      applicantId: applicant.id,
+      seats: {
+        create: [
+          { kind: PanelSeatKind.MKT },
+          { kind: PanelSeatKind.TM },
+          { kind: PanelSeatKind.EER },
+          { kind: PanelSeatKind.FLOATING },
+        ],
+      },
+    },
+    select: { id: true, seats: { select: { id: true, kind: true } } },
+  });
+  const seatOf = (kind: PanelSeatKind) =>
+    panel.seats.find((s) => s.kind === kind)!.id;
+
+  // The titles under test. Written directly rather than via assignCampaignLead
+  // so the fixture doesn't spray activity-log entries into the real log.
+  await prisma.campaignLead.createMany({
+    data: [
+      { campaignId: campaign.id, role: LeadRole.MKT_LEAD, userId: mktLead.id, assignedById: admin.id },
+      { campaignId: campaign.id, role: LeadRole.EER_LEAD, userId: eerLead.id, assignedById: admin.id },
+      { campaignId: campaign.id, role: LeadRole.CLUB_LEAD, userId: clubLead.id, assignedById: admin.id },
+    ],
+  });
+
+  /** Empty every seat and drop any request, so each phase starts clean. */
+  const resetSeats = async () => {
+    await prisma.panelSeatApprovalRequest.deleteMany({
+      where: { seat: { panelId: panel.id } },
+    });
+    await prisma.panelSeat.updateMany({
+      where: { panelId: panel.id },
+      data: { claimedById: null, claimedAt: null },
+    });
+  };
+
+  const cid = campaign.id;
+  try {
+    // --- Refusals: nobody touches a seat that isn't theirs ---
+    record(
+      !(await assignPanelSeat(cid, seatOf(PanelSeatKind.MKT), mktMember.id, mktMember.id)).ok,
+      `ordinary member CANNOT assign the MKT seat (${mktMember.email})`,
+    );
+    record(
+      !(await assignPanelSeat(cid, seatOf(PanelSeatKind.EER), eerLead.id, mktLead.id)).ok,
+      `MKT lead CANNOT assign the EER seat`,
+    );
+    record(
+      !(await assignPanelSeat(cid, seatOf(PanelSeatKind.TM), tmMember.id, mktLead.id)).ok,
+      `MKT lead CANNOT assign the TM seat`,
+    );
+
+    // --- The Club Lead may not stand in for the applicant's own committee ---
+    const ownCommittee = await assignPanelSeat(
+      cid,
+      seatOf(PanelSeatKind.EER),
+      clubLead.id,
+      clubLead.id,
+    );
+    record(
+      !ownCommittee.ok,
+      `Club Lead CANNOT take the EER seat of an EER applicant (refused outright)`,
+    );
+    record(
+      (await prisma.panelSeatApprovalRequest.count({
+        where: { seatId: seatOf(PanelSeatKind.EER) },
+      })) === 0,
+      `Club Lead's barred seat raises NO approval request (not even offered)`,
+    );
+
+    // --- Direct staffing by the seat's own lead, and by the Administrator ---
+    record(
+      (await assignPanelSeat(cid, seatOf(PanelSeatKind.MKT), mktMember.id, mktLead.id)).ok,
+      `MKT lead CAN assign an MKT member to the MKT seat`,
+    );
+    record(
+      (await assignPanelSeat(cid, seatOf(PanelSeatKind.TM), tmMember.id, admin.id)).ok,
+      `Administrator CAN assign the TM seat (TM's lead IS the Administrator)`,
+    );
+    // The floating seat is the Club Lead's to fill, with no approval step.
+    const floating = await assignPanelSeat(
+      cid,
+      seatOf(PanelSeatKind.FLOATING),
+      clubLead.id,
+      clubLead.id,
+    );
+    record(
+      floating.ok && !("awaitingApproval" in floating && floating.awaitingApproval),
+      `Club Lead CAN fill the FLOATING seat directly, with NO approval`,
+    );
+    await resetSeats();
+
+    // --- The Club Lead's request path on another committee's seat ---
+    const requested = await assignPanelSeat(
+      cid,
+      seatOf(PanelSeatKind.MKT),
+      clubLead.id,
+      clubLead.id,
+    );
+    record(
+      requested.ok && "awaitingApproval" in requested && requested.awaitingApproval === true,
+      `Club Lead assigning the MKT seat becomes a PENDING request, not a fill`,
+    );
+    const open = await prisma.panelSeatApprovalRequest.findFirst({
+      where: { seatId: seatOf(PanelSeatKind.MKT), status: ApprovalStatus.PENDING },
+      select: { id: true, approverUserId: true },
+    });
+    record(
+      open?.approverUserId === mktLead.id,
+      `the request is routed to the CURRENT MKT lead as approver`,
+    );
+    record(
+      (await prisma.panelSeat.findUnique({
+        where: { id: seatOf(PanelSeatKind.MKT) },
+        select: { claimedById: true },
+      }))?.claimedById === null,
+      `the requested seat stays EMPTY until it is answered`,
+    );
+
+    if (open) {
+      record(
+        !(await respondToSeatApproval(cid, open.id, true, eerLead.id)).ok,
+        `a DIFFERENT committee's lead CANNOT answer the MKT request`,
+      );
+      record(
+        !(await respondToSeatApproval(cid, open.id, true, mktMember.id)).ok,
+        `an ordinary member CANNOT answer the MKT request`,
+      );
+      record(
+        (await respondToSeatApproval(cid, open.id, true, mktLead.id)).ok,
+        `the MKT lead CAN approve, and the seat fills`,
+      );
+      record(
+        (await prisma.panelSeat.findUnique({
+          where: { id: seatOf(PanelSeatKind.MKT) },
+          select: { claimedById: true },
+        }))?.claimedById === clubLead.id,
+        `approval seats the person the request named`,
+      );
+    }
+    await resetSeats();
+
+    // --- Authority moves with the title, live ---
+    await prisma.campaignLead.update({
+      where: { campaignId_role: { campaignId: cid, role: LeadRole.MKT_LEAD } },
+      data: { userId: mktMember.id },
+    });
+    record(
+      !(await assignPanelSeat(cid, seatOf(PanelSeatKind.MKT), mktLead.id, mktLead.id)).ok,
+      `the OUTGOING MKT lead loses the seat the moment the title moves`,
+    );
+    record(
+      (await assignPanelSeat(cid, seatOf(PanelSeatKind.MKT), mktLead.id, mktMember.id)).ok,
+      `the INCOMING MKT lead has it immediately, with no re-grant`,
+    );
+
+    // --- A closed note freezes the panel, for leads and the Administrator ---
+    await prisma.interviewNote.upsert({
+      where: { applicantId: applicant.id },
+      create: { applicantId: applicant.id, closedAt: new Date(), closedById: admin.id },
+      update: { closedAt: new Date(), closedById: admin.id },
+    });
+    record(
+      !(await reassignPanelSeat(cid, seatOf(PanelSeatKind.MKT), mktMember.id, mktMember.id)).ok,
+      `CLOSED note: the MKT lead CANNOT reassign their own seat`,
+    );
+    record(
+      !(await reassignPanelSeat(cid, seatOf(PanelSeatKind.MKT), mktMember.id, admin.id)).ok,
+      `CLOSED note: not even the Administrator can reassign`,
+    );
+  } finally {
+    await prisma.panelSeatApprovalRequest.deleteMany({
+      where: { seat: { panelId: panel.id } },
+    });
+    await prisma.interviewNote.deleteMany({ where: { applicantId: applicant.id } });
+    await prisma.panelSeat.deleteMany({ where: { panelId: panel.id } });
+    await prisma.interviewPanel.deleteMany({ where: { id: panel.id } });
+    await prisma.campaignLead.deleteMany({ where: { campaignId: cid } });
+    await prisma.applicant.deleteMany({ where: { id: applicant.id } });
+    await prisma.activityLogEntry.deleteMany({ where: { campaignId: cid } });
+    await prisma.campaign.deleteMany({ where: { id: cid } });
+  }
+}
+
 async function main() {
   const rows = await prisma.user.findMany({
     select: { id: true, email: true, permissions: { select: { permission: true } } },
@@ -239,6 +501,7 @@ async function main() {
 
   await auditGateMatrix(users);
   await auditInterviewNoteLogic(users);
+  await auditPanelSeatAuthority(users);
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
   if (fail > 0) {

@@ -7,6 +7,7 @@ import { PermissionGate } from "@/components/permission-gate";
 import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { CampaignLeadsSection } from "./CampaignLeadsSection";
 import { CapacityConfigSection } from "./CapacityConfigSection";
+import { InterviewConfigSection } from "./InterviewConfigSection";
 import { FinalEmailLinksSection } from "./FinalEmailLinksSection";
 import { ScoringConfigSection } from "./ScoringConfigSection";
 
@@ -60,6 +61,12 @@ export default async function ConfigurationPage({
           <StaggerItem>
             <PermissionGate permission={PermissionKey.MANAGE_CAPACITY}>
               <CapacityConfigSection campaignId={campaignId} />
+            </PermissionGate>
+          </StaggerItem>
+
+          <StaggerItem>
+            <PermissionGate permission={PermissionKey.MANAGE_CAPACITY}>
+              <InterviewConfigSection campaignId={campaignId} />
             </PermissionGate>
           </StaggerItem>
 

@@ -37,6 +37,21 @@ const ACTION_LABELS: Record<string, string> = {
   GDG_DAY_DETAILS_SET: "set the GDG Day details",
   PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
   PHASE2_ENTRY_ADDED: "added a Phase 2 note or flag",
+  INTERVIEW_PANEL_SIZE_SET: "set the interview panel size",
+  PANEL_SEAT_ASSIGNED: "assigned an interviewer to a panel",
+  PANEL_SEAT_REASSIGNED: "swapped a panel's interviewer for another",
+  PANEL_SEAT_UNASSIGNED: "removed an interviewer from a panel",
+  PANEL_SEAT_APPROVAL_REQUESTED: "requested another committee's panel seat",
+  PANEL_SEAT_APPROVAL_GRANTED: "approved a panel seat request",
+  PANEL_SEAT_APPROVAL_DECLINED: "declined a panel seat request",
+  PANEL_SEAT_APPROVAL_WITHDRAWN: "withdrew a panel seat request",
+  // Phrased so the actor is not credited with a decision they never made: they
+  // cleared an interview time, and the pending request fell with it. The
+  // approver was never asked. Kept apart from PANEL_SEAT_APPROVAL_DECLINED for
+  // exactly that reason — reading "declined a panel seat request" against the
+  // coordinator who was only editing a schedule would misattribute a judgement.
+  PANEL_SEAT_APPROVAL_AUTO_DECLINED:
+    "cleared an interview time, closing its pending seat requests",
   INTERVIEW_NOTE_UPDATED: "updated an interview note",
   INTERVIEW_NOTE_CLOSED: "closed an interview note",
   INTERVIEW_NOTE_REOPENED: "reopened an interview note",
@@ -108,6 +123,21 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // A red or green flag can swing the final decision, and the entry can never
   // be edited or withdrawn — worth standing out, like the other judgment calls.
   PHASE2_ENTRY_ADDED: "pending",
+  // Panel staffing is routine coordination, not a judgment about anyone.
+  INTERVIEW_PANEL_SIZE_SET: "primary",
+  PANEL_SEAT_ASSIGNED: "accepted",
+  // A swap ends with the seat filled, so it reads as the filling colour rather
+  // than the emptying one — nobody was left off a panel by it.
+  PANEL_SEAT_REASSIGNED: "accepted",
+  PANEL_SEAT_UNASSIGNED: "rejected",
+  // A request is a decision waiting on a human — the app's amber meaning.
+  PANEL_SEAT_APPROVAL_REQUESTED: "pending",
+  PANEL_SEAT_APPROVAL_GRANTED: "accepted",
+  PANEL_SEAT_APPROVAL_DECLINED: "rejected",
+  PANEL_SEAT_APPROVAL_WITHDRAWN: "pending",
+  // Amber, not the "rejected" red its sibling gets: nothing was judged here, a
+  // question simply stopped being answerable. Red would read as a verdict.
+  PANEL_SEAT_APPROVAL_AUTO_DECLINED: "pending",
   INTERVIEW_NOTE_UPDATED: "primary",
   // Closing/reopening a note changes who can see it — sensitive but reversible.
   INTERVIEW_NOTE_CLOSED: "pending",
