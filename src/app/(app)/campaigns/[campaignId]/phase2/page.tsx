@@ -32,10 +32,12 @@ export default async function Phase2Page({
   // always the session's user id resolved server-side in the action.
   const authorName = session.user.name ?? session.user.email ?? "You";
 
-  const { applicants, maxScore, skillSources } = await getPhase2Data(campaignId);
+  const { applicants, maxScore, skillSources, mktSkillWhitelist, mktPreferredCount } =
+    await getPhase2Data(campaignId);
   // Live tally, every load — the same rule the interview-note AVGs and the
-  // capacity counts follow. Nothing here is cached or written back.
-  const skills = tallyMktSkills(skillSources);
+  // capacity counts follow. Nothing here is cached or written back, which is
+  // what makes a whitelist edit show up on the very next load.
+  const skills = tallyMktSkills(skillSources, mktSkillWhitelist);
 
   return (
     <div className="space-y-6">
@@ -69,7 +71,7 @@ export default async function Phase2Page({
         </StaggerGroup>
       )}
 
-      <MktSkillsTable skills={skills} applicantCount={applicants.length} />
+      <MktSkillsTable skills={skills} mktPreferredCount={mktPreferredCount} />
     </div>
   );
 }

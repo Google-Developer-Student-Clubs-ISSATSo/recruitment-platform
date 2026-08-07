@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasAnyPermission } from "@/lib/permissions";
-import { logActivity } from "@/lib/activity-log";
+import { activityLogWrite, logActivity } from "@/lib/activity-log";
+import { seedMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { CAMPAIGN_CREATE_PERMISSIONS } from "@/lib/route-permissions";
 
 export type CreateCampaignState = {
@@ -42,6 +43,12 @@ export async function createCampaign(
   const campaign = await prisma.campaign.create({
     data: { name, isOpen },
   });
+
+  // Starting data for the campaign's editable MKT skill list, exactly like the
+  // defaulted link fields on Campaign itself — a new campaign arrives with a
+  // usable Phase 2 skills table instead of an empty one somebody has to fill in
+  // before the breakdown shows anything.
+  await seedMktSkillWhitelist(campaign.id);
 
   await logActivity({
     actorId: userId,
@@ -122,6 +129,16 @@ export async function setCampaignStatus(
  * first (they reference both applicant and campaign), then applicants (taking
  * their scores and results with them), then the campaign itself (taking questions
  * and config). One transaction, so a half-deleted campaign is never observable.
+ *
+ * The campaign's activity-log entries go too. `ActivityLogEntry.campaignId` is a
+ * bare scalar with no FK (see the schema comment), so nothing deletes them for
+ * us — they are removed explicitly here, because a deleted campaign should not
+ * leave a trail of entries pointing at an id nothing resolves to. The one
+ * survivor is CAMPAIGN_DELETED itself, written as a GLOBAL entry
+ * (`campaignId` omitted) so it isn't caught by its own cascade: it is the single
+ * record that this campaign existed and who ended it. It is created inside the
+ * same transaction as the deletes it describes, so a rollback can never leave
+ * the claim without the act, or the act without the claim.
  */
 export async function deleteCampaign(
   campaignId: string,
@@ -151,18 +168,23 @@ export async function deleteCampaign(
   await prisma.$transaction([
     prisma.emailLog.deleteMany({ where: { campaignId } }),
     prisma.applicant.deleteMany({ where: { campaignId } }),
+    prisma.activityLogEntry.deleteMany({ where: { campaignId } }),
     prisma.campaign.delete({ where: { id: campaignId } }),
+    // Global on purpose — see the doc comment. Ordered after the deleteMany
+    // above so it is written into an already-cleared scope rather than being
+    // swept up by it.
+    activityLogWrite({
+      actorId: userId,
+      actionType: "CAMPAIGN_DELETED",
+      targetType: "Campaign",
+      targetId: campaignId,
+      details: { name: campaign.name, applicantCount },
+    }),
   ]);
 
-  await logActivity({
-    actorId: userId,
-    actionType: "CAMPAIGN_DELETED",
-    targetType: "Campaign",
-    targetId: campaignId,
-    campaignId,
-    details: { name: campaign.name, applicantCount },
-  });
-
   revalidatePath("/campaigns");
+  // The log lost every entry scoped to this campaign and gained the global
+  // CAMPAIGN_DELETED one, so a cached activity-log render is now wrong.
+  revalidatePath("/activity-log");
   return { ok: true, name: campaign.name };
 }

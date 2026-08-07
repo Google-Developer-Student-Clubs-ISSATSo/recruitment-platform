@@ -7,6 +7,7 @@ import {
   RoleTemplateName,
 } from "../src/generated/prisma/enums";
 import { faker } from "@faker-js/faker";
+import { DEFAULT_MKT_SKILLS } from "../src/lib/mkt-skills";
 
 const connectionString = process.env.DIRECT_URL;
 if (!connectionString) {
@@ -462,6 +463,16 @@ async function main() {
   });
   const archivedCampaign = await prisma.campaign.create({
     data: { name: "Recruitment 2025 (Archived)", isOpen: false },
+  });
+
+  // Same starting whitelist a campaign created through the UI gets — seeded
+  // here too so the Phase 2 skills table isn't empty on a fresh dev database.
+  // The list is imported rather than restated, so the two paths can't drift;
+  // the rows go through this file's own client, not the app's.
+  await prisma.mktSkillWhitelist.createMany({
+    data: [campaign.id, archivedCampaign.id].flatMap((campaignId) =>
+      DEFAULT_MKT_SKILLS.map((skillName) => ({ campaignId, skillName })),
+    ),
   });
 
   // 3d. Applicants for the open campaign.

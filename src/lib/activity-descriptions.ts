@@ -37,6 +37,8 @@ const ACTION_LABELS: Record<string, string> = {
   GDG_DAY_DETAILS_SET: "set the GDG Day details",
   PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
   PHASE2_ENTRY_ADDED: "added a Phase 2 note or flag",
+  MKT_SKILL_ADDED: "added a skill to the MKT skills list",
+  MKT_SKILL_REMOVED: "removed a skill from the MKT skills list",
   INTERVIEW_PANEL_SIZE_SET: "set the interview panel size",
   PANEL_SEAT_ASSIGNED: "assigned an interviewer to a panel",
   PANEL_SEAT_REASSIGNED: "swapped a panel's interviewer for another",
@@ -60,6 +62,9 @@ const ACTION_LABELS: Record<string, string> = {
   FINAL_DECISIONS_COMPLETED: "completed the final decisions",
   FINAL_EMAIL_LINKS_UPDATED: "updated the final decision email links",
   FINAL_EMAILS_SENT: "sent the final result emails",
+  // Only ever the campaign-scoped purge. A full wipe leaves no entry to label —
+  // by construction it cannot (see deleteAllLogs).
+  ACTIVITY_LOG_PURGED: "deleted a campaign's activity log entries",
 };
 
 /** "PERMISSION_GRANTED" -> "granted a permission" (falls back to a humanized form). */
@@ -123,6 +128,11 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // A red or green flag can swing the final decision, and the entry can never
   // be edited or withdrawn — worth standing out, like the other judgment calls.
   PHASE2_ENTRY_ADDED: "pending",
+  // Configuration of how answers are read, not a judgment about anyone — the
+  // quiet end of the log, same as the other settings changes. The pair keeps
+  // the add/remove colour split every other reversible pair here uses.
+  MKT_SKILL_ADDED: "accepted",
+  MKT_SKILL_REMOVED: "rejected",
   // Panel staffing is routine coordination, not a judgment about anyone.
   INTERVIEW_PANEL_SIZE_SET: "primary",
   PANEL_SEAT_ASSIGNED: "accepted",
@@ -155,6 +165,9 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // Emailing applicants their outcome is the outward-facing, hard-to-undo act —
   // it stands out in the log alongside finalization.
   PHASE1_EMAILS_SENT: "accepted",
+  // Irreversible destruction of the audit trail itself — red, alongside
+  // CAMPAIGN_DELETED.
+  ACTIVITY_LOG_PURGED: "rejected",
 };
 
 export function actionTone(actionType: string): ActivityTone {
@@ -168,6 +181,9 @@ export const SECURITY_ACTION_TYPES = [
   "BULK_PERMISSION_REVOKED",
   "ADMIN_TRANSFER_INITIATED",
   "ADMIN_TRANSFER_CANCELLED",
+  // Destroying audit history is the most security-sensitive act the platform
+  // allows — it belongs in this count above all.
+  "ACTIVITY_LOG_PURGED",
 ];
 
 /**

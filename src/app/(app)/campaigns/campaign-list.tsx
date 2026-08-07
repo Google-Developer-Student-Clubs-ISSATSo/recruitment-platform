@@ -329,6 +329,10 @@ function DeleteCampaignDialog({
             <li>Every Phase 1 score, ranking and result</li>
             <li>The scoring questions and configuration</li>
             <li>The record of which result emails were sent</li>
+            <li>
+              Its activity-log entries — only the record of this deletion
+              survives
+            </li>
           </ul>
 
           <div className="space-y-1.5">

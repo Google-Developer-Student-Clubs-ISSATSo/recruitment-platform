@@ -18,6 +18,7 @@ import { AnimatedCardList, AnimatedTableBody } from "@/components/motion/table-s
 import { Pager } from "@/components/ui/pager";
 
 import { RefreshButton } from "./refresh-button";
+import { DeleteLogsControls } from "./delete-logs-controls";
 import {
   ActivityLogFilters,
   type ActivityFilters,
@@ -62,6 +63,8 @@ export function ActivityLogList({
   actorOptions,
   actionOptions,
   campaignOptions,
+  canDeleteLogs,
+  selectedCampaign,
   filters,
 }: {
   rows: ActivityLogRow[];
@@ -75,6 +78,10 @@ export function ActivityLogList({
   actorOptions: ActorOption[];
   actionOptions: string[];
   campaignOptions: CampaignOption[];
+  /** Administrator (MANAGE_ACCOUNTS) only — decided server-side. */
+  canDeleteLogs: boolean;
+  /** The campaign the filter is set to, for the scoped delete. */
+  selectedCampaign: CampaignOption | null;
   /** Current filter values, echoed back from the URL. */
   filters: ActivityFilters;
 }) {
@@ -137,7 +144,10 @@ export function ActivityLogList({
             portal.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {canDeleteLogs && (
+            <DeleteLogsControls selectedCampaign={selectedCampaign} />
+          )}
           <RefreshButton />
         </div>
       </section>

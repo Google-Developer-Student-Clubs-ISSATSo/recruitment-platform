@@ -22,7 +22,18 @@ export type LogActivityInput = {
   details?: Prisma.InputJsonValue;
 };
 
-export async function logActivity({
+/**
+ * The log write as an unawaited Prisma promise, so it can be handed to the array
+ * form of `prisma.$transaction([...])` alongside the writes it describes.
+ *
+ * This exists for one case: an action that deletes the very rows the log lives
+ * in (deleting a campaign cascades its scoped entries). There the entry proving
+ * the deletion happened has to land in the SAME transaction as the delete, or a
+ * rollback leaves a log entry for a deletion that never happened — or worse, a
+ * completed deletion with no record of it. Everything else should call
+ * {@link logActivity}.
+ */
+export function activityLogWrite({
   actorId,
   actionType,
   targetType,
@@ -40,4 +51,8 @@ export async function logActivity({
       details,
     },
   });
+}
+
+export async function logActivity(input: LogActivityInput) {
+  return activityLogWrite(input);
 }

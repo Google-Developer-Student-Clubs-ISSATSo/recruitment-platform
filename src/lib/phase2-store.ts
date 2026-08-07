@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma";
 import { answerKey, answerQuestions } from "@/lib/phase1-answers";
 import { passedPhaseOneWhere } from "@/lib/phase1-ranking";
+import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { totalCoefficient } from "@/lib/phase1-score";
 import { Phase2EntryType } from "@/generated/prisma/enums";
 import type { Committee } from "@/generated/prisma/enums";
@@ -49,6 +50,14 @@ export type Phase2Data = {
   maxScore: number;
   /** Raw rows for the skills tally; kept unshaped so phase2.ts can parse them. */
   skillSources: { rawFormData: unknown }[];
+  /** This campaign's approved MKT skill names — the only values the tally counts. */
+  mktSkillWhitelist: string[];
+  /**
+   * How many of the applicants above picked MKT as their preferred committee.
+   * Counted here off the same rows the table is built from, not queried
+   * separately, so it can never disagree with the population it describes.
+   */
+  mktPreferredCount: number;
 };
 
 /**
@@ -63,7 +72,7 @@ export type Phase2Data = {
  * order is stable across loads.
  */
 export async function getPhase2Data(campaignId: string): Promise<Phase2Data> {
-  const [questions, applicants] = await Promise.all([
+  const [questions, applicants, whitelist] = await Promise.all([
     prisma.phaseOneQuestion.findMany({
       where: { campaignId, isActive: true },
       orderBy: { order: "asc" },
@@ -98,6 +107,7 @@ export async function getPhase2Data(campaignId: string): Promise<Phase2Data> {
         },
       },
     }),
+    getMktSkillWhitelist(campaignId),
   ]);
 
   // Only the configured, coefficient-bearing questions get an answer card —
@@ -183,6 +193,10 @@ export async function getPhase2Data(campaignId: string): Promise<Phase2Data> {
     // passed Phase 1 regardless of preferred committee, so it must not be
     // filtered down to MKT applicants here.
     skillSources: rows.map((r) => ({ rawFormData: r.rawFormData })),
+    mktSkillWhitelist: whitelist.map((s) => s.skillName),
+    // The one figure that IS about MKT applicants specifically. Live-counted off
+    // the rows above rather than stored, like every other number on this page.
+    mktPreferredCount: rows.filter((r) => r.preferredCommittee === "MKT").length,
   };
 }
 

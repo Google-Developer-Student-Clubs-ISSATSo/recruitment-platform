@@ -64,34 +64,18 @@ export const PHASE2_ENTRY_MAX_LENGTH = 2000;
 
 // ============ MKT SKILLS ============
 
-// The rawFormData keys the skills tally reads, confirmed against the real
-// imported rows rather than assumed. Both are comma-separated multi-selects.
-export const OTHER_SKILLS_FIELD = "Other skills";
-export const SOFT_SKILLS_FIELD = "Soft skills";
-
 /**
- * Which soft skills count as MKT-relevant.
+ * The rawFormData key the skills tally reads, confirmed against the real
+ * imported rows rather than assumed: a comma-separated checkbox multi-select.
  *
- * "Other skills" needs no such list — every value it can hold (Video/Audio
- * editing, Illustrator, Marketing) is media/design/marketing work, so the whole
- * field counts. "Soft skills" is cross-committee: Content writing and Public
- * speaking are MKT craft, while Teamwork / Leadership / Organization /
- * Communication describe any good candidate for any committee and would drown
- * the real signal if counted here.
- *
- * Matched case-insensitively on the trimmed value. A soft skill added to the
- * form later is EXCLUDED until it is added here — deliberately the safe
- * direction: a missing row is visibly missing, whereas silently counting
- * "Punctuality" as an MKT skill would quietly distort the table.
+ * It is the only skills field the tally reads. "Soft skills" and "Technical
+ * skills" also exist on the form and are deliberately NOT read — the former is
+ * cross-committee (Teamwork, Leadership, Communication describe any good
+ * candidate), the latter belongs to the technical-scorer question. Whitelisting
+ * a value that only ever appears in one of those fields therefore counts
+ * nothing; that is expected, not a bug.
  */
-export const MKT_SOFT_SKILLS: readonly string[] = [
-  "Content writing",
-  "Public speaking",
-];
-
-const MKT_SOFT_SKILL_KEYS = new Set(
-  MKT_SOFT_SKILLS.map((s) => s.toLowerCase()),
-);
+export const OTHER_SKILLS_FIELD = "Other skills";
 
 /** Split one comma-separated multi-select answer into trimmed, non-empty values. */
 export function splitSkills(value: unknown): string[] {
@@ -102,57 +86,77 @@ export function splitSkills(value: unknown): string[] {
     .filter((s) => s !== "");
 }
 
+/** Normalized match key for a skill value: trimmed, lowercased. */
+function skillKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 /**
- * The MKT-relevant skills one applicant listed: every "Other skills" value,
- * plus the allowlisted "Soft skills" ones. De-duplicated per applicant so an
- * applicant who somehow listed the same skill in both fields still counts once
- * toward it — the table's rows are "how many applicants have this skill", not
- * "how many times was it typed".
+ * The whitelisted skills one applicant listed.
+ *
+ * A submitted value counts only if it matches (trimmed, case-insensitive) an
+ * entry on the campaign's whitelist. Anything else is silently dropped — not an
+ * "unknown skill" row, not an error: by the TM Lead's own list it simply isn't
+ * an MKT skill.
+ *
+ * The value returned is the WHITELIST's spelling, not the applicant's, so the
+ * table reads as the configured list rather than as whatever casing happened to
+ * arrive first. De-duplicated per applicant, since the rows mean "how many
+ * applicants have this skill", not "how many times was it submitted".
  */
-export function mktSkillsOf(rawFormData: unknown): string[] {
+export function mktSkillsOf(
+  rawFormData: unknown,
+  whitelist: readonly string[],
+): string[] {
   const data = (rawFormData ?? null) as Record<string, unknown> | null;
   if (!data) return [];
 
-  const skills = [
-    ...splitSkills(data[OTHER_SKILLS_FIELD]),
-    ...splitSkills(data[SOFT_SKILLS_FIELD]).filter((s) =>
-      MKT_SOFT_SKILL_KEYS.has(s.toLowerCase()),
-    ),
-  ];
+  const approved = new Map(whitelist.map((s) => [skillKey(s), s.trim()]));
 
-  // Case-insensitive de-dupe that keeps the first spelling seen, so "Marketing"
-  // and "marketing" collapse into one row rather than two.
   const seen = new Set<string>();
-  return skills.filter((s) => {
-    const key = s.toLowerCase();
-    if (seen.has(key)) return false;
+  const out: string[] = [];
+  for (const value of splitSkills(data[OTHER_SKILLS_FIELD])) {
+    const key = skillKey(value);
+    const canonical = approved.get(key);
+    if (canonical === undefined || seen.has(key)) continue;
     seen.add(key);
-    return true;
-  });
+    out.push(canonical);
+  }
+  return out;
 }
 
 export type SkillCount = { skill: string; count: number };
 
 /**
- * Raw per-skill applicant counts, computed live on every page load — never
- * stored, like every other figure on this app's read-only surfaces.
+ * Per-skill applicant counts, computed live on every page load — never stored,
+ * like every other figure on this app's read-only surfaces. That is what makes
+ * the whitelist retroactive: adding a skill credits everyone who already listed
+ * it on the very next load, with no per-applicant action.
  *
- * Deliberately raw counts only: no category rollup ("Design (total)"), which is
- * out of scope. Sorted by count descending, then alphabetically so equal counts
- * hold a stable order between loads.
+ * Only skills somebody actually listed get a row. A whitelisted skill nobody
+ * has is left out rather than shown as a 0: the whitelist is configuration, and
+ * a campaign whose form doesn't offer a configured skill at all — or offers it
+ * in a field this tally doesn't read — would otherwise carry a permanent 0 row
+ * that reads as missing data. The configured list is visible in full on the
+ * Configuration page, which is where it belongs.
+ *
+ * Sorted by count descending, then alphabetically so equal counts hold a stable
+ * order between loads.
  */
 export function tallyMktSkills(
   applicants: readonly { rawFormData: unknown }[],
+  whitelist: readonly string[],
 ): SkillCount[] {
   const counts = new Map<string, { skill: string; count: number }>();
   for (const a of applicants) {
-    for (const skill of mktSkillsOf(a.rawFormData)) {
-      const key = skill.toLowerCase();
+    for (const skill of mktSkillsOf(a.rawFormData, whitelist)) {
+      const key = skillKey(skill);
       const existing = counts.get(key);
       if (existing) existing.count += 1;
       else counts.set(key, { skill, count: 1 });
     }
   }
+
   return [...counts.values()].sort(
     (a, b) => b.count - a.count || a.skill.localeCompare(b.skill),
   );

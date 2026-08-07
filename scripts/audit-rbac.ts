@@ -103,6 +103,10 @@ function buildGates(): Gate[] {
     ["action transfer admin role", [K.MANAGE_ACCOUNTS]],
     ["action reopen closed interview note", [K.MANAGE_ACCOUNTS]],
     ["action campaign create/delete/open-close", [...CAMPAIGN_CREATE_PERMISSIONS]],
+    // Reading the activity log and destroying it are deliberately different
+    // bars: VIEW_ACTIVITY_LOG gets a member onto the page (covered by the page
+    // matrix above), while deleting history is Administrator-only.
+    ["action deleteCampaignLogs / deleteAllLogs", [K.MANAGE_ACCOUNTS]],
   ];
   for (const [surface, keys] of action) gates.push({ surface, keys });
 

@@ -270,6 +270,7 @@ model Campaign {
   emailLogs           EmailLog[]
   committeeCapacities CommitteeCapacity[]
   leads               CampaignLead[]
+  mktSkillWhitelist   MktSkillWhitelist[]
 }
 
 // One of the four appointable per-campaign lead titles. MKT/EER/Club Lead are
@@ -464,6 +465,34 @@ model Phase2Entry {
 
   // The page reads one applicant's entries at a time, oldest first.
   @@index([applicantId, createdAt])
+}
+
+// Which skill values count as MKT-relevant on this campaign — the TM Lead's own
+// editable list, and the ONLY thing the Phase 2 MKT Skills Breakdown tallies.
+// A submitted skill that isn't on it is silently not counted; adding one here
+// retroactively credits every applicant who already listed it, because the
+// tally is computed live on every page load and nothing per-applicant is stored.
+//
+// One row per skill rather than a String[] column on a single config row. The
+// two shapes both exist in this schema and they mean different things: an array
+// column (PhaseOneQuestion.noteScale) is a fixed ordered tuple written as a
+// whole, while an editable SET of independently added and removed entries is a
+// table — same as CommitteeCapacity, PhaseOneQuestion and CampaignLead. It also
+// gives each add and each removal its own row to log against.
+//
+// skillName is stored with the TM Lead's original casing (it is what the table
+// renders) but matched case-insensitively against submitted values, so the
+// @@unique below is backed by a case-insensitive guard in the action rather than
+// by the constraint alone — Postgres unique indexes are case-sensitive.
+model MktSkillWhitelist {
+  id         String   @id @default(cuid())
+  campaignId String
+  skillName  String
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, skillName])
 }
 
 // ============ EMAIL LOG ============

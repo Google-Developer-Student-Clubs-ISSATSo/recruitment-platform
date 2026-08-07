@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
 import {
   formatDetails,
@@ -45,7 +45,13 @@ export default async function ActivityLogPage({
     to?: string;
   }>;
 }) {
-  await requirePermission(PermissionKey.VIEW_ACTIVITY_LOG);
+  const userId = await requirePermission(PermissionKey.VIEW_ACTIVITY_LOG);
+
+  // Reading the log and destroying it are separate bars. VIEW_ACTIVITY_LOG gets
+  // a member onto this page; deleting history is the Administrator's alone, the
+  // same MANAGE_ACCOUNTS gate used by /admin and the transfer flow. The actions
+  // re-check it server-side — this only decides whether the controls render.
+  const canDeleteLogs = await hasPermission(userId, PermissionKey.MANAGE_ACCOUNTS);
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -194,6 +200,18 @@ export default async function ActivityLogPage({
       actorOptions={actors.map((a) => ({ id: a.id, name: a.name ?? "Unnamed" }))}
       actionOptions={distinctActions.map((a) => a.actionType)}
       campaignOptions={campaignOptions}
+      canDeleteLogs={canDeleteLogs}
+      // Resolved from the options the page already built, so the delete dialog
+      // can name the campaign it is about to clear — including a deleted one,
+      // which falls back to the same label the filter dropdown shows.
+      selectedCampaign={
+        campaignId
+          ? campaignOptions.find((c) => c.id === campaignId) ?? {
+              id: campaignId,
+              name: "Deleted campaign",
+            }
+          : null
+      }
       filters={{
         actor: actorId ?? "",
         action: actionType ?? "",

@@ -1,46 +1,48 @@
 import { Icon } from "@/components/app-shell/icon";
-import { MKT_SOFT_SKILLS, type SkillCount } from "@/lib/phase2";
+import { type SkillCount } from "@/lib/phase2";
 
 /**
- * MKT-relevant skills across everyone who passed Phase 1 — raw per-skill counts,
+ * MKT-relevant skills across everyone who passed Phase 1 — per-skill counts,
  * nothing else.
  *
- * Two things this deliberately is NOT:
- *   - It is not filtered to MKT applicants. The whole point is to find the
- *     people who can already do marketing work whatever committee they picked,
- *     so the population is the full passed-Phase-1 list.
- *   - It is not a category rollup. No "Design (total)" row — raw counts per
- *     distinct skill value, per the scope decision.
+ * The rows are exactly the campaign's configured whitelist (Configuration →
+ * MKT Skills), counted live on every page load, so they cannot drift from the
+ * applicant rows behind them and a whitelist edit lands on the next load.
  *
- * The counts are computed live on every page load (tallyMktSkills), never
- * stored, so they cannot drift from the applicant rows behind them.
+ * The TABLE is deliberately not filtered to MKT applicants — the whole point is
+ * to find people who can already do marketing work whatever committee they
+ * picked. The MKT-preference figure in the header is the one MKT-only number,
+ * kept out of the rows so it can't be misread as a skill count.
  */
 export function MktSkillsTable({
   skills,
-  applicantCount,
+  mktPreferredCount,
 }: {
   skills: SkillCount[];
-  /** Size of the population the counts are drawn from, for the caption. */
-  applicantCount: number;
+  /** Of the same population, how many chose MKT as their preferred committee. */
+  mktPreferredCount: number;
 }) {
   return (
     <section className="rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="border-b border-neutral-200 px-4 py-4 sm:px-6 dark:border-neutral-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-4 sm:px-6 dark:border-neutral-800">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
           <Icon name="bar_chart" className="text-[20px] text-primary" />
           MKT Skills Breakdown
         </h2>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Marketing-relevant skills listed by the {applicantCount} applicant
-          {applicantCount === 1 ? "" : "s"} who passed Phase 1 — every committee,
-          not just MKT. Counts the &ldquo;Other skills&rdquo; answers plus{" "}
-          {MKT_SOFT_SKILLS.join(" and ")} from &ldquo;Soft skills&rdquo;.
+        <p className="flex items-baseline gap-2 rounded-lg bg-primary/10 px-3 py-1.5">
+          <span className="text-lg font-bold tabular-nums text-primary">
+            {mktPreferredCount}
+          </span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+            chose MKT
+          </span>
         </p>
       </div>
 
       {skills.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-neutral-500 sm:px-6 dark:text-neutral-400">
-          Nobody who passed Phase 1 listed an MKT-relevant skill.
+          Nobody who passed Phase 1 listed a skill from this campaign&rsquo;s MKT
+          skills list. Configuration → MKT Skills sets which skills count.
         </p>
       ) : (
         <div className="overflow-x-auto">
