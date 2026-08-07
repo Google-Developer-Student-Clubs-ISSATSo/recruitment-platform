@@ -15,6 +15,7 @@ import {
 } from "./permission-config";
 import { PermissionToggle } from "./permission-toggle";
 import { RoleBadge } from "./role-badge";
+import { CommitteeEditor } from "./committee-editor";
 
 const TOTAL_PERMS = PERMISSION_CATEGORIES.reduce(
   (n, c) => n + c.permissions.length,
@@ -255,12 +256,23 @@ export function UserRow({
       {/* Expanded: permission editor (or read-only view for a fixed role) */}
       {expanded && (
         <div className="border-t border-l-4 border-neutral-100 border-l-primary bg-neutral-50/70 px-5 py-5 dark:border-neutral-800/60 dark:border-l-primary dark:bg-neutral-950/40">
-          {readOnly && (
+          {readOnly ? (
             <p className="mb-4 flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">
               <Icon name="lock" className="text-[16px]" />
-              These permissions are fixed for the TM Lead and can&rsquo;t be
-              changed.
+              The TM Lead&rsquo;s permissions and committee are fixed — the
+              Administrator is a TM member by rule, and the role moves via
+              Transfer Admin Role.
             </p>
+          ) : (
+            // Committee sits above the permission grid because it is an account
+            // attribute rather than a permission — and because changing it can
+            // invalidate lead titles and panel seats, which the editor spells
+            // out before applying.
+            <CommitteeEditor
+              userId={user.id}
+              userName={user.name}
+              committee={user.committee}
+            />
           )}
           <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
             {PERMISSION_CATEGORIES.map((cat) => (

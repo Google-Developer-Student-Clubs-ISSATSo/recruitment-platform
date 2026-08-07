@@ -8,6 +8,7 @@ const ACTION_LABELS: Record<string, string> = {
   SIGNED_OUT: "signed out",
   USER_CREATED: "created a member",
   USER_DELETED: "deleted a member",
+  USER_COMMITTEE_CHANGED: "moved a member to another committee",
   PERMISSION_GRANTED: "granted a permission",
   PERMISSION_REVOKED: "revoked a permission",
   BULK_PERMISSION_GRANTED: "granted a permission to several members",
@@ -102,6 +103,9 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   CAMPAIGN_STATUS_CHANGED: "pending",
   PERMISSION_GRANTED: "accepted",
   USER_DELETED: "rejected",
+  // Sensitive and reversible, but it can silently invalidate lead titles and
+  // panel seats — amber, like the other "changes who can do what" entries.
+  USER_COMMITTEE_CHANGED: "pending",
   PERMISSION_REVOKED: "rejected",
   BULK_PERMISSION_GRANTED: "accepted",
   BULK_PERMISSION_REVOKED: "rejected",

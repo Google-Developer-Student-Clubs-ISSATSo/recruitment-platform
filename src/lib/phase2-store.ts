@@ -7,8 +7,8 @@ import { answerKey, answerQuestions } from "@/lib/phase1-answers";
 import { passedPhaseOneWhere } from "@/lib/phase1-ranking";
 import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { totalCoefficient } from "@/lib/phase1-score";
-import { Phase2EntryType } from "@/generated/prisma/enums";
-import type { Committee } from "@/generated/prisma/enums";
+import { mktSkillsOf } from "@/lib/phase2";
+import { Committee, Phase2EntryType } from "@/generated/prisma/enums";
 
 /** One configured question's text plus this applicant's answer to it. */
 export type Phase2Answer = {
@@ -53,9 +53,14 @@ export type Phase2Data = {
   /** This campaign's approved MKT skill names — the only values the tally counts. */
   mktSkillWhitelist: string[];
   /**
-   * How many of the applicants above picked MKT as their preferred committee.
-   * Counted here off the same rows the table is built from, not queried
-   * separately, so it can never disagree with the population it describes.
+   * How many of the applicants above picked MKT as their preferred committee
+   * AND listed at least one whitelisted skill.
+   *
+   * Both halves matter: a plain "chose MKT" count says nothing about whether
+   * those people can actually do the work, which is the question this whole
+   * section exists to answer. Counted off the same rows the table is built
+   * from, using the same matcher the tally uses, so the figure can never
+   * disagree with the rows beneath it.
    */
   mktPreferredCount: number;
 };
@@ -174,6 +179,8 @@ export async function getPhase2Data(campaignId: string): Promise<Phase2Data> {
       x.id.localeCompare(y.id),
   );
 
+  const skillNames = whitelist.map((s) => s.skillName);
+
   return {
     // rawFormData is dropped here rather than passed on: the client card needs
     // only the answers already extracted above, so the rest of the submitted
@@ -193,10 +200,17 @@ export async function getPhase2Data(campaignId: string): Promise<Phase2Data> {
     // passed Phase 1 regardless of preferred committee, so it must not be
     // filtered down to MKT applicants here.
     skillSources: rows.map((r) => ({ rawFormData: r.rawFormData })),
-    mktSkillWhitelist: whitelist.map((s) => s.skillName),
+    mktSkillWhitelist: skillNames,
     // The one figure that IS about MKT applicants specifically. Live-counted off
-    // the rows above rather than stored, like every other number on this page.
-    mktPreferredCount: rows.filter((r) => r.preferredCommittee === "MKT").length,
+    // the rows above rather than stored, like every other number on this page,
+    // and reusing mktSkillsOf rather than restating the matching rules — the
+    // header and the table must never be able to disagree about what counts as
+    // a match.
+    mktPreferredCount: rows.filter(
+      (r) =>
+        r.preferredCommittee === Committee.MKT &&
+        mktSkillsOf(r.rawFormData, skillNames).length > 0,
+    ).length,
   };
 }
 

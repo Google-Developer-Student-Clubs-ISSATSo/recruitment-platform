@@ -187,7 +187,7 @@ created specifically for the **Tech Lead** --- the one person responsible for ma
 codebase and infrastructure (hosting, database).
 
 - The Tech Lead has real access to the database and hosting dashboards --- this access lives
-  **outside** GDGC Recruitment Platform entirely (it's a Vercel/Supabase-level login, not
+  **outside** GDGC Recruitment Platform entirely (it's a Vercel/Neon-level login, not
   anything the app's permission system governs).
 - **Inside** the platform, the Tech Lead is a normal member. Holding infrastructure access grants
   **no automatic in-app permissions** --- if they need to see applicant data or score anything,
@@ -504,10 +504,10 @@ status-lookup page, data retention/anonymization job.
 
 - **Frontend:** Next.js + TypeScript + Tailwind CSS
 - **Backend:** Next.js API routes
-- **Database:** PostgreSQL via Prisma
-- **Import:** Google Sheets API (read-only) or manual CSV export/import
-- **Hosting:** Vercel + a free-tier managed Postgres (Supabase or Neon) --- low cost, fits the
-  seasonal usage pattern
-- **Auth:** Simple email/password or magic-link for internal roles only
+- **Database:** PostgreSQL via Prisma, hosted on Neon
+- **Import:** manual CSV export/import, or a live webhook fed by a Google Apps Script bound to
+  the recruitment Form (both paths share one validation function --- see `AGENT_CONTEXT.md`)
+- **Hosting:** Vercel --- low cost, fits the seasonal usage pattern
+- **Auth:** magic-link only, no passwords, no public sign-up (Auth.js v5)
 
 ---

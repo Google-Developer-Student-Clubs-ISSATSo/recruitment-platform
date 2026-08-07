@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
-import { LeadRole, PermissionKey, PermissionSource } from "@/generated/prisma/enums";
+import {
+  Committee,
+  LeadRole,
+  PermissionKey,
+  PermissionSource,
+} from "@/generated/prisma/enums";
 
 /** Every appointable lead role, in the display order used by the assignment UI. */
 export const LEAD_ROLES: LeadRole[] = [
@@ -16,6 +21,41 @@ export const LEAD_ROLE_LABELS: Record<LeadRole, string> = {
   [LeadRole.CLUB_LEAD]: "Club Lead",
   [LeadRole.TECHNICAL_LEAD]: "Technical Lead",
 };
+
+/**
+ * The committee a lead role requires its holder to belong to, or null when the
+ * role is open to anyone.
+ *
+ * MKT and EER Lead speak for their committee — on the Configuration page, and
+ * live as the owner of that committee's interview panel seat (see
+ * SEAT_KIND_LEAD_ROLE / panel-authority.ts). Someone outside the committee
+ * holding that title would be deciding who represents a committee they are not
+ * in, which is the same rule `isEligibleForSeat` already enforces one level
+ * down for the seats themselves.
+ *
+ * Club Lead and Technical Lead are deliberately unrestricted: the Club Lead's
+ * whole function is to reach ACROSS committees, and the Technical Lead is a
+ * skills-based appointment (it auto-grants ENTER_TECHNICAL_SCORE) with no
+ * committee meaning at all.
+ *
+ * TM is absent by the same design as everywhere else: TM has no CampaignLead
+ * row, because its lead IS the Administrator.
+ */
+export const LEAD_ROLE_COMMITTEE: Record<LeadRole, Committee | null> = {
+  [LeadRole.MKT_LEAD]: Committee.MKT,
+  [LeadRole.EER_LEAD]: Committee.EER,
+  [LeadRole.CLUB_LEAD]: null,
+  [LeadRole.TECHNICAL_LEAD]: null,
+};
+
+/** May a member of `committee` hold `role`? Unrestricted roles accept anyone. */
+export function isEligibleForLeadRole(
+  role: LeadRole,
+  committee: Committee,
+): boolean {
+  const required = LEAD_ROLE_COMMITTEE[role];
+  return required === null || required === committee;
+}
 
 /**
  * The one permission a lead role auto-grants/auto-revokes on assignment, if

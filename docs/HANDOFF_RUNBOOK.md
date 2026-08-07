@@ -15,13 +15,13 @@ handoffs** covered here --- they're separate, on separate timelines, run by diff
 |---|---|---|
 | Database connection string | Vercel project environment variables **only** --- never in git, never written down elsewhere | Whoever has Vercel project access (the Tech Lead) |
 | Vercel account | Signed up with a dedicated Tech Lead email, created at deployment time | The Tech Lead |
-| Supabase account | Signed up with the same dedicated Tech Lead email | The Tech Lead |
-| Vercel/Supabase passwords | A password-protected document in the club Google Drive | Current Tech Lead; recoverable via that dedicated email's own recovery options |
+| Neon account | Signed up with the same dedicated Tech Lead email | The Tech Lead |
+| Vercel/Neon passwords | A password-protected document in the club Google Drive | Current Tech Lead; recoverable via that dedicated email's own recovery options |
 | Platform Administrator (TM Lead) role | Inside the app itself, via the permission system | Transferred yearly through the in-app invite/accept flow --- see Section 2 |
 | GitHub repo | `Google-Developer-Student-Clubs-ISSATSo` organization | Tech Lead + club members with repo access |
 
 Two separate identities, two separate purposes: the **Tech Lead's dedicated email** owns the
-infrastructure (Vercel, Supabase, GitHub deploys), while the **TM Lead's in-app Administrator
+infrastructure (Vercel, Neon, GitHub deploys), while the **TM Lead's in-app Administrator
 role** owns the recruitment process itself. Nobody needs infrastructure access just to run
 recruitment, and nobody needs to be TM Lead just to maintain the code.
 
@@ -50,7 +50,7 @@ role has never required touching the database or hosting directly.
 
 This one's less frequent and more manual, since it involves real infrastructure credentials:
 
-1. Add the new Tech Lead to the Vercel project and the Supabase project as a team member.
+1. Add the new Tech Lead to the Vercel project and the Neon project as a team member.
 2. Add them as a collaborator/member on the GitHub org repo (ideally with a role that lets them
    deploy).
 3. Update the password-protected Drive doc with the new Tech Lead's access confirmed --- have
@@ -76,12 +76,23 @@ the latest backup?" gap can open up.
 - **Do this once, calmly:** practice restoring a backup into a throwaway local database, just so
   it's a known process rather than something improvised for the first time during an actual
   problem.
+- Note for whoever's Tech Lead: Neon's free tier scales database compute to zero after a few
+  minutes of inactivity --- this is expected behavior, not an outage. The first query after an
+  idle period (e.g. the app's first visitor after the recruitment off-season) takes a brief
+  moment longer while compute spins back up; the data itself is never paused, deleted, or
+  inaccessible. Don't mistake a slow first request for something broken.
+- Schema changes on the live database deserve real caution, not just local testing: a real
+  migration on this project once required hand-writing the SQL, because Prisma's own
+  auto-generated plan would have silently destroyed existing column data on a required type
+  change it couldn't populate safely. When a schema change involves anything more than adding a
+  nullable column, review the generated migration SQL yourself before applying it, and take a
+  fresh backup immediately beforehand.
 
 ---
 
 ## 5. If something goes wrong
 
-- **Can't log into Vercel/Supabase:** use the dedicated Tech Lead email's own account recovery.
+- **Can't log into Vercel/Neon:** use the dedicated Tech Lead email's own account recovery.
 - **Lost the Drive doc:** recoverable via the Tech Lead email --- not a real emergency, just
   update the doc afterward.
 - **Database looks wrong or data is missing:** restore from the most recent scheduled backup

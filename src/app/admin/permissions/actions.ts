@@ -7,10 +7,13 @@ import { requirePermission } from "@/lib/permissions";
 import { logActivity } from "@/lib/activity-log";
 import {
   Committee,
+  InviteStatus,
   PermissionKey,
   PermissionSource,
   RoleTemplateName,
 } from "@/generated/prisma/enums";
+import { isEligibleForLeadRole, LEAD_ROLE_LABELS } from "@/lib/campaign-leads";
+import { SEAT_KIND_COMMITTEE, seatKindLabel } from "@/lib/panel-seat-kind";
 import { ROLE_TEMPLATE_LABELS } from "./permission-config";
 
 const ADMIN = PermissionKey.MANAGE_ACCOUNTS;
@@ -148,6 +151,167 @@ export async function deleteUser(userId: string): Promise<void> {
   });
 
   revalidatePath(PATH);
+}
+
+/**
+ * One thing a committee change would invalidate, in words the admin can act on.
+ */
+export type CommitteeImpact = {
+  kind: "LEAD_ROLE" | "PANEL_SEAT" | "ADMIN_TRANSFER";
+  /** Ready-to-render sentence, e.g. 'MKT Lead of "Recruitment 2026"'. */
+  description: string;
+};
+
+export type UpdateCommitteeResult =
+  | { ok: true; committee: Committee }
+  /** Nothing was written — the caller must confirm the listed consequences. */
+  | { ok: false; needsConfirmation: true; impacts: CommitteeImpact[] }
+  | { ok: false; needsConfirmation?: false; error: string };
+
+/**
+ * Everything a move to `next` would break for this user.
+ *
+ * These are exactly the places `User.committee` is read for a LIVE
+ * authorization decision, so this list is the blast radius and nothing else:
+ *
+ *  - MKT_LEAD / EER_LEAD campaign lead titles (see LEAD_ROLE_COMMITTEE) — the
+ *    holder must be in that committee;
+ *  - claimed panel seats whose kind names a committee (isEligibleForSeat);
+ *  - a pending Administrator transfer invite, which only a TM member may
+ *    accept (transfer-admin/actions.ts re-checks committee at accept time).
+ *
+ * Nothing here is repaired automatically, and the wording says so, because the
+ * consequence is subtler than "their authority is revoked". Lead authority is
+ * resolved live from the CampaignLead ROW, not from the holder's committee — so
+ * an now-ineligible lead keeps the title and everything it can do until a human
+ * reassigns it. Likewise a claimed seat: eligibility is checked when a seat is
+ * filled, not continuously, so the person stays seated. What actually changes
+ * is that they can no longer be PUT there again.
+ *
+ * That is the accepted design, not an oversight: silently unseating people as a
+ * side effect of an account edit is exactly the invisible consequence this
+ * confirmation exists to avoid.
+ */
+async function committeeChangeImpacts(
+  userId: string,
+  email: string,
+  next: Committee,
+): Promise<CommitteeImpact[]> {
+  const [leads, seats, invite] = await Promise.all([
+    prisma.campaignLead.findMany({
+      where: { userId },
+      select: { role: true, campaign: { select: { name: true } } },
+    }),
+    prisma.panelSeat.findMany({
+      where: { claimedById: userId },
+      select: {
+        kind: true,
+        panel: {
+          select: {
+            applicant: {
+              select: { fullName: true, campaign: { select: { name: true } } },
+            },
+          },
+        },
+      },
+    }),
+    prisma.adminTransferInvite.findFirst({
+      where: { invitedEmail: email, status: InviteStatus.PENDING },
+      select: { id: true },
+    }),
+  ]);
+
+  const impacts: CommitteeImpact[] = [];
+
+  for (const lead of leads) {
+    if (isEligibleForLeadRole(lead.role, next)) continue;
+    impacts.push({
+      kind: "LEAD_ROLE",
+      description: `${LEAD_ROLE_LABELS[lead.role]} of “${lead.campaign.name}” — they keep the title and its powers until it is reassigned, but they would no longer be eligible for it.`,
+    });
+  }
+
+  for (const seat of seats) {
+    const committee = SEAT_KIND_COMMITTEE[seat.kind];
+    if (committee === null || committee === next) continue;
+    impacts.push({
+      kind: "PANEL_SEAT",
+      description: `The ${seatKindLabel(seat.kind)} seat on ${seat.panel.applicant.fullName}’s interview panel (“${seat.panel.applicant.campaign.name}”) — they stay seated, but could not be put back in that seat.`,
+    });
+  }
+
+  if (invite && next !== Committee.TM) {
+    impacts.push({
+      kind: "ADMIN_TRANSFER",
+      description:
+        "A pending Administrator transfer invite — only a TM member can accept one, so it would become unacceptable.",
+    });
+  }
+
+  return impacts;
+}
+
+/**
+ * Change a member's home committee.
+ *
+ * Administrator-only (MANAGE_ACCOUNTS), the same gate as every other action on
+ * this screen, and refused for the TM Lead by {@link assertNotLead}: the
+ * Administrator must be a TM member by rule, so their committee is not an
+ * editable attribute — the role moves via Transfer Admin Role instead.
+ *
+ * Two-step by design. The first call returns `needsConfirmation` with the list
+ * of live authorizations the change would invalidate, and writes nothing; the
+ * caller re-submits with `confirmed` once the admin has read it. A change with
+ * no entanglements skips straight through — there is nothing to warn about.
+ */
+export async function updateUserCommittee(
+  userId: string,
+  committee: Committee,
+  confirmed = false,
+): Promise<UpdateCommitteeResult> {
+  const actorId = await requirePermission(ADMIN);
+
+  if (!(committee in Committee)) {
+    return { ok: false, error: "Choose a committee." };
+  }
+  await assertNotLead(userId);
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true, committee: true },
+  });
+  if (!user) return { ok: false, error: "That member no longer exists." };
+
+  if (user.committee === committee) {
+    return { ok: true, committee };
+  }
+
+  if (!confirmed) {
+    const impacts = await committeeChangeImpacts(userId, user.email, committee);
+    if (impacts.length > 0) {
+      return { ok: false, needsConfirmation: true, impacts };
+    }
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { committee } });
+
+  await logActivity({
+    actorId,
+    actionType: "USER_COMMITTEE_CHANGED",
+    targetType: "User",
+    targetId: userId,
+    // Global, not campaign-scoped: a home committee is an account attribute, so
+    // this belongs with USER_CREATED and the permission grants, even though its
+    // consequences land inside campaigns. Same treatment those already get.
+    details: {
+      email: user.email,
+      previousCommittee: user.committee,
+      committee,
+    },
+  });
+
+  revalidatePath(PATH);
+  return { ok: true, committee };
 }
 
 export async function togglePermission(

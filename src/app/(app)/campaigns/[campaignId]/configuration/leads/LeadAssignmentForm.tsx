@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 
 import { Icon } from "@/components/app-shell/icon";
 import { Button } from "@/components/ui/button";
-import type { LeadRole } from "@/generated/prisma/enums";
+import type { Committee, LeadRole } from "@/generated/prisma/enums";
 import type { LeadHolder } from "@/lib/campaign-leads";
 import { assignLead } from "./actions";
 
@@ -16,12 +16,16 @@ export function LeadAssignmentForm({
   roleLabel,
   currentHolder,
   memberOptions,
+  requiredCommittee,
 }: {
   campaignId: string;
   role: LeadRole;
   roleLabel: string;
   currentHolder: LeadHolder;
+  /** Already narrowed to eligible members by the server section. */
   memberOptions: { id: string; label: string }[];
+  /** The committee this title requires, or null when it's open to anyone. */
+  requiredCommittee: Committee | null;
 }) {
   const [selected, setSelected] = useState(currentHolder?.userId ?? NONE);
   const [saved, setSaved] = useState(false);
@@ -53,11 +57,19 @@ export function LeadAssignmentForm({
         </span>
       </div>
 
+      {requiredCommittee && (
+        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+          {memberOptions.length === 0
+            ? `No ${requiredCommittee} members to appoint yet.`
+            : `${requiredCommittee} members only.`}
+        </p>
+      )}
+
       <div className="mt-3 flex items-center gap-2">
         <select
           aria-label={`Assign ${roleLabel}`}
           value={selected}
-          disabled={pending}
+          disabled={pending || memberOptions.length === 0}
           onChange={(e) => {
             setSelected(e.target.value);
             setSaved(false);

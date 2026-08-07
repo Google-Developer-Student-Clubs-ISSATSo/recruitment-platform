@@ -19,7 +19,10 @@ export function MktSkillsTable({
   mktPreferredCount,
 }: {
   skills: SkillCount[];
-  /** Of the same population, how many chose MKT as their preferred committee. */
+  /**
+   * Of the same population, how many chose MKT AND listed at least one skill
+   * from this campaign's list.
+   */
   mktPreferredCount: number;
 }) {
   return (
@@ -29,12 +32,16 @@ export function MktSkillsTable({
           <Icon name="bar_chart" className="text-[20px] text-primary" />
           MKT Skills Breakdown
         </h2>
+        {/* Deliberately spelled out rather than shortened to "chose MKT": the
+            figure counts MKT-preferring applicants who ALSO listed a skill from
+            the list below, and a label naming only half of that is how it got
+            misread the first time. */}
         <p className="flex items-baseline gap-2 rounded-lg bg-primary/10 px-3 py-1.5">
           <span className="text-lg font-bold tabular-nums text-primary">
             {mktPreferredCount}
           </span>
           <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-            chose MKT
+            chose MKT with a listed skill
           </span>
         </p>
       </div>
