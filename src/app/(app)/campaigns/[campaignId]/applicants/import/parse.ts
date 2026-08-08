@@ -1,6 +1,8 @@
 import {
   HEADER,
   classifyApplicantRow,
+  matchesCommitteeQuestion,
+  matchesQuestion,
   type ClassifiedRow,
   type PreviewRow,
 } from "@/lib/applicant-intake";
@@ -82,11 +84,25 @@ export function parseCSV(text: string): string[][] {
   return rows;
 }
 
+// Google writes the first two columns of a responses export itself, in the Form
+// owner's account language — this club's account is French, so they export as
+// "Horodateur" and "Adresse e-mail", not "Timestamp" and "Email". Their POSITION
+// is the stable thing: with email collection enabled, Google always emits the
+// timestamp first and the collected email second, ahead of every authored
+// question. So these two are read by index and every other column by its title.
+const I_TIMESTAMP = 0;
+const I_EMAIL = 1;
+
+// ...and are stored in rawFormData under these keys regardless of what the file
+// called them, so a CSV-built rawFormData stays interchangeable with a
+// webhook-built one (the Apps Script keys the same two answers this way).
+const TIMESTAMP_KEY = "Timestamp";
+
 /**
  * Parse and classify the whole file. `existingEmails` is the lowercased set of
  * emails already in this campaign; rows matching it (or an earlier row in the
- * same file) are flagged as duplicates. Header is matched by exact name, so a
- * missing required column fails loudly rather than mapping the wrong data.
+ * same file) are flagged as duplicates. A required question column that isn't
+ * there fails the whole file loudly, rather than mapping the wrong data.
  */
 export function classifyCsv(
   csvText: string,
@@ -98,14 +114,11 @@ export function classifyCsv(
   }
 
   const header = parsed[0].map((h) => h.trim());
-  const colOf = (name: string) => header.indexOf(name);
-  const iEmail = colOf(HEADER.email);
-  const iName = colOf(HEADER.fullName);
-  const iIss = colOf(HEADER.isIssatso);
-  const iCom = colOf(HEADER.committee);
+  const iName = header.findIndex((h) => matchesQuestion(h, HEADER.fullName));
+  const iIss = header.findIndex((h) => matchesQuestion(h, HEADER.isIssatso));
+  const iCom = header.findIndex(matchesCommitteeQuestion);
 
   const missing: string[] = [];
-  if (iEmail < 0) missing.push(HEADER.email);
   if (iName < 0) missing.push(HEADER.fullName);
   if (iIss < 0) missing.push(HEADER.isIssatso);
   if (iCom < 0) missing.push(HEADER.committee);
@@ -113,6 +126,17 @@ export function classifyCsv(
     return {
       rows: [],
       headerError: `The file is missing required column(s): ${missing.join(", ")}.`,
+    };
+  }
+
+  // The email column is positional, so "is it there?" is a question about the
+  // file's shape, not about a header name — an export narrower than two columns
+  // cannot be a responses file with email collection turned on.
+  if (header.length <= I_EMAIL) {
+    return {
+      rows: [],
+      headerError:
+        "This file has no email column. Export the responses from a Form with email collection enabled.",
     };
   }
 
@@ -131,14 +155,19 @@ export function classifyCsv(
 
     const rawFormData: Record<string, string> = {};
     header.forEach((h, i) => {
-      rawFormData[h] = get(i);
+      // The two Google-generated columns are re-keyed to their canonical names;
+      // the rest keep the question wording they were exported under, which is
+      // what PhaseOneQuestion.sourceField is configured against.
+      if (i === I_TIMESTAMP) rawFormData[TIMESTAMP_KEY] = get(i);
+      else if (i === I_EMAIL) rawFormData[HEADER.email] = get(i);
+      else rawFormData[h] = get(i);
     });
 
     const row = classifyApplicantRow(
       {
         rowNumber: rows.length + 1,
         fullName: get(iName),
-        email: get(iEmail),
+        email: get(I_EMAIL),
         issatsoAnswer: get(iIss),
         committeeAnswer: get(iCom),
         rawFormData,

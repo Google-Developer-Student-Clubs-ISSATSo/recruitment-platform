@@ -8,29 +8,77 @@ import { COMMITTEE_LABEL } from "@/lib/committee";
 // supplies its own duplicate-detection set and does its own writes, without the
 // validation or the auto-reject rule ever forking in two.
 
-// --- Exact form-question wording (authoritative, from the responses file) ----
-// These are the CSV export's column headers AND the Google Form's question
-// titles — the same strings by construction, since Sheets names the export
-// columns after the questions. The webhook keys its payload by them too, so a
-// webhook-built rawFormData is structurally identical to a CSV-built one and
-// PhaseOneQuestion.sourceField lookups work the same either way.
+// --- Form-question wording -------------------------------------------------
+// The Google Form's question titles, which are also the CSV export's column
+// headers for every question someone actually authored. Matched loosely (see
+// normalizeQuestion below), never by ===, because a live Form's titles drift:
+// stray double spaces, a trailing colon, a capitalisation edit, or extra prose
+// appended to a question all leave the question meaning the same thing.
+//
+// The two columns Google generates itself — Timestamp and Email — are NOT
+// matched by title at all in the CSV, because Google writes them in the Form
+// owner's account language ("Horodateur", "Adresse e-mail" on this club's
+// French-locale account). The CSV reads those two by position instead; see
+// classifyCsv. The webhook gets the email from getRespondentEmail() and keys it
+// as "Email", so a webhook-built rawFormData still matches a CSV-built one.
 export const HEADER = {
   email: "Email",
   fullName: "Full name",
   isIssatso: "Are you an ISSATSO student?",
+  // Prefix, not a full title: the live question has a P.S. sentence appended
+  // after this text, so it is matched with startsWith rather than equality.
   committee:
-    "Which one of our three committees do you think is most suitable for you ?",
+    "Which one of our three committees do you think is most suitable for you",
 } as const;
 
-// Committee answer → enum. Anything not listed is an error row, never guessed.
-// Derived from COMMITTEE_LABEL rather than restated, so the answers accepted
-// here and the committee names the outbound emails print stay one and the same.
-const COMMITTEE_MAP: Record<string, Committee> = Object.fromEntries(
-  Object.entries(COMMITTEE_LABEL).map(([value, label]) => [
-    label,
-    value as Committee,
-  ]),
-);
+/**
+ * A question title reduced to the form two titles are compared in: lowercased,
+ * trimmed, runs of whitespace collapsed to one space, a trailing colon dropped.
+ * Everything that survives is meaningful wording.
+ */
+export function normalizeQuestion(title: string): string {
+  return title
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\s*:\s*$/, "");
+}
+
+/** Whether a form's question title means the same as one of our HEADER keys. */
+export function matchesQuestion(title: string, expected: string): boolean {
+  return normalizeQuestion(title) === normalizeQuestion(expected);
+}
+
+/**
+ * The committee question, matched on its opening text. The real title continues
+ * past HEADER.committee with a P.S. addressed to the applicant, and that tail is
+ * free to be reworded without breaking intake.
+ */
+export function matchesCommitteeQuestion(title: string): boolean {
+  return normalizeQuestion(title).startsWith(normalizeQuestion(HEADER.committee));
+}
+
+// Committee answer → enum, by abbreviation. The Form's three choices spell the
+// abbreviation and the full name together ("TM ( Team Managment )" — the typo is
+// really in the live Form), and the abbreviation is the stable half: the prose
+// half gets edited, translated and typo-fixed between cycles. Matched as a whole
+// token, not a substring, so nothing can match inside a longer word.
+const COMMITTEE_TOKENS = Object.keys(COMMITTEE_LABEL) as Committee[];
+
+/**
+ * The committee an answer names, or null if it names none — or more than one,
+ * which is as unresolvable as none and gets the same error row. Never guessed.
+ */
+function committeeFromAnswer(answer: string): Committee | null {
+  const tokens = new Set(
+    answer
+      .toUpperCase()
+      .split(/[^A-Z0-9]+/)
+      .filter(Boolean),
+  );
+  const matched = COMMITTEE_TOKENS.filter((c) => tokens.has(c));
+  return matched.length === 1 ? matched[0] : null;
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -76,13 +124,19 @@ export function rawRowFromFormData(
   rawFormData: Record<string, string>,
   rowNumber = 1,
 ): RawRow {
-  const get = (key: string) => rawFormData[key] ?? "";
+  // Scan the keys rather than index by them: the payload's titles are whatever
+  // the live Form currently says, and only their normalized form is expected to
+  // line up with ours.
+  const find = (matches: (key: string) => boolean) => {
+    const key = Object.keys(rawFormData).find(matches);
+    return key === undefined ? "" : (rawFormData[key] ?? "");
+  };
   return {
     rowNumber,
-    fullName: get(HEADER.fullName),
-    email: get(HEADER.email),
-    issatsoAnswer: get(HEADER.isIssatso),
-    committeeAnswer: get(HEADER.committee),
+    fullName: find((k) => matchesQuestion(k, HEADER.fullName)),
+    email: find((k) => matchesQuestion(k, HEADER.email)),
+    issatsoAnswer: find((k) => matchesQuestion(k, HEADER.isIssatso)),
+    committeeAnswer: find(matchesCommitteeQuestion),
     rawFormData,
   };
 }
@@ -108,10 +162,16 @@ export function classifyApplicantRow(
   const issatsoAnswer = row.issatsoAnswer.trim();
   const committeeAnswer = row.committeeAnswer.trim();
 
-  // Resolve the two mapped/validated fields up front.
-  const isIssatsoStudent =
-    issatsoAnswer === "Yes" ? true : issatsoAnswer === "No" ? false : null;
-  const preferredCommittee = COMMITTEE_MAP[committeeAnswer] ?? null;
+  // Resolve the two mapped/validated fields up front. The ISSATSO choice is
+  // matched on its first word, since the live Form's affirmative is "Yes, I am"
+  // and its tail is the kind of wording that gets reworded; anything not
+  // starting yes/no is still unrecognised rather than assumed.
+  const isIssatsoStudent = /^yes/i.test(issatsoAnswer)
+    ? true
+    : /^no/i.test(issatsoAnswer)
+      ? false
+      : null;
+  const preferredCommittee = committeeFromAnswer(committeeAnswer);
   const committeeLabel = preferredCommittee ?? committeeAnswer;
 
   const base = {

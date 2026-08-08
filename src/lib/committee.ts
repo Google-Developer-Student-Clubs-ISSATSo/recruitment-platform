@@ -3,11 +3,13 @@ import { Committee } from "@/generated/prisma/enums";
 // The committees' full display names. Pure and dependency-free — imported by
 // client components, the CSV import and the outbound emails alike.
 //
-// These exact strings are the answers applicants pick from on the application
-// form, so the CSV import parses against them (see applicants/import/parse.ts,
-// which derives its answer→enum map from this) and the acceptance email tells
-// people which committee they joined using the same wording they chose from.
-// One definition, so the two can never drift into disagreeing.
+// These are the club's own names for the three committees, used wherever a
+// committee is shown to a person — the acceptance email included.
+//
+// They are deliberately NOT what intake matches an applicant's answer against:
+// the Form spells its choices its own way ("TM ( Team Managment )", typo and
+// all), so applicant-intake.ts matches on the abbreviation — this record's keys,
+// which are the enum values — rather than on these labels.
 export const COMMITTEE_LABEL: Record<Committee, string> = {
   [Committee.MKT]: "Marketing (MKT)",
   [Committee.TM]: "Team Management (TM)",

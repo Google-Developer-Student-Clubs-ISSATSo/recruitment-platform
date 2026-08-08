@@ -37,12 +37,32 @@ Identical rules to a CSV import, because it is literally the same function
 - Missing name, missing/invalid email, an unrecognised answer to
   "Are you an ISSATSO student?", or an unrecognised committee → rejected with a
   reason, nothing created.
-- Answered "No" to the ISSATSO question → created as `REJECTED_PHASE1` with no
+- Answered no to the ISSATSO question → created as `REJECTED_PHASE1` with no
   `PhaseOneResult` (the auto-reject rule; there is nothing to score).
 - Otherwise → created as `SUBMITTED` with a `PhaseOneResult` of `PENDING`,
   ready for the scoring queue.
 - Same email already in that campaign → skipped, reported as a success. Apps
   Script retries failed triggers, so a repeat delivery must be harmless.
+
+### How answers are found (why Form edits usually don't break it)
+
+Question titles are matched loosely: case, surrounding and repeated whitespace,
+and a trailing colon are all ignored, and the committee question is matched on
+its opening words only, so the P.S. appended to it can be reworded freely. The
+committee answer is read from the abbreviation in it (`MKT`, `TM`, `EER`, as a
+whole word), not from the full choice text — which is why the live Form's
+"TM ( Team Managment )" typo is harmless. The ISSATSO answer is read from its
+first word, so "Yes, I am" and a bare "Yes" both work.
+
+The email is **not** matched by title on either path. The webhook takes it from
+`getRespondentEmail()` — the collected address is a property of the submission,
+never one of its item responses. The CSV import reads it from **column 1**, and
+the timestamp from **column 0**, because Google generates those two columns in
+the Form owner's account language: on the club's French account they export as
+"Horodateur" and "Adresse e-mail". Their position is fixed whenever the Form
+collects email addresses, so position is what intake relies on. If email
+collection is ever turned off, both paths lose the address and every submission
+becomes a "missing email" error row — that setting is load-bearing.
 
 Every accepted submission writes an `APPLICANT_SUBMITTED_VIA_FORM` activity
 entry ("received an application from the Google Form"), distinct from the
