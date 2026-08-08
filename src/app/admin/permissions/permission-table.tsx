@@ -261,10 +261,14 @@ export function PermissionTable({
             Create new member
           </h2>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            Adds the account immediately with the chosen role template. They can
-            sign in with their email right away.
+            Adds the account immediately. Their role template follows their
+            committee — TM becomes a TM Reviewer, MKT or EER becomes a
+            Committee Rep — and they can sign in with their email right away.
+            Technical Scorer and TM Lead aren&rsquo;t assigned here: grant
+            Technical Scorer from a member&rsquo;s row below, or appoint
+            Technical Lead from Campaign Leads for the auto-grant.
           </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <input
               name="name"
               placeholder="Full name"
@@ -278,21 +282,6 @@ export function PermissionTable({
               required
               className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
             />
-            <select
-              name="roleTemplate"
-              required
-              defaultValue=""
-              className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
-            >
-              <option value="" disabled>
-                Select role template…
-              </option>
-              {templates.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
             <select
               name="committee"
               required

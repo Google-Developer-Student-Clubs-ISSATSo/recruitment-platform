@@ -118,7 +118,11 @@ the next campaign.
 
 - Assigning MKT Lead or EER Lead only offers users whose `User.committee`
   matches (enforced server-side, not just hidden in the UI). Club Lead
-  and Technical Lead are unrestricted --- any user, any committee.
+  and Technical Lead are unrestricted --- any user, any committee. The
+  interview panel-seat assignment picker (see "Interview panels" below)
+  follows the identical committee-match restriction, fixed in the same
+  pass after both were found to independently allow a mismatched
+  committee's member to be picked.
 - Assigning Technical Lead auto-grants `ENTER_TECHNICAL_SCORE`
   (`source: LEAD_ROLE`) if the user doesn't already hold it manually.
   Reassigning Technical Lead auto-revokes that permission from the
@@ -133,6 +137,39 @@ the next campaign.
   (Vercel/Neon owner, per `HANDOFF_RUNBOOK.md`) happen to be the same
   person today but are deliberately uncoupled concepts in the code --- the
   infra role lives entirely outside this app.
+
+### Committee is admin-editable, and role template derives from it
+
+`User.committee` can be changed after account creation from Admin
+Settings (previously it could only be set by deleting and recreating the
+account). Because committee-based authorization is live-resolved (see
+above), editing a user's committee away from one where they currently
+hold `MKT_LEAD`/`EER_LEAD` for an open campaign, or a claimed interview
+panel seat, doesn't fail --- it warns, listing exactly what will be
+affected, and lets the Administrator proceed anyway. This is a deliberate
+"warn, don't block" choice, consistent with how the interview-slot-clear
+confirmation also warns rather than blocking outright.
+
+**Account creation no longer offers an independent role-template
+choice.** `COMMITTEE_REPRESENTATIVE` vs. `TM_REVIEWER` is not a decision
+an admin makes --- it's derived automatically from the committee they
+pick (`roleTemplateForCommittee()` in `permission-config.ts`): TM →
+`TM_REVIEWER`, MKT or EER → `COMMITTEE_REPRESENTATIVE`. This exists
+because the two were previously selectable independently, which allowed
+nonsensical combinations (e.g. an MKT-committee member holding
+`TM_REVIEWER`) with no meaning in the actual permission model.
+`TECHNICAL_SCORER` was removed from the creation form entirely ---
+technical-scoring access only ever comes from Technical Lead assignment
+(auto-granted) or a manual Permission Management grant afterward, never
+from account creation. **`TM_LEAD` is excluded from the creation form at
+the database-query level** (`page.tsx`'s `roleTemplate.findMany()` now
+filters it out), not just hidden client-side --- a real gap was found and
+closed here: nothing had previously stopped an admin from selecting "TM
+Lead" at creation time and silently creating a second Administrator,
+which would have violated the "exactly one Administrator" invariant this
+project treats as load-bearing. `createUser` also throws defensively if
+`roleTemplate` ever resolves to `TM_LEAD` by any path, as a second layer
+behind the query-level exclusion.
 
 ### Live-resolved authority, not snapshotted
 
@@ -220,6 +257,59 @@ underlying validation/auto-reject function (`src/lib/applicant-intake.ts`)
   with the Administrator recorded as actor (a webhook call has no signed-
   in user; if no Administrator exists at all, applicant creation still
   succeeds, logging is skipped, and a `console.error` records why).
+
+**Field matching is normalized/token-based, not exact-string, after real
+Form testing exposed why exact matching doesn't survive contact with a
+live Google Form.** Question titles and answer literals both drift from
+whatever's hardcoded in ways that are easy to miss by eye (a stray
+trailing colon, an extra space, a form author's own typo, an entire
+extra sentence appended to a question title, an answer phrased
+differently than expected). Current approach in
+`src/lib/applicant-intake.ts`:
+
+- Full name / ISSATSO question titles: normalized before comparing ---
+  trimmed, whitespace collapsed, trailing colon stripped, case-
+  insensitive.
+- Committee question title: matched by normalized-starts-with the
+  expected core text, not full equality, since the real title carries a
+  trailing P.S. sentence not present in any hardcoded constant.
+- ISSATSO answer: matched by case-insensitive prefix (`"yes"` / `"no"`),
+  not exact equality --- the real Form's affirmative option is `"Yes, I
+  am"`, not `"Yes"`.
+- Committee answer: matched by checking whether the answer contains the
+  committee's abbreviation as a token (`MKT`/`TM`/`EER`), not an exact
+  full-string match --- the real Form's three literals are `"MKT (
+  Marketing )"`, `"TM ( Team Managment )"` (the typo is genuinely in the
+  live Form, matched as-is, not corrected), and `"EER ( Events and
+  External Relations )"` (uses "and," not "&"). None of the three cross-
+  match as a false positive with each other.
+- `Timestamp`/`Email` CSV columns are matched by **position** (columns 0
+  and 1), never by header text --- Google auto-generates these two
+  column headers in the Form owner's Google account language (e.g.
+  `"Horodateur"`/`"Adresse e-mail"` for a French-locale account), which
+  is outside the Form author's control and not something worth trying to
+  translate/normalize against.
+- On the webhook path specifically, email comes from
+  `e.response.getRespondentEmail()` in `on-form-submit.gs` --- **not**
+  `getEmail()`, which doesn't exist on `FormResponse` --- sidestepping
+  the locale problem entirely on that path, since it never depends on a
+  column header at all.
+- The sheet-bound trigger fallback (`e.namedValues`, only relevant if
+  the script is ever rebound from a form-submit trigger to a sheet-
+  submit one) does not have email-extraction parity with the form-bound
+  path --- this is a known, deliberate non-fix, since the documented
+  setup uses the form-bound trigger. If it's ever hit, it logs a clear
+  warning explaining why, rather than failing as a silent, unexplained
+  "missing email."
+- CSV import and the webhook share this exact matching logic (same
+  functions in `applicant-intake.ts`) --- there is no separate,
+  drifting implementation for either path.
+
+See `docs/GOOGLE_FORM_SYNC_SETUP.md` for the full setup/rotation/
+troubleshooting guide, including its own "How answers are found" section
+--- check that file directly for the most current description of this
+matching behavior, since it's the operationally-facing doc most likely
+to be kept in sync going forward.
 
 ### Campaign scoping
 

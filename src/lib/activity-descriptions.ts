@@ -14,6 +14,10 @@ const ACTION_LABELS: Record<string, string> = {
   BULK_PERMISSION_GRANTED: "granted a permission to several members",
   BULK_PERMISSION_REVOKED: "revoked a permission from several members",
   PERMISSIONS_RESET: "reset permissions to template defaults",
+  // A one-time data correction (see scripts/fix-role-template-mismatches.ts),
+  // not the ordinary committee-move or reset-to-template flows — kept as its
+  // own type so it doesn't read as either of those in the log.
+  USER_ROLE_TEMPLATE_CORRECTED: "corrected a member's role template",
   ADMIN_TRANSFER_INITIATED: "initiated an admin transfer",
   ADMIN_TRANSFER_CANCELLED: "cancelled an admin transfer",
   CAMPAIGN_CREATED: "created a campaign",
@@ -110,6 +114,9 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   BULK_PERMISSION_GRANTED: "accepted",
   BULK_PERMISSION_REVOKED: "rejected",
   PERMISSIONS_RESET: "pending",
+  // Corrective, not routine — same weight as USER_COMMITTEE_CHANGED, which it
+  // resembles in effect (it changes who can do what for the affected member).
+  USER_ROLE_TEMPLATE_CORRECTED: "pending",
   ADMIN_TRANSFER_INITIATED: "pending",
   ADMIN_TRANSFER_CANCELLED: "pending",
   SIGNED_IN: "primary",

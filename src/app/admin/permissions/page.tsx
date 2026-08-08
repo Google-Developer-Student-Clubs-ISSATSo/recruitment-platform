@@ -144,7 +144,13 @@ export default async function PermissionsPage({
         roleTemplate: { select: { permissions: { select: { permission: true } } } },
       },
     }),
-    prisma.roleTemplate.findMany({ select: { name: true } }),
+    // TM_LEAD is excluded here, not filtered downstream: there is exactly one
+    // Administrator at a time, appointed only via Transfer Admin Role, so the
+    // Create User template list must structurally never be able to offer it.
+    prisma.roleTemplate.findMany({
+      where: { name: { not: RoleTemplateName.TM_LEAD } },
+      select: { name: true },
+    }),
   ]);
 
   const toRow = (u: UserQueryRow): AdminUserRow => {

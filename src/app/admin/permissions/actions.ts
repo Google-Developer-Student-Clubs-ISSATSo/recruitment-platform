@@ -14,7 +14,8 @@ import {
 } from "@/generated/prisma/enums";
 import { isEligibleForLeadRole, LEAD_ROLE_LABELS } from "@/lib/campaign-leads";
 import { SEAT_KIND_COMMITTEE, seatKindLabel } from "@/lib/panel-seat-kind";
-import { ROLE_TEMPLATE_LABELS } from "./permission-config";
+import { syncPermissionsToTemplate } from "@/lib/role-template-sync";
+import { roleTemplateForCommittee } from "./permission-config";
 
 const ADMIN = PermissionKey.MANAGE_ACCOUNTS;
 const PATH = "/admin/permissions";
@@ -42,7 +43,7 @@ export type CreateUserState = {
 };
 
 // Create a brand-new member directly: a real User row plus the UserPermission
-// rows copied from the chosen role template, effective immediately. The user
+// rows copied from the derived role template, effective immediately. The user
 // can sign in with their email straight away — there is no acceptance step.
 export async function createUser(
   _prev: CreateUserState,
@@ -54,18 +55,26 @@ export async function createUser(
     .trim()
     .toLowerCase();
   const name = String(formData.get("name") ?? "").trim();
-  const roleTemplate = String(
-    formData.get("roleTemplate") ?? "",
-  ) as RoleTemplateName;
   const committee = String(formData.get("committee") ?? "") as Committee;
 
   if (!EMAIL_RE.test(email))
     return { status: "error", message: "Enter a valid email address." };
   if (!name) return { status: "error", message: "Enter a name." };
-  if (!(roleTemplate in ROLE_TEMPLATE_LABELS))
-    return { status: "error", message: "Choose a role template." };
   if (!(committee in Committee))
     return { status: "error", message: "Choose a committee." };
+
+  // The role template is derived from committee, never accepted from the
+  // form: a client cannot pass roleTemplate=TM_LEAD (or any other template) to
+  // this action at all. Belt-and-suspenders against the "exactly one
+  // Administrator" invariant in particular — even if this derivation were
+  // ever changed to accept an input again, TM_LEAD must still be impossible
+  // to reach here.
+  const roleTemplate = roleTemplateForCommittee(committee);
+  if (roleTemplate === RoleTemplateName.TM_LEAD) {
+    throw new Error(
+      "TM Lead cannot be assigned here — there is exactly one Administrator, appointed via Transfer Admin Role.",
+    );
+  }
 
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } }))
     return {
@@ -623,37 +632,15 @@ export async function resetToTemplate(userId: string): Promise<void> {
   const actorId = await requirePermission(ADMIN);
   await assertNotLead(userId);
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      roleTemplate: {
-        select: {
-          name: true,
-          permissions: { select: { permission: true } },
-        },
-      },
-    },
-  });
-  const template = user?.roleTemplate;
-  if (!template) return;
-
-  await prisma.$transaction([
-    prisma.userPermission.deleteMany({ where: { userId } }),
-    prisma.userPermission.createMany({
-      data: template.permissions.map((p: { permission: PermissionKey }) => ({
-        userId,
-        permission: p.permission,
-        grantedBy: actorId,
-      })),
-    }),
-  ]);
+  const templateName = await syncPermissionsToTemplate(userId, actorId);
+  if (!templateName) return;
 
   await logActivity({
     actorId,
     actionType: "PERMISSIONS_RESET",
     targetType: "User",
     targetId: userId,
-    details: { roleTemplate: template.name },
+    details: { roleTemplate: templateName },
   });
 
   revalidatePath(PATH);

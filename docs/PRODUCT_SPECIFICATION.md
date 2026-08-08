@@ -118,6 +118,15 @@ any time.
 Starting points assigned when an account is created --- only the TM Lead can customize any
 individual user's permissions afterward.
 
+**Role template is derived from committee at creation, not chosen independently.** An account
+created with committee = TM gets **TM Reviewer**; committee = MKT or EER gets **Committee
+Representative**. There is no separate role choice on the creation form --- this was a real,
+fixed bug (an admin could previously pick any role/committee combination, including
+nonsensical ones like an MKT-committee member holding TM Reviewer). **Technical Scorer** is
+never chosen at account creation either --- it's only ever granted afterward, automatically via
+Technical Lead assignment (see **Campaign Leads** below) or manually through Permission
+Management.
+
 ## Interviewer (default)
 `claim_panel_seat`, `edit_own_interview_notes`
 
@@ -128,12 +137,13 @@ individual user's permissions afterward.
 *Not included by default:* `configure_screening` --- setting coefficients, note scales, and the
 reject threshold/target count stays with the TM Lead unless specifically delegated.
 
-## Technical Scorer (default)
-`enter_technical_score` only --- a narrow, single-purpose grant for whoever the Technical lead
-designates to score the Technical Skills column. *(Note: this is unrelated to the "Tech Lead"
-infrastructure identity described below --- one is an in-app scoring permission, the other is
-who holds the database password. The same person could hold both, but they're granted through
-completely different mechanisms.)*
+## Technical Scorer
+`enter_technical_score` only --- a narrow, single-purpose grant. Never chosen at account
+creation (see note above); granted automatically when a user is appointed **Technical Lead**
+for a campaign, or manually by the TM Lead for a backup scorer. *(Note: the in-app Technical
+Lead role is unrelated to the "Tech Lead" infrastructure identity described below --- one is an
+in-app scoring permission/appointment, the other is who holds the database password. The same
+person could hold both, but they're granted through completely different mechanisms.)*
 
 ## Committee Representative (default)
 `claim_panel_seat`, `edit_own_interview_notes`.
@@ -149,7 +159,27 @@ Every permission listed above, across all committees, and the **exclusive** abil
 revoke any permission for anyone else. There is exactly **one** of this role at any time --- a
 hard limit, not a permission, since the whole point is centralized control over who can edit
 what. The role changes hands only through the **Admin Handoff** flow below --- never by directly
-editing another account's permissions.
+editing another account's permissions. **The TM Lead is also the TM committee's Lead** --- there
+is no separate, appointable "TM Lead" role among the Campaign Leads below; the Administrator
+fills that function directly.
+
+## Campaign Leads (per-campaign appointments)
+
+Four roles the TM Lead appoints fresh for each campaign --- these are not permission bundles
+granted at account creation, they're a separate, per-campaign layer on top of whatever role a
+user already holds: **MKT Lead, EER Lead, Club Lead, Technical Lead**. An appointment does not
+carry over automatically to the next campaign.
+
+- **MKT Lead / EER Lead** --- must be a member of that committee (enforced, not just suggested).
+  Assigns and reassigns their own committee's interview panel seats (see step 8 below). Will also
+  be the one working the MKT Skills Breakdown (step 6 below) directly, going forward.
+- **Club Lead** --- no committee restriction. May take an interview panel seat outside their own
+  committee under specific conditions (see step 8).
+- **Technical Lead** --- no committee restriction (there is no Technical *committee*, only this
+  role). Appointing someone Technical Lead automatically grants them `enter_technical_score`;
+  replacing them with someone else automatically removes it from the outgoing holder, unless the
+  TM Lead separately and manually granted it to that person for an unrelated reason, in which case
+  it's left alone.
 
 ## Applicant
 No account, no permissions --- applicants never log into GDGC Recruitment Platform.
@@ -283,27 +313,64 @@ invite emails, using the existing templates (no new templates needed --- just th
 workflow). GDG Day itself happens offline; GDGC Recruitment Platform just tracks the status
 (`Invited to GDG Day`).
 
-### 6. Interview Time Selection (external, bit.ly)
+### 6. Phase 2 --- Post-Screening Review
+
+Reached once Phase 1 is complete: a ranked list of every applicant who passed Phase 1
+(Shortlisted), sorted by **Form Score**, showing each applicant's answers to the
+configured/coefficient-bearing Phase 1 questions only.
+
+Any club member can add to an append-only log per applicant --- **Notes**, **Red Flag**, or
+**Green Flag** --- each entry recording its author and timestamp, never edited or deleted after
+the fact. This is where observations from GDG Day (or afterward) get captured, so they can
+actually inform the **Final Decision Meeting** (step 12) rather than being lost to memory or a
+side conversation nobody wrote down.
+
+Also on this page: an **MKT Skills Breakdown** --- a live count of applicants who listed a skill
+matching an admin-managed whitelist of real MKT-relevant skills (configured per campaign, since
+exact Form wording drifts year to year), read from the "Other skills" form field only. This
+includes any applicant with a matching skill regardless of their preferred committee --- an
+EER-preferred applicant who also listed "Video editing" still counts. A separate count shows
+applicants who both prefer the MKT committee **and** have at least one matching skill.
+
+*(Naming note: this page is called "Phase 2" as a name in its own right, not as this document's
+former stage-numbering language --- see "Suggested Build Phasing" below, which has been
+relabeled to avoid the collision.)*
+
+### 7. Interview Time Selection (external, bit.ly)
 
 Shortlisted applicants book their interview time through the existing bit.ly tool, exactly like
 today. Once booking closes, anyone with `enter_interview_slot` enters each applicant's chosen
 date/time into GDGC Recruitment Platform.
 
-### 7. Interviewer Self-Selection (Panel Claiming)
+### 8. Interview Panel Assignment (Lead-Assigned, Not Self-Selected)
 
-A board shows applicants needing interviewers. Anyone with `claim_panel_seat` claims a seat on an
-applicant's panel for their own committee:
+Panels are staffed by committee Leads, not self-claimed by members. A board shows applicants
+needing interviewers, grouped by day --- viewable by any member, but only actionable by an
+authorized Lead.
 
-- Exactly one interviewer per committee per applicant (MKT, TM, EER) --- three total.
-- No duplicate interviewer on the same applicant.
-- A committee's seat locks once claimed.
+- **Panel size is configurable per campaign: 3 or 4 seats.** At 3, it's exactly one interviewer
+  per committee per applicant (MKT, TM, EER). At 4, a floating fourth seat is added, not tied to
+  any committee.
+- Each committee's Lead assigns and reassigns their own committee's members to their own
+  committee's seat --- MKT Lead for the MKT seat, EER Lead for the EER seat, the TM Lead
+  (Administrator) for the TM seat, since there is no separate appointable TM Lead role. A normal
+  member can view the board but cannot claim, release, or reassign a seat themselves.
+- The floating fourth seat (panel size 4) can be assigned by any of MKT Lead, EER Lead, or Club
+  Lead --- no approval needed, ever.
+- The Club Lead may also take one of the three fixed committee seats, **except** the seat
+  matching the interviewed applicant's own preferred committee --- blocked outright, never
+  allowed, no approval possible for that specific case. Taking a *different* committee's seat
+  requires that seat's Lead (or the Administrator, for TM) to actively approve, via an in-app
+  request-and-respond flow --- not email.
+- No duplicate interviewer on the same applicant. A seat cannot be reassigned once that
+  applicant's interview note has been closed.
 
-### 8. Room Assignment (external link)
+### 9. Room Assignment (external link)
 
 GDGC Recruitment Platform links out to the existing class-availability project (direct link, no
 API). The interviewer manually adds the chosen room as a note on the slot.
 
-### 9. Interview Notes (single shared entry per applicant)
+### 10. Interview Notes (single shared entry per applicant)
 
 One shared note per applicant --- not one per interviewer --- filled in collaboratively by the
 panel, matching how the interview actually happens. Anyone with `edit_own_interview_notes` for
@@ -314,7 +381,7 @@ that applicant can fill in or update it. Fields:
 | Name | pulled from applicant record |
 | Form Score | Phase 1 weighted total, shown for reference |
 | Year of Study | pulled from applicant record |
-| Time | interview time (from step 6) |
+| Time | interview time (from step 7) |
 | Jury | the panel members who conducted this interview |
 | Personality (/10) | |
 | Communication (/10) | |
@@ -331,7 +398,7 @@ panel members while the note is open, and to the TM Lead at all times --- **this
 shared-sheet-then-copy-into-a-private-sheet step entirely.** Once a panelist closes a note, it is
 hidden from everyone except the TM Lead until reopened.
 
-### 10. Final Decision Meeting
+### 11. Final Decision Meeting
 
 A live Discord call: everyone discusses each applicant out loud, but only the person driving the
 call --- holding `enter_final_decision` --- shares their screen and enters decisions.
@@ -344,13 +411,15 @@ not the full note breakdown:
 - **Interview Score (AVG only)** --- not the full 7-category breakdown or remarks; those stay
   available on the interview note itself for anyone who wants to review beforehand
 - Running capacity counter per committee (e.g. "MKT 4/4, TM 3/3, EER 5/5")
+- Any Notes/Red Flags/Green Flags recorded during Phase 2 (step 6) are available for reference
+  during this discussion --- this is their intended purpose.
 
 Decision entry: **Accept / Reject / Shortlist**, with the option to set `assigned_committee`
 different from `preferred_committee` if capacity is full elsewhere and the discussion supports a
 different fit. Once the main pool is reviewed, the dashboard surfaces the shortlist pool
 (ranked/filterable) to fill any remaining capacity.
 
-### 11. Final Emails
+### 12. Final Emails
 
 Anyone with `send_emails` batch-sends acceptance and rejection emails from the dashboard once
 decisions are locked in --- using the existing templates.
@@ -482,18 +551,26 @@ listed here.)*
 
 # Suggested Build Phasing
 
-**Phase 1 --- Screening core**
+*(Historical --- this describes the original three-stage build plan from before implementation
+started. Real build history and current feature status has long since outgrown this shape; see
+`AGENT_CONTEXT.md`'s "Feature Status" section for what's actually true today. Kept here for
+context, and "Build Phase 2" below is renamed from its original "Phase 2" label specifically to
+avoid colliding with the actual, later-built "Phase 2" page described in step 6 above --- they
+are unrelated to each other.)*
+
+**Build Phase 1 --- Screening core**
 Google Sheets/CSV import with auto-reject on non-ISSATSO, permission system (catalog +
 user-permission table + role templates, single TM Lead admin, invite-based Admin Handoff),
 `PhaseOneQuestion`/`PhaseOneScore` scoring rubric with configurable coefficients and note scales,
 weighted ranking, reject-threshold/target-count selection logic with the "to discuss" band,
 processed/remaining tracker, batch email sending, activity log foundation.
 
-**Phase 2 --- Interviews**
-Manual slot-time entry, interviewer panel claiming board (3 seats), link-out to the
-room-availability project, single shared interview note per applicant with the full field list.
+**Build Phase 2 --- Interview infrastructure**
+Manual slot-time entry, interview panel staffing (originally self-claimed, since reworked to
+lead-assigned --- see step 8 above), link-out to the room-availability project, single shared
+interview note per applicant with the full field list.
 
-**Phase 3 --- Decision + polish**
+**Build Phase 3 --- Decision + polish**
 Live final decision dashboard (lean per-applicant view: Form Score + Interview Score only),
 statistics/reporting view, permission management UI + full activity log UI, applicant
 status-lookup page, data retention/anonymization job.

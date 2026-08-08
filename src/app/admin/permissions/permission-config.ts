@@ -109,6 +109,21 @@ export const ROLE_TEMPLATE_LABELS: Record<RoleTemplateName, string> = {
 };
 
 /**
+ * The role template a member's home committee implies. TM's lead IS the
+ * Administrator (see LEAD_ROLE_COMMITTEE in lib/campaign-leads.ts), so an
+ * ordinary TM member's standing role is the reviewer template; MKT and EER
+ * members are committee representatives. This is the only rule creating a new
+ * member is allowed to apply — TECHNICAL_SCORER and TM_LEAD are reachable only
+ * via Technical Lead assignment and the Transfer Admin Role flow respectively,
+ * never at account creation.
+ */
+export function roleTemplateForCommittee(committee: Committee): RoleTemplateName {
+  return committee === Committee.TM
+    ? RoleTemplateName.TM_REVIEWER
+    : RoleTemplateName.COMMITTEE_REPRESENTATIVE;
+}
+
+/**
  * High-consequence permissions. Toggling any of these OFF is hard to undo or
  * has broad reach, so it must be confirmed before it takes effect (STEP 5).
  */
