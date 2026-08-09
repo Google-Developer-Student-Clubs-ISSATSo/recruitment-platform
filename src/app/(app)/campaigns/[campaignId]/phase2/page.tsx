@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/session";
-import { getPhase2Data } from "@/lib/phase2-store";
+import { canViewMktSkills, getPhase2Data } from "@/lib/phase2-store";
 import { tallyMktSkills } from "@/lib/phase2";
-import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
-import { ApplicantCard } from "./ApplicantCard";
+import { RankedList } from "./RankedList";
 import { MktSkillsTable } from "./MktSkillsTable";
 
 // Phase 2 — the working view for everyone who passed Phase 1.
@@ -18,6 +17,12 @@ import { MktSkillsTable } from "./MktSkillsTable";
 // Read-only as far as Phase 1 is concerned: the answers are shown for context
 // and there is no scoring control anywhere on this page. The only writes are
 // appended Notes / Red Flags / Green Flags.
+//
+// One SECTION is narrower than the page: the MKT Skills Breakdown renders only
+// for the campaign's MKT Lead and the Administrator. Everyone else simply
+// doesn't get it — no "no access" message, the same way Configuration's
+// sections are absent rather than refused for members who don't hold their
+// permission.
 export default async function Phase2Page({
   params,
 }: {
@@ -32,8 +37,20 @@ export default async function Phase2Page({
   // always the session's user id resolved server-side in the action.
   const authorName = session.user.name ?? session.user.email ?? "You";
 
-  const { applicants, maxScore, skillSources, mktSkillWhitelist, mktPreferredCount } =
-    await getPhase2Data(campaignId);
+  const [
+    {
+      applicants,
+      maxScore,
+      skillSources,
+      mktSkillWhitelist,
+      mktSkillApplicants,
+      mktPreferredCount,
+    },
+    mayViewSkills,
+  ] = await Promise.all([
+    getPhase2Data(campaignId),
+    canViewMktSkills(campaignId, session.user.id),
+  ]);
   // Live tally, every load — the same rule the interview-note AVGs and the
   // capacity counts follow. Nothing here is cached or written back, which is
   // what makes a whitelist edit show up on the very next load.
@@ -57,21 +74,24 @@ export default async function Phase2Page({
           Phase 1 Selection page, they appear here.
         </p>
       ) : (
-        <StaggerGroup className="space-y-4">
-          {applicants.map((applicant) => (
-            <StaggerItem key={applicant.id}>
-              <ApplicantCard
-                campaignId={campaignId}
-                applicant={applicant}
-                maxScore={maxScore}
-                authorName={authorName}
-              />
-            </StaggerItem>
-          ))}
-        </StaggerGroup>
+        <RankedList
+          campaignId={campaignId}
+          applicants={applicants}
+          maxScore={maxScore}
+          authorName={authorName}
+        />
       )}
 
-      <MktSkillsTable skills={skills} mktPreferredCount={mktPreferredCount} />
+      {/* Not rendered at all for anyone else — so the applicant names and
+          skills never reach their page in the first place, rather than being
+          hidden client-side. */}
+      {mayViewSkills && (
+        <MktSkillsTable
+          skills={skills}
+          applicants={mktSkillApplicants}
+          mktPreferredCount={mktPreferredCount}
+        />
+      )}
     </div>
   );
 }

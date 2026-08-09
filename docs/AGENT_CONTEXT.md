@@ -137,6 +137,18 @@ the next campaign.
   (Vercel/Neon owner, per `HANDOFF_RUNBOOK.md`) happen to be the same
   person today but are deliberately uncoupled concepts in the code --- the
   infra role lives entirely outside this app.
+- **Lead roles are mutually exclusive, per user, per campaign.** One
+  person cannot hold two different `CampaignLead` roles on the same
+  campaign at once (re-assigning them to the role they already hold is a
+  no-op, not a conflict). The Administrator (`TM_LEAD`) can never be
+  assigned to any `CampaignLead` role at all --- they already function as
+  the TM committee's lead directly. Both rules are enforced in
+  `assignCampaignLead` and reflected in the assignment picker's available
+  options (`isTmLeadUser()`, `otherLeadRoleHeldBy()` in
+  `src/lib/campaign-leads.ts`) --- this was a real, previously-open gap,
+  not always true; a `test`-campaign user was found already holding two
+  lead roles simultaneously from before the fix landed, left as-is since
+  it's disposable dev data, not production.
 
 ### Committee is admin-editable, and role template derives from it
 
@@ -226,6 +238,22 @@ original Stage 4 design, not a bug fix). Current model:
   part of a confirmed clear --- logged under its own distinct action type
   so the Activity Log never misattributes an automatic system decline to
   a real human decision by the approver.
+- The Interviews page shows the current user a short summary of their own
+  assignment count ("You're on N interview panels this cycle" ---
+  singular/plural handled by count, zero is a normal unremarkable state,
+  not an error). This count is deliberately **not** a raw `PanelSeat`
+  query keyed on `claimedById` --- a real edge case was found where
+  clearing a slot's scheduled time leaves the panel/seat rows in place
+  (per the tradeoff above) while the applicant silently drops off the
+  board, which would make a naive count disagree with what's visibly on
+  screen. The count is derived from the same "scheduled applicants" list
+  the board itself renders from, so the two can never disagree by
+  construction. On the board, the current user's own name wherever
+  they're an assigned interviewer is visually louder than the old
+  self-serve claim UI's `(you)` marker was (that convention was reused,
+  not replaced, but escalated from barely-visible muted text to
+  primary+semibold with an inset ring, since the original was
+  functionally invisible on a board with many cards).
 
 ### Google Form --- live applicant sync
 
@@ -369,33 +397,52 @@ cascade above.
 ### Phase 2 page (post-Phase-1, pre-Interviews)
 
 **Naming note:** this is a different thing from the recruitment process's
-own "Phase 2" stage-numbering language that may appear in
-`PRODUCT_SPECIFICATION.md` for the Interview stage --- check that document
-for how the two are currently distinguished before assuming they're the
-same. This page (`campaigns/[campaignId]/phase2/`) lists applicants who
-passed Phase 1, ranked by the cached `PhaseOneResult.weightedTotal`
-(never live-recomputed, see above), showing only configured/coefficient-
-bearing question answers (reusing the same filter as the Phase 1 Answers
-panel). Any club member (no dedicated permission) can add an entry to a
-per-applicant, append-only Notes / Red Flag / Green Flag log
-(`Phase2Entry`) --- entries are never edited or deleted, only added to,
-each recording its author.
+own "Phase 2" stage-numbering language --- `PRODUCT_SPECIFICATION.md`
+resolved this collision by renaming its old build-stage label to "Build
+Phase 2"; this page keeps the "Phase 2" name, matching the actual code
+(`campaigns/[campaignId]/phase2/`, `Phase2Entry`, etc.). It lists
+applicants who passed Phase 1, ranked by the cached
+`PhaseOneResult.weightedTotal` (never live-recomputed, see above),
+showing only configured/coefficient-bearing question answers (reusing
+the same filter as the Phase 1 Answers panel). Any club member (no
+dedicated permission) can add an entry to a per-applicant, append-only
+Notes / Red Flag / Green Flag log (`Phase2Entry`) --- entries are never
+edited or deleted, only added to, each recording its author. A
+client-side name search filters the ranked list by substring
+(case-insensitive) without a server round-trip --- filtering never
+renumbers each applicant's ranked position, it only changes visibility.
 
-**MKT Skills Breakdown**, on the same page: a live-computed per-skill
-tally, counting only values that match a campaign-specific, admin-
-editable whitelist (`MktSkillWhitelist`) --- pulled from the applicant's
-**"Other skills"** form field only (not the free-text "Soft skills"
-field, which the tally deliberately never reads). A value only counts if
-it case-insensitively matches an entry in that campaign's whitelist;
-anything else (e.g. "Public speaking," which is a soft skill, not an MKT
-skill) is silently excluded, not shown as an "unrecognized" row. The
-whitelist is managed from the Configuration page (same
-`CONFIGURE_SCREENING` gate as the scoring-rubric section) --- add/remove
-takes effect immediately on next page load, no per-applicant re-tagging
-needed. A separate header count shows applicants who both prefer the MKT
-committee **and** have at least one whitelist-matched skill (not simply
-every MKT-preferring applicant --- an earlier version of this count had
-that bug, since fixed).
+**MKT Skills Breakdown**, on the same page, restricted to the current
+campaign's **MKT Lead and the Administrator only** --- a plain member
+(including other Campaign Leads) doesn't see this section at all, gated
+server-side (the data never reaches the RSC payload for anyone else, not
+just hidden client-side). `canViewMktSkills()` in `phase2-store.ts` is a
+plain boolean check, not a `PermissionKey` --- it's "who currently holds
+a title," resolved live per campaign, not a grantable capability.
+
+The section itself: a live-computed per-skill tally, counting only
+values that match a campaign-specific, admin-editable whitelist
+(`MktSkillWhitelist`) --- pulled from the applicant's **"Other skills"**
+form field only (not the free-text "Soft skills" field, which the tally
+deliberately never reads). A value only counts if it case-insensitively
+matches an entry in that campaign's whitelist; anything else (e.g.
+"Public speaking," which is a soft skill, not an MKT skill) is silently
+excluded, not shown as an "unrecognized" row. The whitelist is managed
+from the Configuration page (same `CONFIGURE_SCREENING` gate as the
+scoring-rubric section) --- add/remove takes effect immediately on next
+page load, no per-applicant re-tagging needed. A **per-applicant detail
+table** (name, preferred committee, matched skill(s)) sits above the
+per-skill aggregate tally --- the applicant list here is deliberately
+**not** filtered by preferred committee (an EER-preferring applicant
+with a matched MKT skill still appears). A separate header count shows
+applicants who both prefer the MKT committee **and** have at least one
+whitelist-matched skill --- this can legitimately differ from the detail
+table's row count, since the detail table includes non-MKT-preferring
+applicants the header count doesn't. All three views (header count,
+detail table, aggregate tally) are computed from a **single shared
+matching pass**, not three independent ones --- this exists specifically
+because an earlier version computed the header count separately from the
+tally and the two silently drifted apart (the bug this fixed).
 
 ### Icons
 
@@ -440,6 +487,43 @@ the sidebar collapses to a drawer below ~768px. Final Decision is the one
 accepted exception: desktop-first, since it's used live/screen-shared
 during the decision meeting --- mobile isn't fully optimized there by
 deliberate tradeoff.
+
+**Identity color system** (`src/lib/identity-color.ts`,
+`identity-color-store.ts`): a single shared resolver decides the color
+for a user's avatar and their committee/role badges (Admin Settings and
+elsewhere), aliased onto existing tokens rather than a new parallel
+palette (`--color-committee-tm` -> `var(--status-accepted)`'s blue, etc.
+--- see the file's own comment: these tokens mean *identity*, not
+*status*, even when they happen to alias the same hex). Resolution
+order: if the user currently holds `CLUB_LEAD` or `TECHNICAL_LEAD` for
+the relevant campaign, that lead color wins (both red --- safe, since the
+two roles are mutually exclusive, see Campaign Leads above); otherwise
+their committee's color applies (TM blue, MKT green, EER yellow ---
+`MKT_LEAD`/`EER_LEAD` holders fall out of this naturally, since their
+lead role's committee always matches their own). Two places deliberately
+stay neutral/uncolored, not oversights: the "Custom" permission-drift
+badge (it's a warning signal, not an identity signal, and coloring it
+would let it blend in with badges that do carry identity), and an
+applicant's own avatar on the Interviews board (their `preferredCommittee`
+is a preference, not a membership --- coloring it the same way as an
+actual member would visually conflate "applied to MKT" with "is on the
+MKT team"; the seat-holder chip next to it, which does represent an
+actual member, is tinted). Avatar initials take the first letter of
+every word in a name, uppercased, no cap applied (no real name in current
+data exceeds 3 words/initials; a cap would go in `src/lib/initials.ts`
+if one's ever needed, not at a call site).
+
+The magic-link sign-in email (`src/auth.ts`) is a standalone hand-built
+template, **not** built on `BaseEmailLayout` like every other outbound
+email (Phase 1 results, interview booking, final decision) --- a
+deliberate choice made when the club's logo was added to it, since
+migrating its one-of-a-kind button style onto the shared layout carried
+real risk of subtly breaking it for a small consistency win. It now
+displays the same `logo-kamel.png` every other email's footer uses,
+sourced the same way `BaseEmailLayout` builds its own logo URL (a
+hosted `<img>`, never a CID attachment) --- worth knowing this is now a
+live-image dependency on the single highest-frequency outbound email in
+the app (fires every sign-in, not just per-applicant milestones).
 
 ---
 

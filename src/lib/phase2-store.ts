@@ -7,8 +7,10 @@ import { answerKey, answerQuestions } from "@/lib/phase1-answers";
 import { passedPhaseOneWhere } from "@/lib/phase1-ranking";
 import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { totalCoefficient } from "@/lib/phase1-score";
+import { getCampaignLeadHolders } from "@/lib/campaign-leads";
+import { getAdministratorId } from "@/lib/panel-authority";
 import { mktSkillsOf } from "@/lib/phase2";
-import { Committee, Phase2EntryType } from "@/generated/prisma/enums";
+import { Committee, LeadRole, Phase2EntryType } from "@/generated/prisma/enums";
 
 /** One configured question's text plus this applicant's answer to it. */
 export type Phase2Answer = {
@@ -44,6 +46,16 @@ export type Phase2Applicant = {
   entries: Phase2Entry[];
 };
 
+/** One applicant behind the skills tally, with the skills that put them there. */
+export type MktSkillApplicant = {
+  id: string;
+  fullName: string;
+  /** Their PREFERRED committee — the tally population is not filtered by it. */
+  preferredCommittee: Committee;
+  /** Whitelist-matched skills, in the whitelist's own spelling. Never empty. */
+  skills: string[];
+};
+
 export type Phase2Data = {
   applicants: Phase2Applicant[];
   /** Σ of active coefficients — the denominator scores are shown against. */
@@ -52,6 +64,14 @@ export type Phase2Data = {
   skillSources: { rawFormData: unknown }[];
   /** This campaign's approved MKT skill names — the only values the tally counts. */
   mktSkillWhitelist: string[];
+  /**
+   * The people behind the tally: every applicant with at least one matched
+   * skill, in the same ranked order as the list above. Exactly the population
+   * the per-skill counts are computed from, so the detail table and the
+   * aggregate table are two views of one set rather than two queries that
+   * could drift apart.
+   */
+  mktSkillApplicants: MktSkillApplicant[];
   /**
    * How many of the applicants above picked MKT as their preferred committee
    * AND listed at least one whitelisted skill.
@@ -181,6 +201,14 @@ export async function getPhase2Data(campaignId: string): Promise<Phase2Data> {
 
   const skillNames = whitelist.map((s) => s.skillName);
 
+  // One match pass, reused by both the per-applicant rows and the header count
+  // below. Calling mktSkillsOf twice over the same rows would be two chances to
+  // apply the whitelist differently; there is only ever one answer per person.
+  const matched = rows.map((row) => ({
+    row,
+    skills: mktSkillsOf(row.rawFormData, skillNames),
+  }));
+
   return {
     // rawFormData is dropped here rather than passed on: the client card needs
     // only the answers already extracted above, so the rest of the submitted
@@ -201,17 +229,53 @@ export async function getPhase2Data(campaignId: string): Promise<Phase2Data> {
     // filtered down to MKT applicants here.
     skillSources: rows.map((r) => ({ rawFormData: r.rawFormData })),
     mktSkillWhitelist: skillNames,
+    mktSkillApplicants: matched
+      .filter((m) => m.skills.length > 0)
+      .map((m) => ({
+        id: m.row.id,
+        fullName: m.row.fullName,
+        preferredCommittee: m.row.preferredCommittee,
+        skills: m.skills,
+      })),
     // The one figure that IS about MKT applicants specifically. Live-counted off
     // the rows above rather than stored, like every other number on this page,
-    // and reusing mktSkillsOf rather than restating the matching rules — the
-    // header and the table must never be able to disagree about what counts as
-    // a match.
-    mktPreferredCount: rows.filter(
-      (r) =>
-        r.preferredCommittee === Committee.MKT &&
-        mktSkillsOf(r.rawFormData, skillNames).length > 0,
+    // and off the same match pass as the detail rows — the header, the detail
+    // table and the aggregate table must never be able to disagree about what
+    // counts as a match.
+    mktPreferredCount: matched.filter(
+      (m) => m.row.preferredCommittee === Committee.MKT && m.skills.length > 0,
     ).length,
   };
+}
+
+/**
+ * May this user see the MKT Skills Breakdown section?
+ *
+ * Only this campaign's CURRENT MKT Lead, or the Administrator. The rest of
+ * Phase 2 — the ranked list, the notes and flags — stays open to every
+ * authenticated member; this is a section-level restriction, not a page gate,
+ * which is why it is a plain boolean here rather than an entry in
+ * CAMPAIGN_PAGE_PERMISSIONS.
+ *
+ * Not a PermissionKey on purpose: this is a question about who holds a title
+ * right now, not a capability an admin grants. Resolved live from the current
+ * CampaignLead row and the current TM_LEAD, reusing getCampaignLeadHolders and
+ * getAdministratorId, so access moves with the title the moment it is
+ * reassigned — an outgoing MKT Lead loses the section on their next load, and
+ * the MKT Lead of a DIFFERENT campaign never had it here, since the holder
+ * lookup is scoped to this campaignId.
+ */
+export async function canViewMktSkills(
+  campaignId: string,
+  userId: string,
+): Promise<boolean> {
+  const [holders, administratorId] = await Promise.all([
+    getCampaignLeadHolders(campaignId),
+    getAdministratorId(),
+  ]);
+  return (
+    holders[LeadRole.MKT_LEAD]?.userId === userId || administratorId === userId
+  );
 }
 
 /**
