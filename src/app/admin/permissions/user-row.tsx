@@ -7,6 +7,8 @@ import { PermissionKey } from "@/generated/prisma/enums";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Icon } from "@/components/app-shell/icon";
+import { initialsOf } from "@/lib/initials";
+import { IDENTITY_TINT_CLASS } from "@/lib/identity-color";
 import {
   PERMISSION_CATEGORIES,
   PERMISSION_DEFINITIONS,
@@ -21,14 +23,6 @@ const TOTAL_PERMS = PERMISSION_CATEGORIES.reduce(
   (n, c) => n + c.permissions.length,
   0,
 );
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("");
-}
 
 function accessLevel(held: number): { label: string; pct: number } {
   const pct = TOTAL_PERMS === 0 ? 0 : Math.round((held / TOTAL_PERMS) * 100);
@@ -117,8 +111,10 @@ export function UserRow({
           className="flex items-center gap-3 text-left"
         >
           <Avatar size="lg">
-            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
-              {initials(user.name)}
+            <AvatarFallback
+              className={`text-xs font-semibold ${IDENTITY_TINT_CLASS[user.identityColor]}`}
+            >
+              {initialsOf(user.name)}
             </AvatarFallback>
           </Avatar>
           <span className="min-w-0">
@@ -132,11 +128,17 @@ export function UserRow({
         </button>
 
         <div>
-          <RoleBadge templateLabel={user.templateLabel} isCustom={user.isCustom} />
+          <RoleBadge
+            templateLabel={user.templateLabel}
+            isCustom={user.isCustom}
+            identityColor={user.identityColor}
+          />
         </div>
 
         <div>
-          <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-status-accepted/10 text-status-accepted">
+          <span
+            className={`rounded px-2 py-0.5 text-[10px] font-bold ${IDENTITY_TINT_CLASS[user.identityColor]}`}
+          >
             {user.committee}
           </span>
         </div>
@@ -198,8 +200,10 @@ export function UserRow({
             className="flex min-w-0 flex-1 items-center gap-3 text-left"
           >
             <Avatar size="lg">
-              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
-                {initials(user.name)}
+              <AvatarFallback
+                className={`text-xs font-semibold ${IDENTITY_TINT_CLASS[user.identityColor]}`}
+              >
+                {initialsOf(user.name)}
               </AvatarFallback>
             </Avatar>
             <span className="min-w-0 flex-1">
@@ -237,8 +241,14 @@ export function UserRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 pl-1">
-          <RoleBadge templateLabel={user.templateLabel} isCustom={user.isCustom} />
-          <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-status-accepted/10 text-status-accepted">
+          <RoleBadge
+            templateLabel={user.templateLabel}
+            isCustom={user.isCustom}
+            identityColor={user.identityColor}
+          />
+          <span
+            className={`rounded px-2 py-0.5 text-[10px] font-bold ${IDENTITY_TINT_CLASS[user.identityColor]}`}
+          >
             {user.committee}
           </span>
           <span className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">

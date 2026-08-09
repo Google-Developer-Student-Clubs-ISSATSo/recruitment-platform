@@ -12,6 +12,8 @@ import {
   type ActivitySummary,
   type ActivityTone,
 } from "@/lib/activity-descriptions";
+import { initialsOf } from "@/lib/initials";
+import { IDENTITY_TINT_CLASS } from "@/lib/identity-color";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
 import { AnimatedCardList, AnimatedTableBody } from "@/components/motion/table-slice";
@@ -35,14 +37,6 @@ const TONE_CLASS: Record<ActivityTone, string> = {
   neutral:
     "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
 };
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("");
-}
 
 const LABEL_CLASS =
   "text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400";
@@ -322,8 +316,10 @@ export function ActivityLogList({
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                            {initials(row.actorName)}
+                          <span
+                            className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${IDENTITY_TINT_CLASS[row.identityColor]}`}
+                          >
+                            {initialsOf(row.actorName)}
                           </span>
                           <span className="text-sm font-medium text-foreground">
                             {row.actorName}
@@ -375,8 +371,10 @@ export function ActivityLogList({
                   <li key={row.id} className="space-y-2 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                          {initials(row.actorName)}
+                        <span
+                          className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${IDENTITY_TINT_CLASS[row.identityColor]}`}
+                        >
+                          {initialsOf(row.actorName)}
                         </span>
                         <span className="truncate text-sm font-medium text-foreground">
                           {row.actorName}

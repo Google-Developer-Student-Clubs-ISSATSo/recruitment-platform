@@ -5,6 +5,9 @@ import Link from "next/link";
 
 import type { PermissionKey } from "@/generated/prisma/enums";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { initialsOf } from "@/lib/initials";
+import type { IdentityColor } from "@/lib/identity-color";
+import { IDENTITY_TINT_CLASS } from "@/lib/identity-color";
 import { Logo } from "@/components/logo";
 import { Icon } from "./icon";
 import { LogoutButton } from "./logout-button";
@@ -29,6 +32,7 @@ import { ThemeToggle } from "./theme-toggle";
 export function AppShellChrome({
   userName,
   userSubtitle,
+  identityColor,
   canManageAccounts,
   permissions,
   notificationBell,
@@ -36,6 +40,8 @@ export function AppShellChrome({
 }: {
   userName: string;
   userSubtitle: string;
+  /** Committee/lead colour for the identity avatar — see lib/identity-color.ts. */
+  identityColor: IdentityColor;
   canManageAccounts: boolean;
   permissions: PermissionKey[];
   /** Server-rendered slot — <NotificationBell> is async and permission-gated. */
@@ -142,8 +148,10 @@ export function AppShellChrome({
         <div className="space-y-1 border-t border-neutral-200 p-3 dark:border-neutral-800">
           <div className="flex items-center gap-3 px-3 py-2">
             <Avatar>
-              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
-                {initials(userName)}
+              <AvatarFallback
+                className={`text-xs font-semibold ${IDENTITY_TINT_CLASS[identityColor]}`}
+              >
+                {initialsOf(userName)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
@@ -208,12 +216,4 @@ export function AppShellChrome({
       </main>
     </div>
   );
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("");
 }

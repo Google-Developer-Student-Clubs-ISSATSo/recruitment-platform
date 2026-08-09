@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/app-shell/icon";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { committeeLabel } from "@/lib/committee";
+import { initialsOf } from "@/lib/initials";
+import { IDENTITY_TINT_CLASS } from "@/lib/identity-color";
 import { seatKindLabel } from "@/lib/panel-seat-kind";
 import type { PanelCandidate } from "@/lib/panel-candidates";
 import type { BoardDay, BoardCard, BoardSeat } from "@/lib/panel-board";
@@ -20,14 +22,6 @@ import {
   respondToSeatApprovalAction,
   cancelSeatApprovalAction,
 } from "./actions";
-
-/** "Amine Hammami" → "AH". Falls back to one letter for single-word names. */
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 /**
  * The interview panel board — a card per scheduled applicant, each holding one
@@ -507,7 +501,13 @@ function SeatRow({
     <div
       className={`relative isolate overflow-hidden rounded-lg px-3 py-2 transition-colors duration-200 ease-out motion-reduce:transition-none ${
         filled
-          ? "bg-status-accepted/5"
+          ? // A ring, not a different fill: the seat is still "filled", and
+            // recolouring its surface would put it in a third state alongside
+            // filled/empty. The ring sits on top of that meaning instead of
+            // competing with it.
+            isMine
+            ? "bg-status-accepted/5 ring-1 ring-inset ring-primary/40"
+            : "bg-status-accepted/5"
           : "border border-dashed border-neutral-300 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800/40"
       }`}
     >
@@ -537,15 +537,33 @@ function SeatRow({
             <span className="flex min-w-0 items-center gap-2">
               {/* An initials chip for the holder, so a filled seat reads as "a
                   person is in it" at a glance — the board equivalent of an
-                  assignee avatar. Tinted with primary rather than the seat's
-                  status green, so it identifies rather than restating "filled". */}
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary">
+                  assignee avatar. Tinted by the holder's COMMITTEE rather than
+                  the seat's status green, so it identifies rather than
+                  restating "filled" — and on the floating seat, which any
+                  committee can fill, it says at a glance whose member is in it. */}
+              <span
+                className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                  seat.claimedByColor
+                    ? IDENTITY_TINT_CLASS[seat.claimedByColor]
+                    : "bg-primary/15 text-primary"
+                }`}
+              >
                 {initialsOf(seat.claimedByName ?? "?")}
               </span>
-              <span className="truncate text-sm font-medium text-foreground">
+              {/* The viewer's own seat is called out rather than left to be
+                  read off a name: "(you)" is this app's existing self-marker,
+                  kept verbatim, but promoted from muted grey to primary and
+                  semibold. On a board of many cards the grey version was
+                  effectively invisible, which is the thing the marker exists
+                  to prevent. */}
+              <span
+                className={`truncate text-sm ${
+                  isMine ? "font-semibold text-primary" : "font-medium text-foreground"
+                }`}
+              >
                 {seat.claimedByName}
                 {isMine && (
-                  <span className="ml-1.5 text-xs font-normal text-neutral-500 dark:text-neutral-400">
+                  <span className="ml-1.5 text-xs font-semibold text-primary">
                     (you)
                   </span>
                 )}

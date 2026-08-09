@@ -5,6 +5,7 @@ import {
 } from "@/lib/tunis-time";
 import { SEAT_KIND_COMMITTEE, SEAT_KIND_ORDER } from "@/lib/panel-seat-kind";
 import { isInterviewDone } from "@/lib/interview-note";
+import { resolveIdentityColor, type IdentityColor } from "@/lib/identity-color";
 import type { Committee, PanelSeatKind } from "@/generated/prisma/enums";
 
 /** A Club Lead's still-open request for a seat, as the board renders it. */
@@ -21,6 +22,13 @@ export type BoardSeat = {
   kind: PanelSeatKind;
   claimedById: string | null;
   claimedByName: string | null;
+  /**
+   * Colour for the holder's initials chip. Null on an empty seat. Resolved
+   * from their committee alone: a seat holder's lead titles aren't loaded
+   * here, and the two roles that would override a committee colour
+   * (Club/Technical Lead) say nothing about which seat they're sitting in.
+   */
+  claimedByColor: IdentityColor | null;
   /**
    * The pending request for this seat, if one is open. Only ever populated for
    * a viewer allowed to see it (the requester or the seat's current lead) —
@@ -105,7 +113,7 @@ export type ScheduledApplicant = {
       id: string;
       kind: PanelSeatKind;
       claimedById: string | null;
-      claimedBy: { name: string | null; email: string } | null;
+      claimedBy: { name: string | null; email: string; committee: Committee } | null;
       approvalRequests: {
         id: string;
         requestedById: string;
@@ -213,6 +221,9 @@ export function groupScheduledIntoDays(
             // filled seat never renders as blank.
             claimedByName: s.claimedById
               ? (s.claimedBy?.name ?? s.claimedBy?.email ?? "Unknown")
+              : null,
+            claimedByColor: s.claimedBy
+              ? resolveIdentityColor({ committee: s.claimedBy.committee })
               : null,
             pendingRequest:
               maySeeRequest && open

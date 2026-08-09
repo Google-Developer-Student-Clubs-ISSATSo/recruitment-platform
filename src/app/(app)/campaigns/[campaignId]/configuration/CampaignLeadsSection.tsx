@@ -7,6 +7,7 @@ import {
   LEAD_ROLE_COMMITTEE,
   LEAD_ROLE_LABELS,
 } from "@/lib/campaign-leads";
+import { RoleTemplateName } from "@/generated/prisma/enums";
 import type { LeadRole } from "@/generated/prisma/enums";
 import { LeadAssignmentForm } from "./leads/LeadAssignmentForm";
 
@@ -16,8 +17,12 @@ import { LeadAssignmentForm } from "./leads/LeadAssignmentForm";
 //
 // Each role gets its OWN option list, narrowed by LEAD_ROLE_COMMITTEE: MKT and
 // EER Lead offer only that committee's members, Club and Technical Lead offer
-// everyone. The narrowing here is presentation — `assignLead` re-checks the
-// same rule server-side, since these options travel to a client component.
+// everyone. The TM Lead is dropped from every list (they're already the
+// campaign's Administrator, see isTmLeadUser), and anyone already holding a
+// DIFFERENT lead role on this campaign is dropped from the others' lists
+// (one title per campaign). The narrowing here is presentation — `assignLead`
+// re-checks both rules server-side, since these options travel to a client
+// component.
 export async function CampaignLeadsSection({
   campaignId,
 }: {
@@ -26,14 +31,26 @@ export async function CampaignLeadsSection({
   const [holders, users] = await Promise.all([
     getCampaignLeadHolders(campaignId),
     prisma.user.findMany({
+      where: { roleTemplate: { isNot: { name: RoleTemplateName.TM_LEAD } } },
       select: { id: true, name: true, email: true, committee: true },
       orderBy: { name: "asc" },
     }),
   ]);
 
+  const heldRoleByUserId = new Map(
+    LEAD_ROLES.filter((role) => holders[role]).map((role) => [
+      holders[role]!.userId,
+      role,
+    ]),
+  );
+
   const optionsFor = (role: LeadRole) =>
     users
       .filter((u) => isEligibleForLeadRole(role, u.committee))
+      .filter((u) => {
+        const heldRole = heldRoleByUserId.get(u.id);
+        return heldRole === undefined || heldRole === role;
+      })
       .map((u) => ({ id: u.id, label: u.name ?? u.email }));
 
   return (

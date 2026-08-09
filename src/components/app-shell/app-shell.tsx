@@ -1,4 +1,5 @@
 import type { PermissionKey } from "@/generated/prisma/enums";
+import type { IdentityColor } from "@/lib/identity-color";
 import { AppShellChrome } from "./app-shell-chrome";
 import { NotificationBell } from "./notification-bell";
 
@@ -15,12 +16,15 @@ import { NotificationBell } from "./notification-bell";
 export function AppShell({
   userName,
   userSubtitle,
+  identityColor,
   canManageAccounts = false,
   permissions,
   children,
 }: {
   userName: string;
   userSubtitle: string;
+  /** Committee/lead colour for the identity avatar — see lib/identity-color.ts. */
+  identityColor: IdentityColor;
   /** Whether to show admin-only controls (Admin Settings + Transfer Admin Role). */
   canManageAccounts?: boolean;
   /** The current user's permissions — the sidebar filters nav links against these. */
@@ -42,6 +46,7 @@ export function AppShell({
     <AppShellChrome
       userName={userName}
       userSubtitle={userSubtitle}
+      identityColor={identityColor}
       canManageAccounts={canManageAccounts}
       permissions={permissions}
       notificationBell={<NotificationBell />}

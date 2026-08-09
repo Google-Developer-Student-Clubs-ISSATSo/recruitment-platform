@@ -1,4 +1,5 @@
 import { Committee, PermissionKey, RoleTemplateName } from "@/generated/prisma/enums";
+import type { IdentityColor } from "@/lib/identity-color";
 
 /** All committees, in display order. */
 export const COMMITTEES: Committee[] = [
@@ -152,6 +153,12 @@ export type AdminUserRow = {
   isCustom: boolean;
   /** Plain global permission flags this user holds. */
   permissions: PermissionKey[];
+  /**
+   * The colour this member is drawn in — avatar and both badges. Resolved once
+   * on the server (see lib/identity-color.ts) so the row can't compute it two
+   * different ways for the same person.
+   */
+  identityColor: IdentityColor;
 };
 
 export type TemplateOption = { name: RoleTemplateName; label: string };

@@ -3,12 +3,20 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { PermissionKey } from "@/generated/prisma/enums";
+import { getLeadRolesForUser } from "@/lib/identity-color-store";
+import { resolveIdentityColor, type IdentityColor } from "@/lib/identity-color";
 import { ROLE_TEMPLATE_LABELS } from "@/app/admin/permissions/permission-config";
 
 export type ShellUser = {
   userId: string;
   userName: string;
   userSubtitle: string;
+  /**
+   * Colour for the sidebar avatar. The shell spans every page, including ones
+   * with no campaign in scope, so lead titles are resolved across OPEN
+   * campaigns — see getLeadRolesForUser.
+   */
+  identityColor: IdentityColor;
   /** Holder of MANAGE_ACCOUNTS — gates admin-only shell controls. */
   canManageAccounts: boolean;
   /**
@@ -42,10 +50,15 @@ export async function getShellUser(): Promise<ShellUser> {
     ? ROLE_TEMPLATE_LABELS[user.roleTemplate.name]
     : "Member";
 
+  const leadRoles = user ? await getLeadRolesForUser(userId) : [];
+
   return {
     userId,
     userName: user?.name ?? "Member",
     userSubtitle: user ? `${templateLabel} · ${user.committee}` : "Member",
+    identityColor: user
+      ? resolveIdentityColor({ committee: user.committee, leadRoles })
+      : "committee-tm",
     canManageAccounts,
     permissions,
   };

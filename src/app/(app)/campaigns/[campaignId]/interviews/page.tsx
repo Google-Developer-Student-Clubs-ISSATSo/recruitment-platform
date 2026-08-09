@@ -20,6 +20,7 @@ import {
 import { InterviewEmailPanel } from "./InterviewEmailPanel";
 import { SlotEntryTable, type SlotRow } from "./SlotEntryTable";
 import { PanelBoard } from "./PanelBoard";
+import { MyPanelSummary } from "./MyPanelSummary";
 
 // Interviews — booking emails, manual slot entry, and the panel board.
 //
@@ -119,7 +120,7 @@ export default async function InterviewsPage({
                 id: true,
                 kind: true,
                 claimedById: true,
-                claimedBy: { select: { name: true, email: true } },
+                claimedBy: { select: { name: true, email: true, committee: true } },
                 // Only the open request matters to the board; answered ones are
                 // history the activity log already carries. At most one can be
                 // pending per seat (requestSeatApproval refuses a second).
@@ -197,6 +198,16 @@ export default async function InterviewsPage({
     isAdministrator: canManageAccounts,
   });
 
+  // Counted off `scheduled` — the very list the board is built from — rather
+  // than queried straight off PanelSeat. Clearing an applicant's slot time
+  // keeps their panel and its seats (see interview-slot.ts), so a seat can
+  // outlive its place on the board; a direct count would then claim more
+  // panels than the viewer can actually see below it. Counting panels, not
+  // seats, also matches what the sentence says.
+  const myPanelCount = scheduled.filter((a) =>
+    (a.interviewPanel?.seats ?? []).some((s) => s.claimedById === userId),
+  ).length;
+
   // Who this viewer may put in each seat kind. The Club Lead gets a picker for
   // every kind, not just the ones they own: theirs proposes rather than fills,
   // but it still needs the same list of names to choose from.
@@ -242,6 +253,10 @@ export default async function InterviewsPage({
               : "Staff the interview panels you're responsible for."}
         </p>
       </div>
+
+      {/* Ungated like the board itself: this is about the viewer's own seats,
+          so it means something to every member regardless of permissions. */}
+      <MyPanelSummary count={myPanelCount} />
 
       <PermissionGate permission={PermissionKey.SEND_EMAILS}>
         <InterviewEmailPanel

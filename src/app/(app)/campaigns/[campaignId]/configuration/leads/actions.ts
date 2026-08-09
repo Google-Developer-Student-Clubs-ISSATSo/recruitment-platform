@@ -9,6 +9,8 @@ import type { LeadRole } from "@/generated/prisma/enums";
 import {
   assignCampaignLead,
   isEligibleForLeadRole,
+  isTmLeadUser,
+  otherLeadRoleHeldBy,
   LEAD_ROLES,
   LEAD_ROLE_COMMITTEE,
   LEAD_ROLE_LABELS,
@@ -45,6 +47,23 @@ export async function assignLead(
     const required = LEAD_ROLE_COMMITTEE[role];
     throw new Error(
       `${user.name ?? user.email} is in ${user.committee}, so they can't be ${LEAD_ROLE_LABELS[role]} — that title is held by a ${required} member.`,
+    );
+  }
+
+  // The TM Lead already IS the Administrator for every campaign — a second,
+  // campaign-scoped lead title on top of that is never appropriate.
+  if (await isTmLeadUser(userId)) {
+    throw new Error(
+      `${user.name ?? user.email} is the TM Lead (Administrator) and can't also hold a campaign lead title.`,
+    );
+  }
+
+  // One member, one lead title per campaign — reassign their existing role
+  // first if they should move to a different one.
+  const otherRole = await otherLeadRoleHeldBy(campaignId, userId, role);
+  if (otherRole) {
+    throw new Error(
+      `${user.name ?? user.email} already holds ${LEAD_ROLE_LABELS[otherRole]} on this campaign — reassign that role before appointing them to ${LEAD_ROLE_LABELS[role]}.`,
     );
   }
 

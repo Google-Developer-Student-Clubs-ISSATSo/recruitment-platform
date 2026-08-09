@@ -7,6 +7,16 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { SMTP_TRANSPORT } from "@/lib/email";
 
+// Same hosted-image convention BaseEmailLayout uses for the other outbound
+// templates: a plain <img> URL, never a CID attachment, built from
+// NEXT_PUBLIC_APP_URL. That means the same constraint applies here too — the
+// env var must point at a real, publicly reachable origin at delivery time, or
+// the logo silently renders blank for every recipient. This is the email every
+// user sees most often (every sign-in), so that constraint gets exercised far
+// more here than on the other templates.
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+const LOGO_SRC = `${APP_URL}/logo-kamel.png`;
+
 function magicLinkEmail(url: string, host: string) {
   const text = [
     "Sign in to the GDGC Recruitment Platform",
@@ -23,6 +33,10 @@ function magicLinkEmail(url: string, host: string) {
       <tr><td align="center">
         <table role="presentation" width="440" cellpadding="0" cellspacing="0"
                style="background:#ffffff;border-radius:12px;padding:32px;border:1px solid #e6e8eb;">
+          <tr><td align="center" style="padding-bottom:20px;">
+            <img src="${LOGO_SRC}" alt="Google Developer Group — GDG on Campus ISSATSo"
+                 width="160" style="width:160px;max-width:100%;height:auto;display:block;border:none;outline:none;text-decoration:none;" />
+          </td></tr>
           <tr><td style="font-size:18px;font-weight:600;color:#1a1a1a;padding-bottom:8px;">
             GDGC Recruitment Platform
           </td></tr>

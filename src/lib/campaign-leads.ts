@@ -5,6 +5,7 @@ import {
   LeadRole,
   PermissionKey,
   PermissionSource,
+  RoleTemplateName,
 } from "@/generated/prisma/enums";
 
 /** Every appointable lead role, in the display order used by the assignment UI. */
@@ -55,6 +56,39 @@ export function isEligibleForLeadRole(
 ): boolean {
   const required = LEAD_ROLE_COMMITTEE[role];
   return required === null || required === committee;
+}
+
+/**
+ * The TM Lead's title already IS "Administrator" for every campaign — giving
+ * them a second, campaign-scoped lead title would be redundant at best and
+ * confusing about who actually speaks for a committee at worst. Mirrors the
+ * `assertNotLead` rule the Permission Management screen already enforces for
+ * account mutations, scoped here to lead assignment.
+ */
+export async function isTmLeadUser(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { roleTemplate: { select: { name: true } } },
+  });
+  return user?.roleTemplate?.name === RoleTemplateName.TM_LEAD;
+}
+
+/**
+ * The other CampaignLead role, if any, that `userId` already holds in
+ * `campaignId` besides `role` itself. A member can represent only one title
+ * per campaign — holding two (e.g. MKT Lead and Technical Lead at once) would
+ * blur who is actually accountable for what.
+ */
+export async function otherLeadRoleHeldBy(
+  campaignId: string,
+  userId: string,
+  role: LeadRole,
+): Promise<LeadRole | null> {
+  const existing = await prisma.campaignLead.findFirst({
+    where: { campaignId, userId, NOT: { role } },
+    select: { role: true },
+  });
+  return existing?.role ?? null;
 }
 
 /**

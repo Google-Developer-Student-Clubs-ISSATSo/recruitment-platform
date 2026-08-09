@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { hasPermission, requirePermission } from "@/lib/permissions";
-import { PermissionKey } from "@/generated/prisma/enums";
+import { Committee, PermissionKey } from "@/generated/prisma/enums";
+import { getLeadRolesByUser } from "@/lib/identity-color-store";
+import { resolveIdentityColor } from "@/lib/identity-color";
 import {
   formatDetails,
   SECURITY_ACTION_TYPES,
@@ -16,7 +18,7 @@ type EntryRow = {
   targetType: string | null;
   details: unknown;
   createdAt: Date;
-  actor: { name: string | null } | null;
+  actor: { id: string; name: string | null; committee: Committee } | null;
 };
 
 // A top-level, platform-wide route (NOT under /admin). It carries its own
@@ -101,13 +103,14 @@ export default async function ActivityLogPage({
     distinctActions,
     actors,
     loggedCampaignIds,
+    leadRolesByUser,
   ] = await Promise.all([
       prisma.activityLogEntry.findMany({
         where,
         orderBy: { createdAt: "desc" },
         skip: (requestedPage - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        include: { actor: { select: { name: true } } },
+        include: { actor: { select: { id: true, name: true, committee: true } } },
       }),
       prisma.activityLogEntry.count({ where }),
       prisma.activityLogEntry.count({
@@ -147,6 +150,9 @@ export default async function ActivityLogPage({
         distinct: ["campaignId"],
         select: { campaignId: true },
       }),
+      // The log spans campaigns, so an actor's colour is resolved from their
+      // lead titles across every OPEN campaign — same rule the app shell uses.
+      getLeadRolesByUser(),
     ]);
 
   // Dependent on loggedCampaignIds, so it can't join the wave above. A deleted
@@ -167,6 +173,15 @@ export default async function ActivityLogPage({
   const rows: ActivityLogRow[] = entries.map((e: EntryRow) => ({
     id: e.id,
     actorName: e.actor?.name ?? "Someone",
+    // Deleted actors, and the "Someone" fallback above, have no committee to
+    // colour by — TM's blue is the neutral choice, matching the shell's own
+    // fallback rather than inventing a fifth grey.
+    identityColor: e.actor
+      ? resolveIdentityColor({
+          committee: e.actor.committee,
+          leadRoles: leadRolesByUser.get(e.actor.id) ?? [],
+        })
+      : "committee-tm",
     actionType: e.actionType,
     createdAtISO: e.createdAt.toISOString(),
     target: e.targetType ?? "—",

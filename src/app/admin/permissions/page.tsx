@@ -6,6 +6,9 @@ import {
   RoleTemplateName,
 } from "@/generated/prisma/enums";
 
+import { getLeadRolesByUser } from "@/lib/identity-color-store";
+import { resolveIdentityColor } from "@/lib/identity-color";
+
 import {
   COMMITTEES,
   ROLE_TEMPLATE_LABELS,
@@ -113,6 +116,7 @@ export default async function PermissionsPage({
     matchingIdRows,
     statsUsers,
     templates,
+    leadRolesByUser,
   ] = await Promise.all([
     prisma.user.findMany({
       where: { roleTemplate: { is: { name: RoleTemplateName.TM_LEAD } } },
@@ -151,6 +155,10 @@ export default async function PermissionsPage({
       where: { name: { not: RoleTemplateName.TM_LEAD } },
       select: { name: true },
     }),
+    // No campaign is in scope on this screen, so lead titles are gathered
+    // across every OPEN campaign — a Club Lead of the running cycle should
+    // still read as one here.
+    getLeadRolesByUser(),
   ]);
 
   const toRow = (u: UserQueryRow): AdminUserRow => {
@@ -170,6 +178,10 @@ export default async function PermissionsPage({
       templateLabel: ROLE_TEMPLATE_LABELS[templateName],
       isCustom,
       permissions,
+      identityColor: resolveIdentityColor({
+        committee: u.committee,
+        leadRoles: leadRolesByUser.get(u.id) ?? [],
+      }),
     };
   };
 

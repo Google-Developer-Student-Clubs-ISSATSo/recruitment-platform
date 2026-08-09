@@ -26,6 +26,30 @@
   --status-rejected: #ea4335;
   --status-pending: #fbbc05;
 
+  /*
+   * Committee + lead identity — the colour a person is rendered in (avatar,
+   * committee badge, role badge), resolved by src/lib/identity-color.ts.
+   *
+   * These ALIAS the brand/status palette rather than restating its hexes, per
+   * this file's one-palette rule. Two consequences worth knowing:
+   *   - the .dark overrides come for free; --status-* is re-tuned for dark
+   *     below, and these resolve through to it, so there is nothing to keep
+   *     in sync by hand;
+   *   - the meaning is identity, NOT status. An EER member's yellow says
+   *     "EER", never "pending". They are the same ink used to say a different
+   *     thing, which is why these have their own names instead of call sites
+   *     reaching for --status-pending directly.
+   *
+   * Club and Technical Lead deliberately share one red: a member can hold only
+   * one lead title per campaign (enforced in leads/actions.ts), so the two can
+   * never collide on the same person and need no visual distinction.
+   */
+  --committee-tm: var(--primary);
+  --committee-mkt: var(--status-accepted);
+  --committee-eer: var(--status-pending);
+  --lead-club: var(--status-rejected);
+  --lead-technical: var(--status-rejected);
+
   /* shadcn neutral surfaces */
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -117,6 +141,12 @@
   --color-status-accepted: var(--status-accepted);
   --color-status-rejected: var(--status-rejected);
   --color-status-pending: var(--status-pending);
+
+  --color-committee-tm: var(--committee-tm);
+  --color-committee-mkt: var(--committee-mkt);
+  --color-committee-eer: var(--committee-eer);
+  --color-lead-club: var(--lead-club);
+  --color-lead-technical: var(--lead-technical);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);

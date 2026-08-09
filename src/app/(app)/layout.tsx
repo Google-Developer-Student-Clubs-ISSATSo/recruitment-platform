@@ -18,6 +18,7 @@ export default async function AppLayout({
     <AppShell
       userName={shell.userName}
       userSubtitle={shell.userSubtitle}
+      identityColor={shell.identityColor}
       canManageAccounts={shell.canManageAccounts}
       permissions={shell.permissions}
     >

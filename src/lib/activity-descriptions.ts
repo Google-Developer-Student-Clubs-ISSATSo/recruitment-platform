@@ -2,6 +2,8 @@
 // bell preview and the activity-log page. Pure functions — safe on client or
 // server.
 
+import type { IdentityColor } from "@/lib/identity-color";
+
 const ACTION_LABELS: Record<string, string> = {
   MAGIC_LINK_REQUESTED: "requested a sign-in link",
   SIGNED_IN: "signed in",
@@ -220,6 +222,8 @@ export function formatDetails(details: unknown): string {
 export type ActivityLogRow = {
   id: string;
   actorName: string;
+  /** Committee/lead colour for the actor's avatar — see lib/identity-color.ts. */
+  identityColor: IdentityColor;
   actionType: string;
   createdAtISO: string;
   /** What was acted upon, e.g. "User" — or "—" when not applicable. */
