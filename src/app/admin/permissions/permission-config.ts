@@ -148,7 +148,8 @@ export type AdminUserRow = {
   templateLabel: string;
   /**
    * True when the user's current permission set deviates from their assigned
-   * template — the badge then reads "{templateLabel} Custom".
+   * template. Feeds {@link primaryRoleIsCustom} below rather than the badge
+   * directly — see that field for why.
    */
   isCustom: boolean;
   /** Plain global permission flags this user holds. */
@@ -159,6 +160,18 @@ export type AdminUserRow = {
    * different ways for the same person.
    */
   identityColor: IdentityColor;
+  /**
+   * What the role badge reads — a held Lead title if any, else
+   * {@link templateLabel}. Resolved once on the server (see
+   * lib/primary-role.ts), same reasoning as identityColor above.
+   */
+  primaryRoleLabel: string;
+  /**
+   * Whether {@link primaryRoleLabel} may still show the "Custom" suffix. False
+   * whenever a Lead title is the source of the label (a Lead title cannot
+   * drift — see lib/primary-role.ts); otherwise mirrors {@link isCustom}.
+   */
+  primaryRoleIsCustom: boolean;
 };
 
 export type TemplateOption = { name: RoleTemplateName; label: string };

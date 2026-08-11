@@ -129,8 +129,8 @@ export function UserRow({
 
         <div>
           <RoleBadge
-            templateLabel={user.templateLabel}
-            isCustom={user.isCustom}
+            label={user.primaryRoleLabel}
+            isCustom={user.primaryRoleIsCustom}
             identityColor={user.identityColor}
           />
         </div>
@@ -242,8 +242,8 @@ export function UserRow({
 
         <div className="flex flex-wrap items-center gap-2 pl-1">
           <RoleBadge
-            templateLabel={user.templateLabel}
-            isCustom={user.isCustom}
+            label={user.primaryRoleLabel}
+            isCustom={user.primaryRoleIsCustom}
             identityColor={user.identityColor}
           />
           <span

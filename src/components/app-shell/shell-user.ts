@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { getLeadRolesForUser } from "@/lib/identity-color-store";
 import { resolveIdentityColor, type IdentityColor } from "@/lib/identity-color";
+import { resolvePrimaryRole } from "@/lib/primary-role";
 import { ROLE_TEMPLATE_LABELS } from "@/app/admin/permissions/permission-config";
 
 export type ShellUser = {
@@ -51,11 +52,14 @@ export async function getShellUser(): Promise<ShellUser> {
     : "Member";
 
   const leadRoles = user ? await getLeadRolesForUser(userId) : [];
+  const primaryRoleLabel = user
+    ? resolvePrimaryRole({ templateLabel, leadRoles }).label
+    : "Member";
 
   return {
     userId,
     userName: user?.name ?? "Member",
-    userSubtitle: user ? `${templateLabel} · ${user.committee}` : "Member",
+    userSubtitle: user ? `${primaryRoleLabel} · ${user.committee}` : "Member",
     identityColor: user
       ? resolveIdentityColor({ committee: user.committee, leadRoles })
       : "committee-tm",

@@ -8,6 +8,7 @@ import {
 
 import { getLeadRolesByUser } from "@/lib/identity-color-store";
 import { resolveIdentityColor } from "@/lib/identity-color";
+import { resolvePrimaryRole } from "@/lib/primary-role";
 
 import {
   COMMITTEES,
@@ -168,6 +169,9 @@ export default async function PermissionsPage({
     const templateName = u.roleTemplate?.name ?? RoleTemplateName.COMMITTEE_REPRESENTATIVE;
     const templatePerms = u.roleTemplate?.permissions.map((p) => p.permission) ?? [];
     const isCustom = !samePermissions(permissions, templatePerms);
+    const templateLabel = ROLE_TEMPLATE_LABELS[templateName];
+    const leadRoles = leadRolesByUser.get(u.id) ?? [];
+    const primaryRole = resolvePrimaryRole({ templateLabel, leadRoles });
 
     return {
       id: u.id,
@@ -175,13 +179,12 @@ export default async function PermissionsPage({
       email: u.email,
       committee: u.committee,
       templateName,
-      templateLabel: ROLE_TEMPLATE_LABELS[templateName],
+      templateLabel,
       isCustom,
       permissions,
-      identityColor: resolveIdentityColor({
-        committee: u.committee,
-        leadRoles: leadRolesByUser.get(u.id) ?? [],
-      }),
+      identityColor: resolveIdentityColor({ committee: u.committee, leadRoles }),
+      primaryRoleLabel: primaryRole.label,
+      primaryRoleIsCustom: primaryRole.isTemplateDerived && isCustom,
     };
   };
 

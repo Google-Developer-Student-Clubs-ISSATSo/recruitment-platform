@@ -25,14 +25,18 @@ const COMMITTEE_COLOR: Record<Committee, IdentityColor> = {
 /**
  * Lead roles that OVERRIDE their holder's committee colour.
  *
- * Only the two cross-committee titles are here. MKT_LEAD and EER_LEAD are
- * absent BY DESIGN rather than by omission: LEAD_ROLE_COMMITTEE restricts each
- * to its own committee, so resolving them through the committee branch below
- * already yields green/yellow — exactly the colour an explicit entry would
- * give. Adding them would be a second way to compute the same answer, and a
- * second thing to keep consistent if the restriction ever changes.
+ * All four Campaign Lead titles are here, and all four resolve to the same
+ * red (`lead-club` and `lead-technical` are literally the same token — see
+ * globals.css) so every Lead reads as one identity colour regardless of
+ * which committee they belong to. MKT_LEAD and EER_LEAD used to be left out
+ * on purpose, because their holder's own committee colour (green/yellow)
+ * already matched what an explicit entry would give — that's no longer true
+ * now that every Lead title is meant to read as red, so they're explicit
+ * entries too.
  */
 const LEAD_COLOR: Partial<Record<LeadRole, IdentityColor>> = {
+  [LeadRole.MKT_LEAD]: "lead-club",
+  [LeadRole.EER_LEAD]: "lead-club",
   [LeadRole.CLUB_LEAD]: "lead-club",
   [LeadRole.TECHNICAL_LEAD]: "lead-technical",
 };
