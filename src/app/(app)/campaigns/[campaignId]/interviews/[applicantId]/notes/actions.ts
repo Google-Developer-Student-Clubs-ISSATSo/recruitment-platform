@@ -6,7 +6,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditInterviewNote, hasPermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
-import { isNoteFieldKey } from "@/lib/interview-note";
+import { isNoteFieldKey, noteCloseEligibility } from "@/lib/interview-note";
+import { formatTunisDateTime } from "@/lib/tunis-time";
 import {
   saveNoteRating,
   saveNoteRemarks,
@@ -106,15 +107,73 @@ export async function saveNoteRemarksAction(
  * MANAGE_ACCOUNTS. Closing revokes the panel member's own access afterwards, so
  * both the notes path and the interviews board (whose notes link keys off the
  * same access check) are revalidated.
+ *
+ * TIMING GATE, enforced HERE and not only in the UI. A note cannot be closed
+ * until the interview's scheduled time plus a short grace has passed (see
+ * noteCloseEligibility). The button being disabled is a courtesy; this is the
+ * rule, and it holds against a direct POST with whatever arguments.
+ *
+ * `force` is the Administrator's override, and it is an explicit argument
+ * rather than something inferred: the server refuses an early close even for an
+ * Administrator unless they passed it, so a stray or replayed call cannot
+ * bypass the confirmation step the UI puts in front of them. It states an
+ * intent the caller had to opt into, the same shape setPhase2Visibility uses.
  */
 export async function closeInterviewNoteAction(
   campaignId: string,
   applicantId: string,
+  force = false,
 ): Promise<SaveNoteResult> {
   const gate = await authorize(campaignId, applicantId);
   if (!gate.ok) return gate;
 
-  const result = await closeInterviewNote(applicantId, campaignId, gate.userId);
+  // Read fresh rather than trusting anything the client sent: the slot may have
+  // been rescheduled since the page rendered.
+  const slot = await prisma.interviewSlot.findUnique({
+    where: { applicantId },
+    select: { scheduledTime: true },
+  });
+  const eligibility = noteCloseEligibility({
+    scheduledTime: slot?.scheduledTime,
+    now: new Date(),
+  });
+
+  let forced: { scheduledTime: Date; allowedAt: Date } | undefined;
+
+  if (eligibility.state === "too_early") {
+    const isManage = await hasPermission(
+      gate.userId,
+      PermissionKey.MANAGE_ACCOUNTS,
+    );
+    if (!isManage) {
+      return {
+        ok: false,
+        error: `This interview is scheduled for ${formatTunisDateTime(
+          slot!.scheduledTime!,
+        )}. The note can be closed from ${formatTunisDateTime(
+          eligibility.allowedAt,
+        )}.`,
+      };
+    }
+    if (!force) {
+      return {
+        ok: false,
+        error:
+          "This interview hasn't happened yet — confirm the force close to continue.",
+      };
+    }
+    forced = {
+      scheduledTime: slot!.scheduledTime!,
+      allowedAt: eligibility.allowedAt,
+    };
+  }
+
+  const result = await closeInterviewNote(
+    applicantId,
+    campaignId,
+    gate.userId,
+    forced,
+  );
   if (!result.ok) return result;
 
   revalidatePath(`/campaigns/${campaignId}/interviews/${applicantId}/notes`);

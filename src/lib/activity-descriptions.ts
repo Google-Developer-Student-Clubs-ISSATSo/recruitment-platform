@@ -67,6 +67,12 @@ const ACTION_LABELS: Record<string, string> = {
     "cleared an interview time, closing its pending seat requests",
   INTERVIEW_NOTE_UPDATED: "updated an interview note",
   INTERVIEW_NOTE_CLOSED: "closed an interview note",
+  // Deliberately worded so the override is unmistakable at a glance in the log:
+  // this is the Administrator-only path taken BEFORE the interview's scheduled
+  // time, which every other closer is refused. Kept as its own type rather than
+  // a flag inside INTERVIEW_NOTE_CLOSED's details so it can be scanned for.
+  INTERVIEW_NOTE_FORCE_CLOSED:
+    "force-closed an interview note before its scheduled time",
   INTERVIEW_NOTE_REOPENED: "reopened an interview note",
   CAPACITY_UPDATED: "updated the committee capacity",
   FINAL_DECISION_RECORDED: "recorded a final decision",
@@ -172,6 +178,10 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   INTERVIEW_NOTE_UPDATED: "primary",
   // Closing/reopening a note changes who can see it — sensitive but reversible.
   INTERVIEW_NOTE_CLOSED: "pending",
+  // The one close that overrode a rule. Red, unlike its sibling above: this is
+  // the entry someone would come looking for if a note's timing is ever
+  // questioned, and it should not blend into the amber routine ones.
+  INTERVIEW_NOTE_FORCE_CLOSED: "rejected",
   INTERVIEW_NOTE_REOPENED: "pending",
   // Configuration, not a decision about anyone — the quiet end of the log, same
   // as the other settings changes.

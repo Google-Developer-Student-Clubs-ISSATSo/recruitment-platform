@@ -76,26 +76,51 @@ export async function saveNoteRemarks(
 /**
  * Close an interview note — locks it to MANAGE_ACCOUNTS only from here on (see
  * canEditInterviewNote / canViewInterviewNote). Upserts, so it works even before
- * any rating has been entered: closing is allowed at any time. Authorization is
- * the caller's job.
+ * any rating has been entered. Authorization — including the "has the slot time
+ * passed yet" gate — is the caller's job; see closeInterviewNoteAction.
+ *
+ * `forced` records WHICH path was taken, and is only ever true for an
+ * Administrator closing ahead of the scheduled time. It changes nothing about
+ * the write: the point is that the log can tell the two apart afterwards, so a
+ * note closed before its interview can be traced rather than being
+ * indistinguishable from an ordinary close.
  */
 export async function closeInterviewNote(
   applicantId: string,
   campaignId: string,
   userId: string,
+  forced?: { scheduledTime: Date; allowedAt: Date },
 ): Promise<SaveNoteResult> {
+  const closedAt = new Date();
+
   await prisma.interviewNote.upsert({
     where: { applicantId },
-    create: { applicantId, closedAt: new Date(), closedById: userId },
-    update: { closedAt: new Date(), closedById: userId },
+    create: { applicantId, closedAt, closedById: userId },
+    update: { closedAt, closedById: userId },
   });
 
   await logActivity({
     actorId: userId,
-    actionType: "INTERVIEW_NOTE_CLOSED",
+    actionType: forced
+      ? "INTERVIEW_NOTE_FORCE_CLOSED"
+      : "INTERVIEW_NOTE_CLOSED",
     targetType: "Applicant",
     targetId: applicantId,
     campaignId,
+    // Only the force path carries detail, and it carries the facts that make
+    // the override reviewable: when the interview was due, when closing would
+    // have become normally available, and how far ahead of that it happened.
+    details: forced
+      ? {
+          reason:
+            "Administrator force-closed before the interview's scheduled time.",
+          scheduledTimeISO: forced.scheduledTime.toISOString(),
+          normallyAllowedAtISO: forced.allowedAt.toISOString(),
+          minutesEarly: Math.round(
+            (forced.allowedAt.getTime() - closedAt.getTime()) / 60_000,
+          ),
+        }
+      : undefined,
   });
 
   return { ok: true };

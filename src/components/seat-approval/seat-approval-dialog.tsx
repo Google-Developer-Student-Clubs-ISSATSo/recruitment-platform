@@ -35,29 +35,45 @@ import { answerSeatApprovalAction } from "@/app/(app)/actions";
  * Several pending requests queue rather than stack: answering one advances to
  * the next, so a lead who returns to a busy board works through them in order
  * instead of meeting a pile.
+ *
+ * THE QUEUE IS TRACKED BY REQUEST ID, NOT BY POSITION, and that is load-bearing.
+ * `items` holds only what is still PENDING on the server, so answering one and
+ * refreshing makes the list shrink FROM THE FRONT. An index into that list is
+ * therefore pointing at a moving target: advancing it while the list slides
+ * back underneath skips exactly one request per answer — with two pending, the
+ * second became `items[1]` of a 1-length array, i.e. `undefined`, and the whole
+ * modal unmounted while that request was still genuinely PENDING and unanswered
+ * (it reappeared only on the next full page load). Filtering out the ids this
+ * session has already answered is immune to that: it removes precisely the
+ * answered ones however the list moves.
  */
 export function SeatApprovalDialog({ items }: { items: SeatApprovalItem[] }) {
   const router = useRouter();
-  const [index, setIndex] = useState(0);
+  const [answeredIds, setAnsweredIds] = useState<string[]>([]);
   const [deferred, setDeferred] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const item = items[index];
+  // Also covers the gap between the action resolving and the refreshed props
+  // arriving: without it the just-answered request would still be on screen,
+  // with live buttons, for that window.
+  const queue = items.filter((i) => !answeredIds.includes(i.requestId));
+  const item = queue[0];
   if (!item || deferred) return null;
 
   function answer(approve: boolean) {
     setError(null);
+    const answeredId = item.requestId;
     startTransition(async () => {
-      const result = await answerSeatApprovalAction(item.requestId, approve);
+      const result = await answerSeatApprovalAction(answeredId, approve);
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      // Advance locally, then refresh: the server is the source of truth for
-      // what is still pending, and a refresh re-renders this with the request
-      // just answered already gone.
-      setIndex((i) => i + 1);
+      // Drop this ONE id, then refresh. The server stays the source of truth
+      // for what is still pending; once it re-renders, the answered request is
+      // gone from `items` and this filter entry is simply inert.
+      setAnsweredIds((prev) => [...prev, answeredId]);
       router.refresh();
     });
   }
@@ -93,12 +109,18 @@ export function SeatApprovalDialog({ items }: { items: SeatApprovalItem[] }) {
           </AlertDialogDescription>
         </AlertDialogHeader>
 
+        {/* Counts what is still WAITING rather than "request N of M". With the
+            queue keyed by id, the current request is always the head of the
+            remaining list, so a position would be a constant 1 and the total
+            would shrink under it — "Request 1 of 2" then "Request 1 of 1"
+            reads like a miscount. How many are left is the honest version of
+            the same information, and it stays correct as the list shrinks. */}
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           {item.campaignName}
-          {items.length > 1 && (
+          {queue.length > 1 && (
             <>
               {" · "}
-              Request {index + 1} of {items.length}
+              {queue.length - 1} more waiting
             </>
           )}
         </p>

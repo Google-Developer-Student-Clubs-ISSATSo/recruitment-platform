@@ -119,3 +119,53 @@ export function isInterviewDone(
   return note?.closedAt != null;
 }
 
+/**
+ * How long after the scheduled start a note stays locked. A panellist should be
+ * writing up an interview that has actually happened, not closing the record
+ * before the candidate has sat down — but an interview that started late, or
+ * one being written up the moment it ends, must not be blocked either, so the
+ * bar is the START time plus a short grace rather than any guess at a duration.
+ */
+export const NOTE_CLOSE_GRACE_MINUTES = 10;
+
+export type NoteCloseEligibility =
+  /** Past the threshold, or there is no scheduled time to measure against. */
+  | { state: "allowed" }
+  /** Before the threshold — only an Administrator may force past this. */
+  | { state: "too_early"; allowedAt: Date };
+
+/**
+ * May this note be closed yet, ignoring who is asking?
+ *
+ * TIMEZONE: there is deliberately NO timezone handling in here, and that is the
+ * correct behaviour rather than an omission. `scheduledTime` is stored as an
+ * absolute instant — the coordinator's Tunis wall-clock is resolved to one at
+ * entry by parseTunisLocal, which pins +01:00 explicitly (see lib/tunis-time.ts)
+ * — so comparing it against `now`, also an instant, is a comparison of two
+ * points on the same timeline. It yields the identical answer whether this runs
+ * on a server in Tunis, in UTC, or anywhere else, and for a viewer in any zone.
+ * Converting either side to a wall-clock first is what would BREAK it. Tunis
+ * time matters only for DISPLAYING the threshold to a human.
+ *
+ * A null `scheduledTime` is "allowed": with no time recorded there is nothing
+ * to be early relative to, and blocking forever would strand a note that can
+ * never be closed. The board only lists scheduled applicants, so this is the
+ * unusual path, not the normal one.
+ */
+export function noteCloseEligibility({
+  scheduledTime,
+  now,
+  graceMinutes = NOTE_CLOSE_GRACE_MINUTES,
+}: {
+  scheduledTime: Date | null | undefined;
+  now: Date;
+  graceMinutes?: number;
+}): NoteCloseEligibility {
+  if (!scheduledTime) return { state: "allowed" };
+
+  const allowedAt = new Date(scheduledTime.getTime() + graceMinutes * 60_000);
+  return now.getTime() >= allowedAt.getTime()
+    ? { state: "allowed" }
+    : { state: "too_early", allowedAt };
+}
+

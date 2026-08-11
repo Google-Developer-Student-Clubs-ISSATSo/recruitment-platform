@@ -11,7 +11,7 @@ import {
 import { PermissionKey } from "@/generated/prisma/enums";
 import { formatTunisDateTime } from "@/lib/tunis-time";
 import { buildJury, seatKindLabel } from "@/lib/panel-seat-kind";
-import type { NoteScores } from "@/lib/interview-note";
+import { noteCloseEligibility, type NoteScores } from "@/lib/interview-note";
 import { readYearOfStudy } from "@/lib/applicant-form-fields";
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import { NoteEditor, type NoteMode } from "./NoteEditor";
@@ -110,6 +110,15 @@ export default async function InterviewNotesPage({
   const yearOfStudy = readYearOfStudy(applicant.rawFormData);
   const scheduled = applicant.interviewSlot?.scheduledTime ?? null;
 
+  // Whether closing is available yet. Evaluated on the server so the control
+  // renders in the right state on first paint; the action re-evaluates it
+  // against a fresh read, which is where the rule is actually enforced.
+  const closeEligibility = noteCloseEligibility({
+    scheduledTime: scheduled,
+    now: new Date(),
+  });
+  const closeTooEarly = closeEligibility.state === "too_early";
+
   return (
     <div className="space-y-6">
       <div>
@@ -204,6 +213,14 @@ export default async function InterviewNotesPage({
                 campaignId={campaignId}
                 applicantId={applicantId}
                 mode="close"
+                tooEarly={closeTooEarly}
+                canForceClose={isManage}
+                scheduledLabel={scheduled ? formatTunisDateTime(scheduled) : null}
+                allowedAtLabel={
+                  closeEligibility.state === "too_early"
+                    ? formatTunisDateTime(closeEligibility.allowedAt)
+                    : null
+                }
               />
             )}
             {canReopen && (
