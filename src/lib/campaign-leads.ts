@@ -93,10 +93,10 @@ export async function otherLeadRoleHeldBy(
 
 /**
  * The one permission a lead role auto-grants/auto-revokes on assignment, if
- * any. Only TECHNICAL_LEAD has one today — MKT/EER/Club Lead are tracked
- * titles with no attached capability yet.
+ * any. EER/Club Lead remain tracked titles with no attached capability.
  */
 const AUTO_GRANTED_PERMISSION: Partial<Record<LeadRole, PermissionKey>> = {
+  [LeadRole.MKT_LEAD]: PermissionKey.VIEW_MKT_SKILLS_BREAKDOWN,
   [LeadRole.TECHNICAL_LEAD]: PermissionKey.ENTER_TECHNICAL_SCORE,
 };
 
@@ -129,17 +129,18 @@ export async function getCampaignLeadHolders(
 }
 
 /**
- * Assign (or reassign) a lead role for a campaign, handling the
- * TECHNICAL_LEAD auto-grant/auto-revoke side effect.
+ * Assign (or reassign) a lead role for a campaign, handling whichever
+ * auto-grant/auto-revoke side effect AUTO_GRANTED_PERMISSION defines for it.
  *
  * - The CampaignLead row for (campaignId, role) is upserted — reassigning
  *   updates the existing row's userId rather than creating a second one.
- * - If this role auto-grants a permission (currently only TECHNICAL_LEAD ->
- *   ENTER_TECHNICAL_SCORE): the new holder gets it with source LEAD_ROLE
- *   unless they already hold it (any source, left untouched); the previous
- *   holder loses it ONLY if their row's source is still LEAD_ROLE — a MANUAL
- *   grant (whether pre-existing or later re-confirmed via Permission
- *   Management, see togglePermission/bulkSetPermission) is never auto-revoked.
+ * - If this role auto-grants a permission (currently TECHNICAL_LEAD ->
+ *   ENTER_TECHNICAL_SCORE and MKT_LEAD -> VIEW_MKT_SKILLS_BREAKDOWN): the new
+ *   holder gets it with source LEAD_ROLE unless they already hold it (any
+ *   source, left untouched); the previous holder loses it ONLY if their row's
+ *   source is still LEAD_ROLE — a MANUAL grant (whether pre-existing or later
+ *   re-confirmed via Permission Management, see togglePermission/
+ *   bulkSetPermission) is never auto-revoked.
  *
  * Every assignment, and every auto-grant/auto-revoke side effect, gets its
  * own logActivity entry so the Activity Log stays honest about what was a

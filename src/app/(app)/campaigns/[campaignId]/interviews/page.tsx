@@ -12,6 +12,7 @@ import {
   ALL_SEAT_KINDS,
 } from "@/lib/panel-candidates";
 import { PermissionGate } from "@/components/permission-gate";
+import { RefreshButton } from "@/components/refresh-button";
 import {
   ApplicantStatus,
   ApprovalStatus,
@@ -243,15 +244,24 @@ export default async function InterviewsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Interviews</h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          {seesAdminSections
-            ? "Invite shortlisted applicants to book an interview, then record the slots they choose."
-            : isBoardReadOnly
-              ? "Who is sitting on each interview panel."
-              : "Staff the interview panels you're responsible for."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Interviews</h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            {seesAdminSections
+              ? "Invite shortlisted applicants to book an interview, then record the slots they choose."
+              : isBoardReadOnly
+                ? "Who is sitting on each interview panel."
+                : "Staff the interview panels you're responsible for."}
+          </p>
+        </div>
+        {/* The board is what this refreshes: <PanelBoard> renders its days
+            straight from props (its only state is which day is expanded), so a
+            seat another lead just filled or approved shows up on refresh.
+            <SlotEntryTable> below does seed its time/room inputs into state —
+            deliberately left alone, since re-syncing a field mid-edit would
+            discard what someone is typing. */}
+        <RefreshButton ariaLabel="Refresh interview panels" />
       </div>
 
       {/* Ungated like the board itself: this is about the viewer's own seats,

@@ -60,6 +60,28 @@ export function EntrySection({
   const [pending, startTransition] = useTransition();
   const tone = TONE[section.tone];
 
+  // Adopt a NEW server payload when one arrives — what makes the page's Refresh
+  // button actually surface an entry a different reviewer just added. Without
+  // this, `rows` would keep the copy taken at mount forever: a soft refresh
+  // (router.refresh) streams fresh props into this component rather than
+  // remounting it, so the useState initialiser above never runs again.
+  //
+  // Compared by CONTENT, not reference: <ApplicantCard> rebuilds this prop with
+  // .filter() on every render, so a reference check would fire constantly and
+  // wipe the optimistic row below on each keystroke. Entries are append-only
+  // with stable ids, so the id list is a faithful signature — it changes
+  // exactly when the server's set of entries does.
+  //
+  // Written as a during-render adjustment rather than an effect (React's
+  // documented "adjusting state when a prop changes" pattern): it re-renders
+  // before paint, so a refresh never flashes the stale list first.
+  const serverSignature = entries.map((e) => e.id).join(",");
+  const [syncedSignature, setSyncedSignature] = useState(serverSignature);
+  if (serverSignature !== syncedSignature) {
+    setSyncedSignature(serverSignature);
+    setRows(entries);
+  }
+
   function submit() {
     const trimmed = text.trim();
     if (trimmed === "" || pending) return;

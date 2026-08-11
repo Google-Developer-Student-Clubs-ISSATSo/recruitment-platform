@@ -4,11 +4,12 @@ import { useMemo, useState, useTransition } from "react";
 import { motion } from "motion/react";
 
 import { Icon } from "@/components/app-shell/icon";
+import { RefreshButton } from "@/components/refresh-button";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { computeWeightedTotal, totalCoefficient } from "@/lib/phase1-score";
 import { savePhaseOneScore } from "./actions";
 import { ApplicantQueueList, type QueueEntry } from "./ApplicantQueueList";
-import { ApplicantAnswerPanel } from "./ApplicantAnswerPanel";
+import { ApplicantAnswerPanel } from "@/components/applicant-answer-panel";
 import { ScoringControl } from "./ScoringControl";
 import { WeightedTotalDisplay } from "./WeightedTotalDisplay";
 import { ProcessedRemainingCounter } from "./ProcessedRemainingCounter";
@@ -39,6 +40,21 @@ export function Phase1ScoringClient({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const reduced = useReducedMotion();
+
+  // Adopt a NEW server payload when one arrives — what makes the Refresh button
+  // above actually show an applicant someone else just scored, or one the Form
+  // webhook added to the queue. A soft refresh (router.refresh) streams fresh
+  // props in rather than remounting, so the useState initialiser never re-runs
+  // on its own and this list would otherwise stay frozen at its mount value.
+  //
+  // A reference check is correct here, unlike in <EntrySection>: this prop is
+  // handed straight down from the server component, so its identity changes
+  // only when the server actually re-rendered — never on a local setState.
+  const [syncedFrom, setSyncedFrom] = useState(initialApplicants);
+  if (initialApplicants !== syncedFrom) {
+    setSyncedFrom(initialApplicants);
+    setApplicants(initialApplicants);
+  }
 
   const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
 
@@ -125,15 +141,18 @@ export function Phase1ScoringClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Phase 1 Scoring Queue
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          {viewMode === "technical-only"
-            ? "Enter the Technical Skills score for each applicant. Scores save the moment you pick a value."
-            : "Score each applicant against the active rubric. Scores save the moment you pick a value."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Phase 1 Scoring Queue
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            {viewMode === "technical-only"
+              ? "Enter the Technical Skills score for each applicant. Scores save the moment you pick a value."
+              : "Score each applicant against the active rubric. Scores save the moment you pick a value."}
+          </p>
+        </div>
+        <RefreshButton ariaLabel="Refresh scoring queue" />
       </div>
 
       <ProcessedRemainingCounter

@@ -118,6 +118,7 @@ export default async function PermissionsPage({
     statsUsers,
     templates,
     leadRolesByUser,
+    committeeGroups,
   ] = await Promise.all([
     prisma.user.findMany({
       where: { roleTemplate: { is: { name: RoleTemplateName.TM_LEAD } } },
@@ -160,6 +161,16 @@ export default async function PermissionsPage({
     // across every OPEN campaign — a Club Lead of the running cycle should
     // still read as one here.
     getLeadRolesByUser(),
+    // Members per committee. Counted in the DATABASE rather than off any list
+    // above: `memberUsers` is one page of ten and excludes the TM Lead, so
+    // tallying it would report whatever happens to be on screen. This groups
+    // over every user, which is what makes the three cards sum exactly to
+    // Total Members (the Administrator included — they hold a committee like
+    // anyone else).
+    prisma.user.groupBy({
+      by: ["committee"],
+      _count: { _all: true },
+    }),
   ]);
 
   const toRow = (u: UserQueryRow): AdminUserRow => {
@@ -204,6 +215,15 @@ export default async function PermissionsPage({
     }),
   );
 
+  // Seeded from COMMITTEES so a committee with no members still renders as 0
+  // rather than vanishing — an absent card would read as "no such committee".
+  const committeeCounts = Object.fromEntries(
+    COMMITTEES.map((c) => [c, 0]),
+  ) as Record<Committee, number>;
+  for (const group of committeeGroups) {
+    committeeCounts[group.committee] = group._count._all;
+  }
+
   const pageCount = Math.max(1, Math.ceil(matchingCount / PAGE_SIZE));
   const page = Math.min(requestedPage, pageCount);
 
@@ -216,6 +236,7 @@ export default async function PermissionsPage({
       currentUserId={currentUserId}
       totalMembers={statsUsers.length}
       customizedCount={customizedCount}
+      committeeCounts={committeeCounts}
       matchingCount={matchingCount}
       matchingIds={matchingIdRows.map((r) => r.id)}
       page={page}

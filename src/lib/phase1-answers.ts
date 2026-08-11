@@ -24,6 +24,17 @@ export type AnswerQuestion = {
 };
 
 /**
+ * What <ApplicantAnswerPanel> needs per question: the lookup fields above plus
+ * an id for the React key.
+ *
+ * Declared here rather than in the component so the panel — which now serves
+ * both the Phase 1 Scoring Queue and the Applicants answers dialog — does not
+ * have to reach into either page's folder for a type. Phase1Question satisfies
+ * it structurally, so its call site needed no change beyond the import path.
+ */
+export type AnswerPanelQuestion = AnswerQuestion & { id: string };
+
+/**
  * The rawFormData key an answer is read from: the configured `sourceField` when
  * there is one, else the question text.
  *

@@ -15,8 +15,8 @@ const SUBHEADING_CLASS =
  * counts only mean something once you can see who they are made of, and because
  * acting on this section means contacting a person, not a number.
  *
- * Restricted to the campaign's MKT Lead and the Administrator (see
- * canViewMktSkills) — the page around it stays open to everyone.
+ * Restricted to VIEW_MKT_SKILLS_BREAKDOWN holders (see canViewMktSkills in
+ * lib/phase2-store.ts) — the page around it stays open to everyone.
  *
  * The rows are exactly the campaign's configured whitelist (Configuration →
  * MKT Skills), counted live on every page load, so they cannot drift from the

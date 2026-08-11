@@ -27,6 +27,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       PermissionKey.SCREEN_PHASE1,
       PermissionKey.ENTER_TECHNICAL_SCORE,
       PermissionKey.IMPORT_APPLICANTS,
+      PermissionKey.VIEW_MKT_SKILLS_BREAKDOWN,
     ],
   },
   {
@@ -99,6 +100,8 @@ export const PERMISSION_DEFINITIONS: Record<PermissionKey, string> = {
     "Open closed, archived campaigns from previous recruitment cycles.",
   [PermissionKey.VIEW_ACTIVITY_LOG]:
     "Read the platform-wide audit trail of every recorded action and who took it.",
+  [PermissionKey.VIEW_MKT_SKILLS_BREAKDOWN]:
+    "See the Phase 2 MKT Skills Breakdown — which applicants listed which whitelisted MKT skills.",
 };
 
 /** Human-friendly names for the role templates. */

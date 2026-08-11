@@ -7,6 +7,7 @@ import {
   getPhase2Viewer,
 } from "@/lib/phase2-visibility-store";
 import { tallyMktSkills } from "@/lib/phase2";
+import { RefreshButton } from "@/components/refresh-button";
 import { RankedList } from "./RankedList";
 import { MktSkillsTable } from "./MktSkillsTable";
 
@@ -23,10 +24,11 @@ import { MktSkillsTable } from "./MktSkillsTable";
 // appended Notes / Red Flags / Green Flags.
 //
 // One SECTION is narrower than the page: the MKT Skills Breakdown renders only
-// for the campaign's MKT Lead and the Administrator. Everyone else simply
-// doesn't get it — no "no access" message, the same way Configuration's
-// sections are absent rather than refused for members who don't hold their
-// permission.
+// for holders of VIEW_MKT_SKILLS_BREAKDOWN (auto-granted to the current MKT
+// Lead, held by the Administrator, or manually granted — see canViewMktSkills
+// in lib/phase2-store.ts). Everyone else simply doesn't get it — no "no
+// access" message, the same way Configuration's sections are absent rather
+// than refused for members who don't hold their permission.
 export default async function Phase2Page({
   params,
 }: {
@@ -63,7 +65,7 @@ export default async function Phase2Page({
     mayViewSkills,
   ] = await Promise.all([
     getPhase2Data(campaignId, viewer, visibility),
-    canViewMktSkills(campaignId, session.user.id),
+    canViewMktSkills(session.user.id),
   ]);
   // Live tally, every load — the same rule the interview-note AVGs and the
   // capacity counts follow. Nothing here is cached or written back, which is
@@ -72,14 +74,22 @@ export default async function Phase2Page({
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-          Phase 2
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Everyone who passed Phase 1, ranked by their screening score. Notes and
-          flags recorded here are permanent and carry into the final decision.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
+            Phase 2
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            Everyone who passed Phase 1, ranked by their screening score. Notes
+            and flags recorded here are permanent and carry into the final
+            decision.
+          </p>
+        </div>
+        {/* Notes and flags are the thing worth refreshing here — several
+            reviewers write into the same applicant during a discussion. See
+            <EntrySection>, which re-syncs its list when a refresh brings a new
+            server payload. */}
+        <RefreshButton ariaLabel="Refresh notes and flags" />
       </header>
 
       {applicants.length === 0 ? (

@@ -5,8 +5,20 @@ import {
   answerKey,
   answerQuestions,
   configuredAnswerKeys,
+  type AnswerPanelQuestion,
 } from "@/lib/phase1-answers";
-import type { Phase1Question, ViewMode } from "./types";
+
+/**
+ * How much of the applicant surface this pane shows. Structurally identical to
+ * the Phase 1 Scoring Queue's own ViewMode, so its call site passes straight
+ * through; declared locally so this shared component owns no dependency on any
+ * one page's types.
+ *
+ * The Applicants answers dialog only ever passes "full" — its page is gated by
+ * VIEW_FULL_POOL, which is the permission that grants complete answers, and the
+ * technical-only restriction belongs to ENTER_TECHNICAL_SCORE on Phase 1.
+ */
+type AnswerPanelViewMode = "full" | "technical-only";
 
 // Exact rawFormData keys for the reference fields shown in the technical-only
 // view. These match the CSV headers.
@@ -67,7 +79,14 @@ function AnswerValue({ value }: { value: string }) {
   );
 }
 
-// Reading pane. One component, two modes (STEP 5 — a variant, not a duplicate):
+// Reading pane, shared by the Phase 1 Scoring Queue (beside its scoring
+// controls) and the Applicants page's answers dialog. It lives in
+// src/components/ rather than in either page's folder precisely because both
+// render it: a second copy is how the two would drift on what counts as an
+// answer, which is the same drift lib/phase1-answers.ts was extracted to
+// prevent one level down.
+//
+// One component, two modes (STEP 5 — a variant, not a duplicate):
 //   - "full": for each ACTIVE NON-TECHNICAL question, show the question text and
 //     the applicant's answer, falling back to a clear "No answer found" state
 //     when the key isn't in the submitted row. Below that, an "Other Submitted
@@ -114,9 +133,9 @@ export function ApplicantAnswerPanel({
   questions,
   rawFormData,
 }: {
-  viewMode: ViewMode;
+  viewMode: AnswerPanelViewMode;
   fullName: string;
-  questions: Phase1Question[];
+  questions: AnswerPanelQuestion[];
   rawFormData: Record<string, unknown> | null;
 }) {
   if (viewMode === "technical-only") {

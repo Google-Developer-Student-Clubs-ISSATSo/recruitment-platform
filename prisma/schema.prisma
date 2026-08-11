@@ -106,6 +106,13 @@ enum PermissionKey {
   SEND_EMAILS
   VIEW_CAMPAIGN_HISTORY
   VIEW_ACTIVITY_LOG
+  // Read access to the Phase 2 MKT Skills Breakdown section. Auto-granted on
+  // MKT Lead assignment (source LEAD_ROLE) exactly like ENTER_TECHNICAL_SCORE
+  // is on Technical Lead assignment — see AUTO_GRANTED_PERMISSION in
+  // lib/campaign-leads.ts. A plain global flag like every other key here, so
+  // (like ENTER_TECHNICAL_SCORE) it is not campaign-scoped: once granted it
+  // reads through on every campaign's Phase 2 page until revoked.
+  VIEW_MKT_SKILLS_BREAKDOWN
 }
 
 enum Committee {

@@ -3,12 +3,11 @@
 // components import; this module is server-only.
 
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 import { answerKey, answerQuestions } from "@/lib/phase1-answers";
 import { passedPhaseOneWhere } from "@/lib/phase1-ranking";
 import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { totalCoefficient } from "@/lib/phase1-score";
-import { getCampaignLeadHolders } from "@/lib/campaign-leads";
-import { getAdministratorId } from "@/lib/panel-authority";
 import { mktSkillsOf } from "@/lib/phase2";
 import {
   canViewAnyPhase2Surface,
@@ -17,7 +16,7 @@ import {
   type Phase2Viewer,
   type Phase2VisibilityState,
 } from "@/lib/phase2-visibility";
-import { Committee, LeadRole, Phase2EntryType } from "@/generated/prisma/enums";
+import { Committee, PermissionKey, Phase2EntryType } from "@/generated/prisma/enums";
 
 /** One configured question's text plus this applicant's answer to it. */
 export type Phase2Answer = {
@@ -334,31 +333,30 @@ export async function getPhase2Data(
 /**
  * May this user see the MKT Skills Breakdown section?
  *
- * Only this campaign's CURRENT MKT Lead, or the Administrator. The rest of
- * Phase 2 — the ranked list, the notes and flags — stays open to every
- * authenticated member; this is a section-level restriction, not a page gate,
- * which is why it is a plain boolean here rather than an entry in
- * CAMPAIGN_PAGE_PERMISSIONS.
+ * Gated by VIEW_MKT_SKILLS_BREAKDOWN — a real PermissionKey now, not a
+ * hardcoded title check. The rest of Phase 2 — the ranked list, the notes and
+ * flags — stays open to every authenticated member; this is a section-level
+ * restriction, not a page gate, which is why it is a plain boolean here
+ * rather than an entry in CAMPAIGN_PAGE_PERMISSIONS.
  *
- * Not a PermissionKey on purpose: this is a question about who holds a title
- * right now, not a capability an admin grants. Resolved live from the current
- * CampaignLead row and the current TM_LEAD, reusing getCampaignLeadHolders and
- * getAdministratorId, so access moves with the title the moment it is
- * reassigned — an outgoing MKT Lead loses the section on their next load, and
- * the MKT Lead of a DIFFERENT campaign never had it here, since the holder
- * lookup is scoped to this campaignId.
+ * Auto-granted on MKT Lead assignment (source LEAD_ROLE) by
+ * AUTO_GRANTED_PERMISSION in lib/campaign-leads.ts — see assignCampaignLead
+ * for the grant/revoke rules, including the source:MANUAL protection that
+ * keeps a manually-confirmed grant from being auto-revoked on reassignment.
+ * The Administrator holds it as an ordinary MANUAL grant on their own
+ * UserPermission row (backfilled onto the TM_LEAD template and its current
+ * holder when this permission was introduced), the same as every other key
+ * they hold.
+ *
+ * Deliberately NOT campaign-scoped, matching how ENTER_TECHNICAL_SCORE (the
+ * other lead-role auto-grant) already behaves: a plain global UserPermission
+ * flag, so once granted it reads through on every campaign's Phase 2 page,
+ * not only the one where the title was held — no `campaignId` parameter here
+ * for exactly that reason, so a caller can't be misled into thinking this is
+ * scoped when it structurally isn't.
  */
-export async function canViewMktSkills(
-  campaignId: string,
-  userId: string,
-): Promise<boolean> {
-  const [holders, administratorId] = await Promise.all([
-    getCampaignLeadHolders(campaignId),
-    getAdministratorId(),
-  ]);
-  return (
-    holders[LeadRole.MKT_LEAD]?.userId === userId || administratorId === userId
-  );
+export async function canViewMktSkills(userId: string): Promise<boolean> {
+  return hasPermission(userId, PermissionKey.VIEW_MKT_SKILLS_BREAKDOWN);
 }
 
 /**

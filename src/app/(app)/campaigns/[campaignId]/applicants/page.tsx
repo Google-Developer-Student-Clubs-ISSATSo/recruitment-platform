@@ -47,6 +47,19 @@ export default async function ApplicantsPage({
     redirectTo: `/campaigns/${campaignId}/dashboard?denied=1`,
   });
 
+  // VIEW_FULL_POOL is what the answers dialog rests on — the same key whose
+  // description promises "read their complete application answers", and the
+  // same key that gates this page today, so this is true for anyone who gets
+  // this far.
+  //
+  // Re-checked anyway, and used to decide whether `rawFormData` is SELECTED AT
+  // ALL below, rather than merely whether the dialog renders. Two reasons:
+  // the answers must never sit in the page payload for a viewer who isn't
+  // entitled to them (hiding them client-side is not hiding them), and if this
+  // page's gate is ever widened to "any of [...]" the way Phase 1's was, the
+  // answers stay behind their own key instead of silently riding along.
+  const canViewAnswers = await hasPermission(userId, PermissionKey.VIEW_FULL_POOL);
+
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number(sp.page) || 1);
   const query = sp.q?.trim() ?? "";
@@ -78,6 +91,7 @@ export default async function ApplicantsPage({
     shortlistedCount,
     rejectedCount,
     presentStatusRows,
+    answerQuestionRows,
   ] = await Promise.all([
     prisma.applicant.findMany({
       where,
@@ -91,6 +105,9 @@ export default async function ApplicantsPage({
         preferredCommittee: true,
         isIssatsoStudent: true,
         status: true,
+        // Only for a holder of the permission that grants answers — see above.
+        // Absent from the payload entirely otherwise, not blanked.
+        ...(canViewAnswers ? { rawFormData: true } : {}),
       },
     }),
     prisma.applicant.count({ where }),
@@ -118,6 +135,23 @@ export default async function ApplicantsPage({
       distinct: ["status"],
       select: { status: true },
     }),
+    // The configured questions the answers dialog labels answers with. Exactly
+    // the query the Phase 1 scoring page runs — same filter, same ordering, same
+    // fields — because <ApplicantAnswerPanel> resolves each answer through
+    // answerKey(question) and would otherwise be reading a different set of
+    // questions than the Scoring Queue does for the same applicant.
+    canViewAnswers
+      ? prisma.phaseOneQuestion.findMany({
+          where: { campaignId, isActive: true },
+          orderBy: { order: "asc" },
+          select: {
+            id: true,
+            text: true,
+            requiresTechnicalScorer: true,
+            sourceField: true,
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   const pageCount = Math.max(1, Math.ceil(matching / PAGE_SIZE));
@@ -140,6 +174,8 @@ export default async function ApplicantsPage({
       pageSize={PAGE_SIZE}
       presentStatuses={presentStatusRows.map((r) => r.status)}
       filters={{ q: query, status: sp.status ?? "", committee: sp.committee ?? "" }}
+      canViewAnswers={canViewAnswers}
+      answerQuestions={answerQuestionRows}
     />
   );
 }

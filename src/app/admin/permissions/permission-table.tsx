@@ -10,6 +10,11 @@ import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { AnimatedList } from "@/components/motion/table-slice";
 import { Pager } from "@/components/ui/pager";
 import {
+  IDENTITY_TEXT_CLASS,
+  resolveIdentityColor,
+} from "@/lib/identity-color";
+import {
+  COMMITTEES,
   type AdminUserRow,
   type TemplateOption,
 } from "./permission-config";
@@ -38,6 +43,7 @@ export function PermissionTable({
   currentUserId,
   totalMembers,
   customizedCount,
+  committeeCounts,
   matchingCount,
   matchingIds,
   page,
@@ -55,6 +61,12 @@ export function PermissionTable({
   /** Totals over everyone, independent of filters and paging. */
   totalMembers: number;
   customizedCount: number;
+  /**
+   * Members per committee, counted over EVERY user (the Administrator
+   * included), so these three sum to {@link totalMembers}. Keyed by the full
+   * Committee enum, which has exactly three values — see the cards below.
+   */
+  committeeCounts: Record<Committee, number>;
   /** How many members match the current filters, across all pages. */
   matchingCount: number;
   /** Their ids — what "select all matching" selects. */
@@ -226,11 +238,36 @@ export function PermissionTable({
         </button>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards. Six on one 3-wide grid: the platform totals on the first
+          row, then one card per committee on the second.
+
+          COMMITTEES has exactly three entries because the Committee enum has
+          exactly three values (MKT / TM / EER) — there is no fourth committee
+          to show. "Technical" exists in this app only as a lead title
+          (TECHNICAL_LEAD), a role template (TECHNICAL_SCORER) and a permission
+          (ENTER_TECHNICAL_SCORE); none of them is a committee anyone belongs
+          to, and LEAD_ROLE_COMMITTEE maps TECHNICAL_LEAD to null precisely
+          because it carries no committee meaning.
+
+          Mapped rather than written out three times so adding a committee to
+          the enum surfaces its card automatically instead of silently
+          under-reporting the total. Coloured through the shared identity
+          system, so a committee reads in the same colour here as it does on
+          every avatar and chip on this page. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatCard label="Total Members" value={totalMembers} />
         <StatCard label="Role Templates" value={templates.length} tone="primary" />
         <StatCard label="Customized" value={customizedCount} tone="rejected" />
+        {COMMITTEES.map((committee) => (
+          <StatCard
+            key={committee}
+            label={`${committee} Members`}
+            value={committeeCounts[committee]}
+            valueClassName={
+              IDENTITY_TEXT_CLASS[resolveIdentityColor({ committee })]
+            }
+          />
+        ))}
       </div>
 
       {/* Create form — an inline expanding panel rather than a true dialog: it
@@ -529,19 +566,29 @@ function StatCard({
   label,
   value,
   tone,
+  valueClassName,
 }: {
   label: string;
   value: number;
   tone?: "primary" | "rejected" | "pending";
+  /**
+   * Overrides the tone-derived colour. Exists for the committee cards, whose
+   * colour comes from the identity system (IDENTITY_TEXT_CLASS) rather than
+   * from the three status tones — adding "mkt"/"eer" tones here would be a
+   * second, drifting definition of colours that lib/identity-color.ts already
+   * owns.
+   */
+  valueClassName?: string;
 }) {
   const valueColor =
-    tone === "primary"
+    valueClassName ??
+    (tone === "primary"
       ? "text-primary"
       : tone === "rejected"
         ? "text-status-rejected"
         : tone === "pending"
           ? "text-[color:var(--status-pending)]"
-          : "text-foreground";
+          : "text-foreground");
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
