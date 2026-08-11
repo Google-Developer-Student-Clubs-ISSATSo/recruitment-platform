@@ -6,9 +6,39 @@ import { AnimatePresence, motion } from "motion/react";
 import { Icon } from "@/components/app-shell/icon";
 import { committeeLabel } from "@/lib/committee";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
-import { PHASE2_SECTIONS } from "@/lib/phase2";
+// Both from phase2.ts, the client-safe half: phase2-visibility.ts reaches
+// prisma through campaign-leads.ts and must not enter a browser bundle.
+import { PHASE2_SECTIONS, surfaceOfEntryType } from "@/lib/phase2";
 import type { Phase2Applicant } from "@/lib/phase2-store";
 import { EntrySection } from "./EntrySection";
+
+/**
+ * The tally pill a column shows per entry type — the same shape, icon and tone
+ * the header has always used, just grouped into its column instead of one row.
+ */
+function TallyPill({
+  section,
+  count,
+}: {
+  section: (typeof PHASE2_SECTIONS)[number];
+  count: number;
+}) {
+  return (
+    <span
+      title={`${count} ${section.label.toLowerCase()}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        section.tone === "rejected"
+          ? "bg-status-rejected/10 text-status-rejected"
+          : section.tone === "accepted"
+            ? "bg-status-accepted/10 text-status-accepted"
+            : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+      }`}
+    >
+      <Icon name={section.icon} className="text-[13px]" />
+      {count}
+    </span>
+  );
+}
 
 /**
  * Two decimals, or an em dash when the applicant has no total yet — the same
@@ -33,12 +63,17 @@ export function ApplicantCard({
   applicant,
   maxScore,
   authorName,
+  showNotesColumn,
+  showFlagsColumn,
 }: {
   campaignId: string;
   applicant: Phase2Applicant;
   maxScore: number;
   /** The signed-in member's display name, for optimistically-added entries. */
   authorName: string;
+  /** Whether each column exists on this page at all — see <RankedList>. */
+  showNotesColumn: boolean;
+  showFlagsColumn: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const reduced = useReducedMotion();
@@ -47,6 +82,26 @@ export function ApplicantCard({
     section: s,
     count: applicant.entries.filter((e) => e.type === s.type).length,
   }));
+
+  // Split by surface so each column tallies only its own types. Notes is one
+  // type; flags is deliberately both, matching the single switch that governs
+  // them (see lib/phase2-visibility.ts).
+  const noteCounts = counts.filter(
+    (c) => surfaceOfEntryType(c.section.type) === "notes",
+  );
+  const flagCounts = counts.filter(
+    (c) => surfaceOfEntryType(c.section.type) === "flags",
+  );
+
+  // A column can be present on the page while this particular applicant is out
+  // of the viewer's reach — a committee-matched Lead sees the column because
+  // their own committee populates it, and other committees' rows read "—".
+  // Distinct from a zero count, which means "visible, nothing written yet".
+  const sectionsToRender = PHASE2_SECTIONS.filter((s) =>
+    surfaceOfEntryType(s.type) === "notes"
+      ? showNotesColumn && applicant.canViewNotes
+      : showFlagsColumn && applicant.canViewFlags,
+  );
 
   return (
     <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
@@ -69,27 +124,42 @@ export function ApplicantCard({
           </span>
         </span>
 
-        {/* Flag tallies — visible while collapsed, so a red flag can't hide. */}
-        <span className="hidden items-center gap-2 sm:flex">
-          {counts
-            .filter((c) => c.count > 0)
-            .map(({ section, count }) => (
-              <span
-                key={section.type}
-                title={`${count} ${section.label.toLowerCase()}`}
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                  section.tone === "rejected"
-                    ? "bg-status-rejected/10 text-status-rejected"
-                    : section.tone === "accepted"
-                      ? "bg-status-accepted/10 text-status-accepted"
-                      : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-                }`}
-              >
-                <Icon name={section.icon} className="text-[13px]" />
-                {count}
+        {/* Notes and Flags, each its own fixed column — visible while collapsed,
+            so a red flag can't hide behind a closed card. A column absent here
+            is absent for the whole table (the viewer may not read that surface
+            anywhere); a "—" inside a present column is this one applicant being
+            out of a committee-matched Lead's reach. */}
+        {showNotesColumn && (
+          <span className="hidden w-16 shrink-0 items-center gap-1 sm:flex">
+            {!applicant.canViewNotes ? (
+              <span className="text-xs text-neutral-300 dark:text-neutral-600">
+                —
               </span>
-            ))}
-        </span>
+            ) : (
+              noteCounts
+                .filter((c) => c.count > 0)
+                .map(({ section, count }) => (
+                  <TallyPill key={section.type} section={section} count={count} />
+                ))
+            )}
+          </span>
+        )}
+
+        {showFlagsColumn && (
+          <span className="hidden w-24 shrink-0 items-center gap-1 sm:flex">
+            {!applicant.canViewFlags ? (
+              <span className="text-xs text-neutral-300 dark:text-neutral-600">
+                —
+              </span>
+            ) : (
+              flagCounts
+                .filter((c) => c.count > 0)
+                .map(({ section, count }) => (
+                  <TallyPill key={section.type} section={section} count={count} />
+                ))
+            )}
+          </span>
+        )}
 
         <span className="shrink-0 text-right">
           <span className="block text-base font-bold tabular-nums text-foreground sm:text-lg">
@@ -161,20 +231,33 @@ export function ApplicantCard({
                 </div>
               </div>
 
-              <div className="grid gap-5 border-t border-neutral-200 pt-4 lg:grid-cols-3 dark:border-neutral-800">
-                {PHASE2_SECTIONS.map((section) => (
-                  <EntrySection
-                    key={section.type}
-                    campaignId={campaignId}
-                    applicantId={applicant.id}
-                    section={section}
-                    entries={applicant.entries.filter(
-                      (e) => e.type === section.type,
-                    )}
-                    authorName={authorName}
-                  />
-                ))}
-              </div>
+              {/* Only the surfaces this viewer may read for THIS applicant. A
+                  section left out here had its entries dropped server-side, so
+                  there is nothing to render even if the markup were forced. */}
+              {sectionsToRender.length > 0 && (
+                <div
+                  className={`grid gap-5 border-t border-neutral-200 pt-4 dark:border-neutral-800 ${
+                    sectionsToRender.length === 1
+                      ? "lg:grid-cols-1"
+                      : sectionsToRender.length === 2
+                        ? "lg:grid-cols-2"
+                        : "lg:grid-cols-3"
+                  }`}
+                >
+                  {sectionsToRender.map((section) => (
+                    <EntrySection
+                      key={section.type}
+                      campaignId={campaignId}
+                      applicantId={applicant.id}
+                      section={section}
+                      entries={applicant.entries.filter(
+                        (e) => e.type === section.type,
+                      )}
+                      authorName={authorName}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         )}

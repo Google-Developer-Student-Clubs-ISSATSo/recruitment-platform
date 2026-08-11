@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/session";
 import { canViewMktSkills, getPhase2Data } from "@/lib/phase2-store";
+import {
+  getPhase2VisibilityState,
+  getPhase2Viewer,
+} from "@/lib/phase2-visibility-store";
 import { tallyMktSkills } from "@/lib/phase2";
 import { RankedList } from "./RankedList";
 import { MktSkillsTable } from "./MktSkillsTable";
@@ -37,6 +41,14 @@ export default async function Phase2Page({
   // always the session's user id resolved server-side in the action.
   const authorName = session.user.name ?? session.user.email ?? "You";
 
+  // Resolved before the data read, because what getPhase2Data returns DEPENDS
+  // on them: notes and flags this viewer may not read are dropped server-side
+  // rather than hidden in the browser.
+  const [viewer, visibility] = await Promise.all([
+    getPhase2Viewer(campaignId, session.user.id),
+    getPhase2VisibilityState(campaignId),
+  ]);
+
   const [
     {
       applicants,
@@ -45,10 +57,12 @@ export default async function Phase2Page({
       mktSkillWhitelist,
       mktSkillApplicants,
       mktPreferredCount,
+      showNotesColumn,
+      showFlagsColumn,
     },
     mayViewSkills,
   ] = await Promise.all([
-    getPhase2Data(campaignId),
+    getPhase2Data(campaignId, viewer, visibility),
     canViewMktSkills(campaignId, session.user.id),
   ]);
   // Live tally, every load — the same rule the interview-note AVGs and the
@@ -79,6 +93,8 @@ export default async function Phase2Page({
           applicants={applicants}
           maxScore={maxScore}
           authorName={authorName}
+          showNotesColumn={showNotesColumn}
+          showFlagsColumn={showFlagsColumn}
         />
       )}
 

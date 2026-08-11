@@ -43,6 +43,8 @@ model User {
   panelSeatsClaimed     PanelSeat[]
   interviewNotesClosed  InterviewNote[]
   phase2EntriesWritten  Phase2Entry[]
+  phase2NotesClosed     Phase2VisibilityConfig[] @relation("Phase2NotesClosedBy")
+  phase2FlagsClosed     Phase2VisibilityConfig[] @relation("Phase2FlagsClosedBy")
   campaignLeadsHeld     CampaignLead[]        @relation("CampaignLeadHolder")
   campaignLeadsAssigned CampaignLead[]        @relation("CampaignLeadAssignedBy")
 
@@ -267,6 +269,7 @@ model Campaign {
   phaseOneQuestions   PhaseOneQuestion[]
   phaseOneConfig      PhaseOneConfig?
   interviewConfig     InterviewConfig?
+  phase2Visibility    Phase2VisibilityConfig?
   emailLogs           EmailLog[]
   committeeCapacities CommitteeCapacity[]
   leads               CampaignLead[]
@@ -465,6 +468,38 @@ model Phase2Entry {
 
   // The page reads one applicant's entries at a time, oldest first.
   @@index([applicantId, createdAt])
+}
+
+// Who may READ the Phase 2 entries on this campaign — two independent switches,
+// both owned by the Administrator. Nothing here affects who may WRITE an entry
+// (still every authenticated member) or the append-only rule above.
+//
+// Mirrors InterviewNote's close/reopen shape rather than inventing a new one:
+// a nullable closedAt plus the user who set it, where NULL MEANS OPEN. That
+// polarity is load-bearing — a campaign with no row at all is therefore open,
+// so adding this table changes nothing about what existing campaigns show
+// until an Administrator actively closes a switch.
+//
+// Flags are ONE switch covering both RED_FLAG and GREEN_FLAG: the club treats
+// them as a single "flags" surface, and a red flag hidden while its
+// counterbalancing green flag stayed visible would misrepresent an applicant.
+// Notes are independent of them.
+//
+// Closing a switch does not hide entries from everyone — the Administrator and
+// a committee-matched Campaign Lead always read through it. See
+// lib/phase2-visibility.ts for the single statement of that rule.
+model Phase2VisibilityConfig {
+  id         String @id @default(cuid())
+  campaignId String @unique
+
+  notesClosedAt   DateTime?
+  notesClosedById String?
+  flagsClosedAt   DateTime?
+  flagsClosedById String?
+
+  campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  notesClosedBy User?    @relation("Phase2NotesClosedBy", fields: [notesClosedById], references: [id])
+  flagsClosedBy User?    @relation("Phase2FlagsClosedBy", fields: [flagsClosedById], references: [id])
 }
 
 // Which skill values count as MKT-relevant on this campaign — the TM Lead's own

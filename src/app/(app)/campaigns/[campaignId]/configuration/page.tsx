@@ -11,6 +11,7 @@ import { InterviewConfigSection } from "./InterviewConfigSection";
 import { FinalEmailLinksSection } from "./FinalEmailLinksSection";
 import { ScoringConfigSection } from "./ScoringConfigSection";
 import { MktSkillsConfigSection } from "./MktSkillsConfigSection";
+import { Phase2VisibilitySection } from "./Phase2VisibilitySection";
 
 // Per-campaign Configuration. Composes independent sections, each gated by its
 // own permission via <PermissionGate>. Adding a third configuration area later
@@ -86,6 +87,12 @@ export default async function ConfigurationPage({
           <StaggerItem>
             <PermissionGate permission={PermissionKey.CONFIGURE_SCREENING}>
               <MktSkillsConfigSection campaignId={campaignId} />
+            </PermissionGate>
+          </StaggerItem>
+
+          <StaggerItem>
+            <PermissionGate permission={PermissionKey.MANAGE_ACCOUNTS}>
+              <Phase2VisibilitySection campaignId={campaignId} />
             </PermissionGate>
           </StaggerItem>
 

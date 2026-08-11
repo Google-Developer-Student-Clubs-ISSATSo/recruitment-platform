@@ -26,11 +26,20 @@ export function RankedList({
   applicants,
   maxScore,
   authorName,
+  showNotesColumn,
+  showFlagsColumn,
 }: {
   campaignId: string;
   applicants: Phase2Applicant[];
   maxScore: number;
   authorName: string;
+  /**
+   * Whether each column exists for this viewer at all. Decided on the server
+   * (see lib/phase2-visibility.ts) — false means the column is omitted, not
+   * blanked, and the entries behind it were never sent.
+   */
+  showNotesColumn: boolean;
+  showFlagsColumn: boolean;
 }) {
   const [query, setQuery] = useState("");
 
@@ -76,6 +85,8 @@ export function RankedList({
                 applicant={applicant}
                 maxScore={maxScore}
                 authorName={authorName}
+                showNotesColumn={showNotesColumn}
+                showFlagsColumn={showFlagsColumn}
               />
             </StaggerItem>
           ))}

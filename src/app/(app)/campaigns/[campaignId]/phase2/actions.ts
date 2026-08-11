@@ -7,7 +7,16 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { isPhase2EntryType, PHASE2_ENTRY_MAX_LENGTH } from "@/lib/phase2";
 import { addPhase2Entry } from "@/lib/phase2-store";
+import {
+  canViewPhase2Surface,
+  surfaceOfEntryType,
+} from "@/lib/phase2-visibility";
+import {
+  getPhase2VisibilityState,
+  getPhase2Viewer,
+} from "@/lib/phase2-visibility-store";
 import { PHASE_ONE_ACCEPTED } from "@/lib/phase1-ranking";
+import type { Committee } from "@/generated/prisma/enums";
 
 export type AddEntryResult = { ok: true } | { ok: false; error: string };
 
@@ -25,7 +34,10 @@ export type AddEntryResult = { ok: true } | { ok: false; error: string };
 async function authorize(
   campaignId: string,
   applicantId: string,
-): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; userId: string; applicantCommittee: Committee }
+  | { ok: false; error: string }
+> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return { ok: false, error: "You are signed out." };
@@ -34,6 +46,7 @@ async function authorize(
     where: { id: applicantId },
     select: {
       campaignId: true,
+      preferredCommittee: true,
       phaseOneResult: { select: { classification: true } },
     },
   });
@@ -46,7 +59,7 @@ async function authorize(
     return { ok: false, error: "That applicant didn't pass Phase 1." };
   }
 
-  return { ok: true, userId };
+  return { ok: true, userId, applicantCommittee: applicant.preferredCommittee };
 }
 
 /**
@@ -66,6 +79,30 @@ export async function addPhase2EntryAction(
 
   if (!isPhase2EntryType(type)) {
     return { ok: false, error: "Unknown entry type." };
+  }
+
+  // You may only append to a surface you can currently READ for this applicant.
+  //
+  // Writing is otherwise unrestricted and stays that way — this is not a new
+  // permission, it just keeps the server consistent with the UI, which stops
+  // rendering a section the viewer cannot read. Without it a crafted POST could
+  // append to a restricted surface, producing an append-only row its own author
+  // cannot see to correct. Anyone who can see the box can still use it.
+  const [viewer, visibility] = await Promise.all([
+    getPhase2Viewer(campaignId, gate.userId),
+    getPhase2VisibilityState(campaignId),
+  ]);
+  const permitted = canViewPhase2Surface({
+    viewer,
+    surface: surfaceOfEntryType(type),
+    applicantCommittee: gate.applicantCommittee,
+    state: visibility,
+  });
+  if (!permitted) {
+    return {
+      ok: false,
+      error: "That section is restricted for this applicant.",
+    };
   }
 
   const trimmed = text.trim();

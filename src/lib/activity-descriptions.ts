@@ -44,6 +44,10 @@ const ACTION_LABELS: Record<string, string> = {
   GDG_DAY_DETAILS_SET: "set the GDG Day details",
   PHASE1_EMAILS_SENT: "sent the Phase 1 result emails",
   PHASE2_ENTRY_ADDED: "added a Phase 2 note or flag",
+  // Which SURFACE (notes or flags) is in the entry's `details`, so the two
+  // switches share one pair of types rather than needing four.
+  PHASE2_VISIBILITY_CLOSED: "restricted who can read a Phase 2 surface",
+  PHASE2_VISIBILITY_OPENED: "opened a Phase 2 surface to all members",
   MKT_SKILL_ADDED: "added a skill to the MKT skills list",
   MKT_SKILL_REMOVED: "removed a skill from the MKT skills list",
   INTERVIEW_PANEL_SIZE_SET: "set the interview panel size",
@@ -141,6 +145,10 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // A red or green flag can swing the final decision, and the entry can never
   // be edited or withdrawn — worth standing out, like the other judgment calls.
   PHASE2_ENTRY_ADDED: "pending",
+  // Changes who can read what — sensitive but reversible, so the same amber the
+  // interview-note close/reopen pair carries, for the same reason.
+  PHASE2_VISIBILITY_CLOSED: "pending",
+  PHASE2_VISIBILITY_OPENED: "pending",
   // Configuration of how answers are read, not a judgment about anyone — the
   // quiet end of the log, same as the other settings changes. The pair keeps
   // the add/remove colour split every other reversible pair here uses.

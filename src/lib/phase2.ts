@@ -48,6 +48,26 @@ export const PHASE2_SECTIONS = [
 
 export type Phase2Section = (typeof PHASE2_SECTIONS)[number];
 
+/**
+ * The two independently-toggled READ surfaces on Phase 2 (see
+ * lib/phase2-visibility.ts for who may read each one).
+ *
+ * RED_FLAG and GREEN_FLAG deliberately collapse into one `"flags"` surface:
+ * hiding a red flag while its counterbalancing green flag stayed readable would
+ * misrepresent the applicant, so the club treats them as a single surface.
+ *
+ * This mapping lives HERE rather than beside the visibility rule because the
+ * client cards need it to group their columns, and this is the module that is
+ * safe for them to import — phase2-visibility.ts reaches LEAD_ROLE_COMMITTEE
+ * through campaign-leads.ts, which imports prisma.
+ */
+export type Phase2Surface = "notes" | "flags";
+
+/** Which surface an entry type belongs to — the only place that mapping lives. */
+export function surfaceOfEntryType(type: Phase2EntryType): Phase2Surface {
+  return type === Phase2EntryType.NOTE ? "notes" : "flags";
+}
+
 const ENTRY_TYPES = new Set<string>(Object.values(Phase2EntryType));
 
 /** Narrow a client-supplied string to a real entry type. */
