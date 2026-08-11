@@ -209,9 +209,9 @@ export default async function InterviewsPage({
     (a.interviewPanel?.seats ?? []).some((s) => s.claimedById === userId),
   ).length;
 
-  // Who this viewer may put in each seat kind. The Club Lead gets a picker for
-  // every kind, not just the ones they own: theirs proposes rather than fills,
-  // but it still needs the same list of names to choose from.
+  // Who this viewer may put in each seat kind. The Club Lead still gets a
+  // control for every kind — theirs proposes rather than fills on the ones they
+  // don't own — so the kinds are loaded the same way.
   //
   // Loaded only for the kinds this viewer can act on, so an ordinary member's
   // render costs nothing extra.
@@ -224,6 +224,26 @@ export default async function InterviewsPage({
     campaignId,
     staffableKinds,
   );
+
+  // A Club Lead REQUESTING a seat they don't own may only put themselves
+  // forward (see requestSeatApproval) — seating other members is a committee
+  // lead's power over their own committee, not something the cross-committee
+  // exception carries with it. Narrow the picker so it cannot offer a name the
+  // server would refuse.
+  //
+  // Scoped to exactly that case: `ownedKinds` is left alone, so the Club Lead's
+  // own FLOATING seat still lists everyone (the spec has that one ASSIGNED by
+  // any of MKT/EER/Club Lead, approval-free), and an Administrator — who fills
+  // every seat directly rather than requesting — is excluded from this branch
+  // entirely.
+  if (powers.isClubLead && !canManageAccounts) {
+    for (const kind of ALL_SEAT_KINDS) {
+      if (powers.ownedKinds.includes(kind)) continue;
+      assignableByKind[kind] = (assignableByKind[kind] ?? []).filter(
+        (candidate) => candidate.id === userId,
+      );
+    }
+  }
 
   // A viewer who can neither staff nor propose sees a plain read-only board —
   // which is most members, by design.

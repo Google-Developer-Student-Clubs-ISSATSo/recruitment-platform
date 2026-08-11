@@ -91,6 +91,13 @@ export function SeatApprovalDialog({ items }: { items: SeatApprovalItem[] }) {
               Panel seat request
             </span>
           </AlertDialogTitle>
+          {/* The on-behalf-of branch is RETAINED even though new requests are
+              now self-only (requestSeatApproval refuses any other assignee).
+              Requests raised before that rule exist in the database and name
+              somebody other than their requester; rendering them through the
+              "asking for themselves" wording would state something untrue
+              about a real record. Costs a few lines, and the alternative is a
+              UI that misreports history. */}
           <AlertDialogDescription>
             {item.forSelf ? (
               <>

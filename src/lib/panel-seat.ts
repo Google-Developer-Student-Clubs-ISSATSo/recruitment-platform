@@ -375,13 +375,28 @@ async function declineOpenRequestsFor(seatId: string): Promise<void> {
 // ============ CLUB LEAD SEAT REQUESTS ============
 
 /**
- * The Club Lead asks a committee's lead for their seat — for themselves, or for
- * a member they want on that panel.
+ * The Club Lead asks a committee's lead for that seat — FOR THEMSELVES ONLY.
  *
- * The Club Lead is the one person who may reach across into any committee's
- * seat, but not silently — the seat's own lead has to agree. Nothing about the
- * seat changes here; only a PENDING request is created, exactly the shape
- * AdminTransferInvite uses for "nothing happens until the other party acts".
+ * SELF-ONLY, deliberately, and this is the narrower of two capabilities that
+ * must not be conflated:
+ *
+ *  - Seating OTHER members is a COMMITTEE lead's power, and it is scoped to
+ *    their own committee: the MKT Lead seats MKT members in the MKT seat, the
+ *    EER Lead theirs, the Administrator the TM seat. That runs through
+ *    canFillDirectly and never comes here.
+ *  - The Club Lead's power is the CROSS-COMMITTEE exception: they may occupy a
+ *    seat outside their own committee, with that seat's lead agreeing. The spec
+ *    words it as the Club Lead "taking" a seat, not assigning one — they are
+ *    reaching across on their own behalf, not acquiring a second committee's
+ *    staffing rights. Letting them nominate someone else would hand them
+ *    exactly the staffing authority the committee leads hold, over every
+ *    committee at once, which is a strictly larger power than the exception is
+ *    for.
+ *
+ * The Club Lead is still the one person who may reach across, but not silently
+ * — the seat's own lead has to agree. Nothing about the seat changes here; only
+ * a PENDING request is created, exactly the shape AdminTransferInvite uses for
+ * "nothing happens until the other party acts".
  *
  * Two seats are never requested. The floating seat needs no approval — the Club
  * Lead fills it directly. And the seat matching the applicant's OWN preferred
@@ -406,6 +421,18 @@ async function requestSeatApproval(
     return {
       ok: false,
       error: "Only this campaign's Club Lead can request another committee's seat.",
+    };
+  }
+
+  // Self-only — see the doc comment. Checked on the server rather than left to
+  // the picker the UI offers, so a crafted call naming someone else is refused
+  // the same way. Ordered after the Club Lead check so a non-lead still gets
+  // the "only the Club Lead" message rather than a confusing self-only one.
+  if (assigneeId !== requesterId) {
+    return {
+      ok: false,
+      error:
+        "You can only request a seat for yourself. Another committee's members are seated by their own lead.",
     };
   }
 
