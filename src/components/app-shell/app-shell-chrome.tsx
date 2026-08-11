@@ -107,7 +107,12 @@ export function AppShellChrome({
       <aside
         id="app-sidebar"
         aria-label="Main navigation"
-        className={`fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-neutral-200 bg-white transition-[transform,visibility] duration-300 ease-out motion-reduce:transition-none md:visible md:translate-x-0 dark:border-neutral-800 dark:bg-neutral-900 ${
+        // h-dvh, not h-screen: 100vh doesn't account for a mobile browser's
+        // collapsing address/toolbar chrome, so a fixed h-screen sidebar can
+        // extend past the real visible viewport — clipping the account
+        // section (Transfer Admin Role, Log Out) below the fold on phones.
+        // Same fix already used for the alert dialog's max-height.
+        className={`fixed left-0 top-0 z-50 flex h-dvh w-64 flex-col border-r border-neutral-200 bg-white transition-[transform,visibility] duration-300 ease-out motion-reduce:transition-none md:visible md:translate-x-0 dark:border-neutral-800 dark:bg-neutral-900 ${
           open ? "visible translate-x-0" : "invisible -translate-x-full"
         }`}
       >

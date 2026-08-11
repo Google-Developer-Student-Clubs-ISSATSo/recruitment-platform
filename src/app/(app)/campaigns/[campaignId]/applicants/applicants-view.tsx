@@ -1,6 +1,7 @@
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import { StatusBadge } from "./status-badge";
 import { ImportPanel } from "./import/import-panel";
+import { RefreshButton } from "./refresh-button";
 import {
   AnimatedCardList,
   AnimatedTableBody,
@@ -85,7 +86,10 @@ export function ApplicantsView({
             campaign.
           </p>
         </div>
-        {canImport && <ImportPanel campaignId={campaignId} />}
+        <div className="flex items-center gap-3">
+          <RefreshButton />
+          {canImport && <ImportPanel campaignId={campaignId} />}
+        </div>
       </div>
 
       {/* Stat cards — campaign-wide totals from their own count queries, so they
