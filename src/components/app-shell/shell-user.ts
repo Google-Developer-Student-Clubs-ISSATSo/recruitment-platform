@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { getEffectivePermissions } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
 import { getLeadRolesForUser } from "@/lib/identity-color-store";
 import { resolveIdentityColor, type IdentityColor } from "@/lib/identity-color";
@@ -40,12 +41,14 @@ export async function getShellUser(): Promise<ShellUser> {
     select: {
       name: true,
       committee: true,
-      permissions: { select: { permission: true } },
       roleTemplate: { select: { name: true } },
     },
   });
 
-  const permissions = user?.permissions.map((p) => p.permission) ?? [];
+  // Effective, not raw: a capped Club Lead's stored TM_REVIEWER rows must not
+  // resurface here, or the sidebar would offer links hasPermission then
+  // denies at the route (see CLUB_LEAD_CAPPED_PERMISSIONS in lib/permissions).
+  const permissions = await getEffectivePermissions(userId);
   const canManageAccounts = permissions.includes(PermissionKey.MANAGE_ACCOUNTS);
   const templateLabel = user?.roleTemplate
     ? ROLE_TEMPLATE_LABELS[user.roleTemplate.name]

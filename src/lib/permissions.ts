@@ -65,6 +65,40 @@ export const isCappedTmClubLead = cache(async function isCappedTmClubLead(
 });
 
 /**
+ * Apply the Club Lead cap to an already-known permission list. Split out from
+ * {@link getEffectivePermissions} so a caller that already fetched a user's
+ * raw permissions in the same query (e.g. the Admin Settings table, which
+ * loads every row's permissions in one bulk query) doesn't need a second
+ * round trip through {@link getUserPermissions} just to re-derive the same
+ * list — it only needs the capped-or-not verdict from
+ * {@link isCappedTmClubLead}.
+ */
+export function applyClubLeadCap(
+  permissions: readonly PermissionKey[],
+  isCapped: boolean,
+): PermissionKey[] {
+  if (!isCapped) return [...permissions];
+  return permissions.filter((p) => !CLUB_LEAD_CAPPED_PERMISSIONS.has(p));
+}
+
+/**
+ * A user's REAL, effective permission set: stored grants with the Club Lead
+ * cap applied. This — not {@link getUserPermissions} — is what every surface
+ * that displays or derives from "what can this user do" should read, so nav
+ * rendering, the Admin Settings table, and the actual route/action gates
+ * (hasPermission below) can never disagree about a capped user's access.
+ */
+export async function getEffectivePermissions(
+  userId: string,
+): Promise<PermissionKey[]> {
+  const [permissions, capped] = await Promise.all([
+    getUserPermissions(userId),
+    isCappedTmClubLead(userId),
+  ]);
+  return applyClubLeadCap(permissions.map((p) => p.permission), capped);
+}
+
+/**
  * Derived from the request-cached permission LIST rather than querying for the
  * one key. A single render asks about several different permissions — the page
  * guard, then each `<PermissionGate>`, then per-section checks — and a
@@ -77,17 +111,8 @@ export async function hasPermission(
   userId: string,
   permission: PermissionKey,
 ): Promise<boolean> {
-  const permissions = await getUserPermissions(userId);
-  if (!permissions.some((p) => p.permission === permission)) return false;
-
-  if (
-    CLUB_LEAD_CAPPED_PERMISSIONS.has(permission) &&
-    (await isCappedTmClubLead(userId))
-  ) {
-    return false;
-  }
-
-  return true;
+  const effective = await getEffectivePermissions(userId);
+  return effective.includes(permission);
 }
 
 /**

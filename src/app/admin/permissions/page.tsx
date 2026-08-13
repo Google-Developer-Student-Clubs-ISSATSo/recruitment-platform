@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { applyClubLeadCap, isCappedTmClubLead } from "@/lib/permissions";
 import {
   Committee,
   PermissionKey,
@@ -173,16 +174,28 @@ export default async function PermissionsPage({
     }),
   ]);
 
-  const toRow = (u: UserQueryRow): AdminUserRow => {
-    const permissions = u.permissions.map((p) => p.permission);
+  const toRow = async (u: UserQueryRow): Promise<AdminUserRow> => {
+    const rawPermissions = u.permissions.map((p) => p.permission);
     // The user's OWN assigned template is the reference. (Defensive fallback
     // to Committee Representative only if a legacy row has none.)
     const templateName = u.roleTemplate?.name ?? RoleTemplateName.COMMITTEE_REPRESENTATIVE;
     const templatePerms = u.roleTemplate?.permissions.map((p) => p.permission) ?? [];
-    const isCustom = !samePermissions(permissions, templatePerms);
+    // Template-drift tracking stays on the RAW stored grants — it answers "did
+    // an admin customize this account away from its template", which is a
+    // storage question, unaffected by whether the Club Lead cap currently
+    // suppresses some of those grants at runtime.
+    const isCustom = !samePermissions(rawPermissions, templatePerms);
     const templateLabel = ROLE_TEMPLATE_LABELS[templateName];
     const leadRoles = leadRolesByUser.get(u.id) ?? [];
     const primaryRole = resolvePrimaryRole({ templateLabel, leadRoles });
+    // The permission grid and access-level bar, though, must show what this
+    // user can ACTUALLY do — the same effective set hasPermission() enforces
+    // — so a capped Club Lead's grid doesn't read "Granted" on something the
+    // route guard would refuse them. See lib/permissions.ts.
+    const permissions = applyClubLeadCap(
+      rawPermissions,
+      await isCappedTmClubLead(u.id),
+    );
 
     return {
       id: u.id,
@@ -199,8 +212,8 @@ export default async function PermissionsPage({
     };
   };
 
-  const leads = leadUsers.map(toRow);
-  const members = memberUsers.map(toRow);
+  const leads = await Promise.all(leadUsers.map(toRow));
+  const members = await Promise.all(memberUsers.map(toRow));
 
   const customizedCount = statsUsers.filter((u) => {
     const perms = u.permissions.map((p) => p.permission);

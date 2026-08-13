@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import { StaggerGroup, StaggerItem } from "@/components/motion/stagger";
-import { getUserPermissions } from "@/lib/permissions";
+import { getEffectivePermissions } from "@/lib/permissions";
 import type { PermissionKey } from "@/generated/prisma/enums";
 import {
   CAMPAIGN_PAGE_PERMISSIONS,
@@ -103,9 +103,7 @@ export async function QuickLinksGrid({
   campaignId: string;
   userId: string;
 }) {
-  const held = new Set(
-    (await getUserPermissions(userId)).map((p) => p.permission),
-  );
+  const held = new Set(await getEffectivePermissions(userId));
 
   const links: QuickLink[] = [
     ...CAMPAIGN_LINKS.map((link) => ({
