@@ -8,6 +8,7 @@ import type { PermissionKey } from "@/generated/prisma/enums";
 // Value import (not just the type) — the interview-note helpers below compare
 // against specific permission keys at runtime.
 import { PermissionKey as PermissionKeyEnum } from "@/generated/prisma/enums";
+import { Committee, LeadRole } from "@/generated/prisma/enums";
 
 export const getUserPermissions = cache(async function getUserPermissions(
   userId: string,
@@ -16,6 +17,51 @@ export const getUserPermissions = cache(async function getUserPermissions(
     where: { userId },
     orderBy: { permission: "asc" },
   });
+});
+
+/**
+ * The permissions TM_REVIEWER has beyond COMMITTEE_REPRESENTATIVE's baseline.
+ * RoleTemplate is assigned once at account creation from committee
+ * (roleTemplateForCommittee) and never re-derived, so these normally just sit
+ * on every TM-committee member's account as-expected. But Club Lead is
+ * deliberately committee-unrestricted (LEAD_ROLE_COMMITTEE in
+ * lib/campaign-leads.ts) specifically so it can reach across committees — a
+ * TM-committee member who becomes Club Lead keeps their TM_REVIEWER rows
+ * verbatim, which would leave the club's cross-committee representative with
+ * a standing view into the full applicant pool and Phase 1 screening that no
+ * other Lead role gets. Club Lead should always sit at
+ * Committee-Representative baseline, regardless of home committee.
+ */
+export const CLUB_LEAD_CAPPED_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PermissionKeyEnum.VIEW_FULL_POOL,
+  PermissionKeyEnum.SCREEN_PHASE1,
+  PermissionKeyEnum.ENTER_INTERVIEW_SLOT,
+]);
+
+/**
+ * True when userId is a TM-committee member currently holding CLUB_LEAD in
+ * any campaign — the one case where a stored TM_REVIEWER permission row must
+ * not be taken at face value (see CLUB_LEAD_CAPPED_PERMISSIONS above). This
+ * checks live, rather than revoking/restoring the stored rows, because
+ * template-baseline grants and genuine admin-granted MANUAL permissions are
+ * indistinguishable in storage (PermissionSource has no separate "from
+ * template" value) — capping at check time is non-destructive and needs
+ * nothing to be restored when the Club Lead title moves to someone else.
+ */
+export const isCappedTmClubLead = cache(async function isCappedTmClubLead(
+  userId: string,
+): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { committee: true },
+  });
+  if (user?.committee !== Committee.TM) return false;
+
+  const lead = await prisma.campaignLead.findFirst({
+    where: { userId, role: LeadRole.CLUB_LEAD },
+    select: { id: true },
+  });
+  return lead !== null;
 });
 
 /**
@@ -32,7 +78,16 @@ export async function hasPermission(
   permission: PermissionKey,
 ): Promise<boolean> {
   const permissions = await getUserPermissions(userId);
-  return permissions.some((p) => p.permission === permission);
+  if (!permissions.some((p) => p.permission === permission)) return false;
+
+  if (
+    CLUB_LEAD_CAPPED_PERMISSIONS.has(permission) &&
+    (await isCappedTmClubLead(userId))
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 /**

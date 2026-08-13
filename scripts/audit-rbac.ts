@@ -5,6 +5,8 @@ import {
   hasAnyPermission,
   canEditInterviewNote,
   canViewInterviewNote,
+  isCappedTmClubLead,
+  CLUB_LEAD_CAPPED_PERMISSIONS,
 } from "../src/lib/permissions";
 import {
   CAMPAIGN_PAGE_PERMISSIONS,
@@ -496,11 +498,20 @@ async function main() {
     select: { id: true, email: true, permissions: { select: { permission: true } } },
     orderBy: { email: "asc" },
   });
-  const users: SeededUser[] = rows.map((u) => ({
-    id: u.id,
-    email: u.email,
-    keys: new Set(u.permissions.map((p) => p.permission)),
-  }));
+  const users: SeededUser[] = [];
+  for (const u of rows) {
+    const keys = new Set(u.permissions.map((p) => p.permission));
+    // A TM-committee Club Lead's VIEW_FULL_POOL/SCREEN_PHASE1/
+    // ENTER_INTERVIEW_SLOT rows are capped live by hasPermission (see
+    // isCappedTmClubLead) even though they're still present in storage — drop
+    // them from this seeded identity's expected key set so Section 1's
+    // "holder must be ALLOWED" positive control reflects the real gate
+    // decision instead of the stale stored grant.
+    if (await isCappedTmClubLead(u.id)) {
+      for (const capped of CLUB_LEAD_CAPPED_PERMISSIONS) keys.delete(capped);
+    }
+    users.push({ id: u.id, email: u.email, keys });
+  }
   console.log(`Loaded ${users.length} seeded users as test identities.`);
 
   await auditGateMatrix(users);
