@@ -1,10 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
-
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/app-shell/icon";
+import { useSoftRefresh } from "@/lib/use-soft-refresh";
 
 /**
  * Manual soft refresh for a server-rendered page.
@@ -27,14 +25,25 @@ import { Icon } from "@/components/app-shell/icon";
 export function RefreshButton({
   label = "Refresh",
   ariaLabel = "Refresh this page",
+  pending: pendingProp,
+  onRefresh,
 }: {
   /** Button text. Kept short — it sits in a header row beside other actions. */
   label?: string;
   /** Spoken name. Say what is refreshed, since "Refresh" alone is ambiguous. */
   ariaLabel?: string;
+  /**
+   * Share a transition with another trigger on the same page (e.g. interval
+   * polling via <AutoRefresh>), so a manual click and a poll tick can never
+   * both be in flight as separate refreshes. Omit either prop to keep this
+   * button self-contained, as every existing call site does today.
+   */
+  pending?: boolean;
+  onRefresh?: () => void;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const own = useSoftRefresh();
+  const pending = pendingProp ?? own.pending;
+  const refresh = onRefresh ?? own.refresh;
 
   return (
     <Button
@@ -42,7 +51,7 @@ export function RefreshButton({
       variant="outline"
       disabled={pending}
       aria-label={ariaLabel}
-      onClick={() => startTransition(() => router.refresh())}
+      onClick={refresh}
     >
       <Icon
         name="refresh"

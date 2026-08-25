@@ -1,7 +1,7 @@
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
 import type { AnswerPanelQuestion } from "@/lib/phase1-answers";
 import { ImportPanel } from "./import/import-panel";
-import { RefreshButton } from "@/components/refresh-button";
+import { RefreshControls } from "@/components/refresh-controls";
 import { ApplicantsRows } from "./applicants-rows";
 import { Pagination } from "./Pagination";
 import {
@@ -102,8 +102,10 @@ export function ApplicantsView({
         </div>
         <div className="flex items-center gap-3">
           {/* Safe here: every row renders straight from server props — the only
-              client state in <ApplicantsRows> is which dialog is open. */}
-          <RefreshButton ariaLabel="Refresh applicant list" />
+              client state in <ApplicantsRows> is which dialog is open. Polls
+              every 30s so a new Form submission (or CSV import) shows up
+              without a manual refresh; paused while the tab is backgrounded. */}
+          <RefreshControls ariaLabel="Refresh applicant list" intervalMs={30_000} />
           {canImport && <ImportPanel campaignId={campaignId} />}
         </div>
       </div>

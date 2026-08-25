@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 
@@ -14,49 +14,75 @@ import {
   timeAgo,
   type ActivityItem,
 } from "@/lib/activity-descriptions";
-import { markActivityViewed } from "./notification-actions";
+import { usePolling } from "@/lib/use-polling";
+import { markActivityViewed, getNotificationState } from "./notification-actions";
+
+const POLL_INTERVAL_MS = 30_000;
 
 // Client half of the notification bell: the Popover trigger + recent-activity
-// preview. Permission gating and data fetching live in the server-side
-// <NotificationBell> that renders this.
+// preview, kept live by polling getNotificationState() on the same
+// visibility-aware interval the Applicants page's auto-refresh uses.
+// Permission gating and the initial fetch live in the server-side
+// <NotificationBell> that renders this — a user without VIEW_ACTIVITY_LOG
+// never mounts this component, so no polling ever starts for them.
 export function NotificationBellMenu({
-  items,
-  hasUnread,
+  initialItems,
+  initialLastViewedActivityAt,
 }: {
-  items: ActivityItem[];
-  /** Server-computed: is there activity newer than this user last saw? */
-  hasUnread: boolean;
+  initialItems: ActivityItem[];
+  initialLastViewedActivityAt: string | null;
 }) {
-  // Controlled so "View all" can explicitly close the popover as it navigates —
-  // otherwise it stays open behind the newly-loaded activity-log page.
   const [open, setOpen] = useState(false);
-  // Locally suppress the dot the moment the feed is opened, so it clears
-  // instantly rather than waiting for the next server render to catch up.
-  const [seen, setSeen] = useState(false);
-  const [, startTransition] = useTransition();
+  const [items, setItems] = useState(initialItems);
+  // Compared against items[0] to derive the unread dot — see
+  // getNotificationState's doc comment for why this stays a raw timestamp
+  // instead of a pre-computed boolean: a poll tick and an optimistic "just
+  // opened the bell" update both need to redo this comparison against
+  // whatever `items` currently holds, not a snapshot taken elsewhere.
+  const [lastViewedIso, setLastViewedIso] = useState(initialLastViewedActivityAt);
 
-  const showDot = hasUnread && !seen;
+  const hasUnread =
+    items.length > 0 &&
+    (lastViewedIso === null || items[0].createdAtISO > lastViewedIso);
+
+  usePolling(() => {
+    void getNotificationState().then((state) => {
+      setItems(state.items);
+      // Only adopt the server's lastViewedActivityAt if it's newer than what
+      // we already know. Opening the bell sets it optimistically below,
+      // ahead of markActivityViewed()'s write landing — without this guard,
+      // a poll tick that lands in that gap would read the old DB value and
+      // undo the optimistic clear, flashing the dot back on.
+      setLastViewedIso((current) =>
+        current === null ||
+        (state.lastViewedActivityAt !== null &&
+          state.lastViewedActivityAt > current)
+          ? state.lastViewedActivityAt
+          : current,
+      );
+    });
+  }, POLL_INTERVAL_MS);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    // Opening the feed marks it seen. Fire-and-forget the persist; the dot is
-    // hidden optimistically regardless of how the write goes.
-    if (next && showDot) {
-      setSeen(true);
-      startTransition(() => {
-        void markActivityViewed();
-      });
+    if (next && hasUnread) {
+      // Optimistic: clears the dot immediately rather than waiting on the
+      // persist below, and — since it's derived from real item timestamps,
+      // not a boolean flag — stays correct if a newer activity arrives on a
+      // later poll tick (hasUnread recomputes true again, as it should).
+      setLastViewedIso(new Date().toISOString());
+      void markActivityViewed();
     }
   }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
-        aria-label={showDot ? "Notifications (unread)" : "Notifications"}
+        aria-label={hasUnread ? "Notifications (unread)" : "Notifications"}
         className="relative flex size-9 cursor-pointer items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-primary dark:text-neutral-400 dark:hover:bg-neutral-800"
       >
         <Bell className="size-5" aria-hidden />
-        {showDot && (
+        {hasUnread && (
           <span
             aria-hidden
             className="absolute right-1.5 top-1.5 size-2 rounded-full bg-status-rejected ring-2 ring-white dark:ring-neutral-900"
