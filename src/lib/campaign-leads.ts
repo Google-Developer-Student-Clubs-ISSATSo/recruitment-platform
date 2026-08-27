@@ -235,3 +235,50 @@ export async function assignCampaignLead({
     });
   }
 }
+
+/**
+ * Revoke every lead role's auto-granted permission for a campaign that is
+ * closing. `assignCampaignLead` already handles revocation on reassignment,
+ * but a lead who simply keeps their title until the campaign closes was
+ * never covered — closing is the other way the role effectively ends. The
+ * CampaignLead row itself is left in place as the historical record of who
+ * led the campaign; only the stored permission side effect is cleaned up.
+ *
+ * Same MANUAL-grant protection as the reassignment branch above: a holder's
+ * permission is deleted only if its source is still LEAD_ROLE.
+ */
+export async function revokeLeadRolePermissionsForCampaign(
+  campaignId: string,
+  actorId: string,
+): Promise<void> {
+  const leads = await prisma.campaignLead.findMany({
+    where: { campaignId },
+    select: { role: true, userId: true },
+  });
+
+  for (const { role, userId } of leads) {
+    const autoPermission = AUTO_GRANTED_PERMISSION[role];
+    if (!autoPermission) continue;
+
+    const grant = await prisma.userPermission.findUnique({
+      where: { userId_permission: { userId, permission: autoPermission } },
+      select: { id: true, source: true },
+    });
+    if (!grant || grant.source !== PermissionSource.LEAD_ROLE) continue;
+
+    await prisma.userPermission.delete({ where: { id: grant.id } });
+    await logActivity({
+      actorId,
+      actionType: "PERMISSION_AUTO_REVOKED",
+      targetType: "User",
+      targetId: userId,
+      campaignId,
+      details: {
+        permission: autoPermission,
+        reason: `Automatically revoked: campaign closed while holding ${LEAD_ROLE_LABELS[role]}.`,
+        campaignId,
+        role,
+      },
+    });
+  }
+}

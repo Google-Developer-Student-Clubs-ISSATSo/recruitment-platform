@@ -6,10 +6,24 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import { setGdgDayDetailsAction, sendPhaseOneEmailsAction } from "./actions";
+import { PHASE1_TEMPLATE } from "@/lib/phase1-email-templates";
 
 type Tally = { total: number; sent: number };
 type SendFailure = { name: string; email: string; error: string };
 type SendSummary = { sent: number; failed: number; skipped: number; failures: SendFailure[] };
+type PersistedFailure = {
+  applicantId: string;
+  fullName: string;
+  email: string;
+  templateKey: string;
+  error: string;
+  sentAt: string;
+};
+
+const TEMPLATE_LABEL: Record<string, string> = {
+  [PHASE1_TEMPLATE.ACCEPTANCE]: "Acceptance",
+  [PHASE1_TEMPLATE.REJECTION]: "Rejection",
+};
 
 /** UTC-derived so server and client agree — no hydration mismatch. */
 function formatSentAt(iso: string): string {
@@ -31,6 +45,7 @@ export function EmailPanel({
   acceptance,
   rejection,
   lastSentAtISO,
+  persistedFailures,
 }: {
   campaignId: string;
   canSendEmails: boolean;
@@ -40,6 +55,7 @@ export function EmailPanel({
   acceptance: Tally;
   rejection: Tally;
   lastSentAtISO: string | null;
+  persistedFailures: PersistedFailure[];
 }) {
   const gdgDaySet = gdgDayInputValue !== null && gdgDayLocation !== null;
 
@@ -52,6 +68,14 @@ export function EmailPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<SendSummary | null>(null);
+
+  // If a send just happened, its (fresher) result.failures entry wins over
+  // the DB-backed persisted one for the same applicant, so nobody's shown
+  // twice right after a send.
+  const resultFailureEmails = new Set((result?.failures ?? []).map((f) => f.email));
+  const visiblePersistedFailures = persistedFailures.filter(
+    (f) => !resultFailureEmails.has(f.email),
+  );
 
   const acceptancePending = acceptance.total - acceptance.sent;
   const rejectionPending = rejection.total - rejection.sent;
@@ -300,6 +324,23 @@ export function EmailPanel({
               ))}
             </ul>
           )}
+        </div>
+      )}
+
+      {/* Persisted (DB-backed) failures — survive reloads, independent of this session's `result` */}
+      {visiblePersistedFailures.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-status-rejected/30 bg-status-rejected/10 p-4 text-sm">
+          <p className="font-medium text-status-rejected">
+            Currently failing — will be retried automatically on the next send
+          </p>
+          <ul className="space-y-1 text-xs text-status-rejected">
+            {visiblePersistedFailures.map((f) => (
+              <li key={`${f.applicantId}:${f.templateKey}`}>
+                {f.fullName} ({f.email}) — {TEMPLATE_LABEL[f.templateKey] ?? f.templateKey}
+                : {f.error} (attempted {formatSentAt(f.sentAt)})
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

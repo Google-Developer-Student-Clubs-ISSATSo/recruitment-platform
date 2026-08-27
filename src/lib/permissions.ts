@@ -40,13 +40,16 @@ export const CLUB_LEAD_CAPPED_PERMISSIONS: ReadonlySet<PermissionKey> = new Set(
 
 /**
  * True when userId is a TM-committee member currently holding CLUB_LEAD in
- * any campaign — the one case where a stored TM_REVIEWER permission row must
- * not be taken at face value (see CLUB_LEAD_CAPPED_PERMISSIONS above). This
- * checks live, rather than revoking/restoring the stored rows, because
- * template-baseline grants and genuine admin-granted MANUAL permissions are
- * indistinguishable in storage (PermissionSource has no separate "from
- * template" value) — capping at check time is non-destructive and needs
- * nothing to be restored when the Club Lead title moves to someone else.
+ * an OPEN campaign — the one case where a stored TM_REVIEWER permission row
+ * must not be taken at face value (see CLUB_LEAD_CAPPED_PERMISSIONS above).
+ * Closed campaigns are excluded on purpose — a title from a finished cycle
+ * is history, not present identity (same scoping and rationale as
+ * `getLeadRolesForUser` in identity-color-store.ts). This checks live,
+ * rather than revoking/restoring the stored rows, because template-baseline
+ * grants and genuine admin-granted MANUAL permissions are indistinguishable
+ * in storage (PermissionSource has no separate "from template" value) —
+ * capping at check time is non-destructive and needs nothing to be restored
+ * when the Club Lead title moves to someone else.
  */
 export const isCappedTmClubLead = cache(async function isCappedTmClubLead(
   userId: string,
@@ -58,7 +61,7 @@ export const isCappedTmClubLead = cache(async function isCappedTmClubLead(
   if (user?.committee !== Committee.TM) return false;
 
   const lead = await prisma.campaignLead.findFirst({
-    where: { userId, role: LeadRole.CLUB_LEAD },
+    where: { userId, role: LeadRole.CLUB_LEAD, campaign: { isOpen: true } },
     select: { id: true },
   });
   return lead !== null;

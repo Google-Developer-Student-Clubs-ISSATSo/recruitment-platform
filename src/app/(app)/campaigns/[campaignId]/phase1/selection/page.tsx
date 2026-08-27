@@ -61,6 +61,7 @@ export default async function Phase1SelectionPage({
       select: {
         id: true,
         fullName: true,
+        email: true,
         status: true,
         phaseOneScores: { select: { questionId: true } },
         phaseOneResult: {
@@ -75,6 +76,7 @@ export default async function Phase1SelectionPage({
         templateKey: true,
         status: true,
         sentAt: true,
+        errorMessage: true,
       },
     }),
     hasPermission(userId, PermissionKey.SEND_EMAILS),
@@ -139,6 +141,37 @@ export default async function Phase1SelectionPage({
       null,
     );
 
+  // A FAILED log only counts as "currently failing" if no later SENT row
+  // exists for the same applicant+template — a retried-successfully send
+  // shouldn't still show as failing.
+  const sentKeys = new Set(
+    emailLogs
+      .filter((l) => l.status === "SENT")
+      .map((l) => `${l.applicantId}:${l.templateKey}`),
+  );
+  const applicantsById = new Map(applicants.map((a) => [a.id, a]));
+  const latestFailureByKey = new Map<string, (typeof emailLogs)[number]>();
+  for (const l of emailLogs) {
+    if (l.status !== "FAILED") continue;
+    const key = `${l.applicantId}:${l.templateKey}`;
+    if (sentKeys.has(key)) continue;
+    const existing = latestFailureByKey.get(key);
+    if (!existing || l.sentAt > existing.sentAt) {
+      latestFailureByKey.set(key, l);
+    }
+  }
+  const persistedFailures = Array.from(latestFailureByKey.values()).map((l) => {
+    const applicant = applicantsById.get(l.applicantId);
+    return {
+      applicantId: l.applicantId,
+      fullName: applicant?.fullName ?? "Unknown applicant",
+      email: applicant?.email ?? "",
+      templateKey: l.templateKey,
+      error: l.errorMessage ?? "Unknown error",
+      sentAt: l.sentAt.toISOString(),
+    };
+  });
+
   return (
     <div className="space-y-6">
       <SelectionClient
@@ -168,6 +201,7 @@ export default async function Phase1SelectionPage({
             acceptance={acceptance}
             rejection={rejection}
             lastSentAtISO={lastSentAt?.toISOString() ?? null}
+            persistedFailures={persistedFailures}
           />
         </div>
       )}

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { hasAnyPermission } from "@/lib/permissions";
 import { activityLogWrite, logActivity } from "@/lib/activity-log";
 import { seedMktSkillWhitelist } from "@/lib/mkt-skills-store";
+import { revokeLeadRolePermissionsForCampaign } from "@/lib/campaign-leads";
 import { CAMPAIGN_CREATE_PERMISSIONS } from "@/lib/route-permissions";
 
 export type CreateCampaignState = {
@@ -69,6 +70,16 @@ export async function createCampaign(
  * toggle. Closing matters: per the campaign-scoping rules a closed campaign is
  * only enterable by VIEW_CAMPAIGN_HISTORY / MANAGE_ACCOUNTS holders (see the
  * campaign layout guard), so flipping this changes who can reach the campaign.
+ *
+ * Closing also steps down every lead role's auto-granted permission
+ * (revokeLeadRolePermissionsForCampaign) — a lead's title stops being present
+ * identity the moment the campaign closes (see isCappedTmClubLead /
+ * getLeadRolesForUser), so the capability it granted should stop too, the
+ * same as it would on reassignment. This is deliberately one-directional:
+ * reopening a campaign does NOT re-grant those permissions. A step-down is
+ * treated as real, matching how reassignment already treats permission loss
+ * as something that requires a deliberate new grant to restore, never an
+ * automatic one.
  */
 export async function setCampaignStatus(
   campaignId: string,
@@ -98,6 +109,10 @@ export async function setCampaignStatus(
     where: { id: campaignId },
     data: { isOpen },
   });
+
+  if (campaign.isOpen && !isOpen) {
+    await revokeLeadRolePermissionsForCampaign(campaignId, userId);
+  }
 
   await logActivity({
     actorId: userId,
