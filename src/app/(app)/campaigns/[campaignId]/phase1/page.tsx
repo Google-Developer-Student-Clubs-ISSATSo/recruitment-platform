@@ -7,11 +7,24 @@ import { PermissionKey, ApplicantStatus } from "@/generated/prisma/enums";
 import { Phase1ScoringClient } from "./Phase1ScoringClient";
 import type { Phase1Applicant, Phase1Question, ViewMode } from "./types";
 
-// Exact rawFormData keys the technical-only view is allowed to see.
+// Keys the technical-only payload is sent to the client under. The client reads
+// these exact names, so they stay fixed — they are NOT the form's headers.
 const GITHUB_FIELD = "GitHub link";
 const LINKEDIN_FIELD = "LinkedIn link";
 const SOFT_SKILLS_FIELD = "Soft skills";
 const OTHER_SKILLS_FIELD = "Other skills";
+
+// rawFormData is stored under the Google Form's exact question titles
+// (e.g. "Github Profile Link:", "Your soft skills: "), which change from one
+// form to the next. So instead of an exact-key lookup, find the stored key whose
+// normalised form (lowercase, letters/digits only) contains the needle.
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function pick(raw: Record<string, unknown>, needle: string): string | null {
+  const key = Object.keys(raw).find((k) => norm(k).includes(needle));
+  const v = key ? raw[key] : null;
+  return typeof v === "string" && v.trim() ? v : null;
+}
 
 // Phase 1 Scoring Queue. Data entry only — reviewers and the Technical Scorer
 // enter scores; ranking/auto-classification is a later stage. Everything is
@@ -75,7 +88,8 @@ export default async function Phase1Page({
 
   const activeQuestions: Phase1Question[] = questionRows;
   const activeIds = new Set(activeQuestions.map((q) => q.id));
-  const technical = activeQuestions.find((q) => q.requiresTechnicalScorer) ?? null;
+  const technical =
+    activeQuestions.find((q) => q.requiresTechnicalScorer) ?? null;
 
   // What the client renders controls for: everything for full reviewers, ONLY
   // the Technical question for the technical-only viewer (so no other question
@@ -84,7 +98,9 @@ export default async function Phase1Page({
     viewMode === "full" ? activeQuestions : technical ? [technical] : [];
 
   const applicants: Phase1Applicant[] = applicantRows.map((a) => {
-    const activeScores = a.phaseOneScores.filter((s) => activeIds.has(s.questionId));
+    const activeScores = a.phaseOneScores.filter((s) =>
+      activeIds.has(s.questionId),
+    );
     const scoredCount = activeScores.length; // across all active questions
 
     if (viewMode === "full") {
@@ -101,16 +117,13 @@ export default async function Phase1Page({
     }
 
     // technical-only: hand the client only what it's allowed to see. The other
-    // 8 answers and their scores are dropped here, server-side.
+    // answers and their scores are dropped here, server-side.
     const raw = (a.rawFormData ?? {}) as Record<string, unknown>;
     const restricted: Record<string, unknown> = {
-      [GITHUB_FIELD]: typeof raw[GITHUB_FIELD] === "string" ? raw[GITHUB_FIELD] : null,
-      [LINKEDIN_FIELD]:
-        typeof raw[LINKEDIN_FIELD] === "string" ? raw[LINKEDIN_FIELD] : null,
-      [SOFT_SKILLS_FIELD]:
-        typeof raw[SOFT_SKILLS_FIELD] === "string" ? raw[SOFT_SKILLS_FIELD] : null,
-      [OTHER_SKILLS_FIELD]:
-        typeof raw[OTHER_SKILLS_FIELD] === "string" ? raw[OTHER_SKILLS_FIELD] : null,
+      [GITHUB_FIELD]: pick(raw, "github"),
+      [LINKEDIN_FIELD]: pick(raw, "linkedin"),
+      [SOFT_SKILLS_FIELD]: pick(raw, "softskills"),
+      [OTHER_SKILLS_FIELD]: pick(raw, "otherskills"),
     };
     const scores: Record<string, number> = {};
     if (technical) {
