@@ -41,7 +41,7 @@ const SOCIAL_LEFT: Social[] = [
   {
     label: "Facebook",
     handle: "/GDGC.ISSATSo",
-    href: "https://www.facebook.com/gdgoc.issatso",
+    href: "https://www.facebook.com/gdgc.issatso",
   },
   {
     label: "LinkedIn",
