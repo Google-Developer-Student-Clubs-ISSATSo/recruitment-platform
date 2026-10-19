@@ -17,31 +17,59 @@ const NOTE_MAX_LENGTH = 2000;
  * "Saved" receipt that stays until the next keystroke mirrors how the button
  * animations acknowledge a score pick.
  *
- * Rendered keyed by applicant id, so switching people swaps the textarea to
- * that person's note rather than leaking one applicant's draft into the next.
+ * Rendered keyed by applicant id (key={applicantId} at the Phase1ScoringClient
+ * call site), which resets only this component's EPHEMERAL per-applicant state:
+ * the "Saved" flash, the error line, the pending-save UI. The note text itself
+ * lives in Phase1ScoringClient's draft record and is handed in through props,
+ * so switching people can never destroy an unsaved draft, and the
+ * last-acknowledged baseline travels with it so "Saved" stays true across the
+ * round trip.
  */
 export function ScoringNote({
   campaignId,
   applicantId,
   initialNote,
+  draft,
+  savedBaseline,
+  onDraftChange,
+  onSaved,
 }: {
   campaignId: string;
   applicantId: string;
   initialNote: string;
+  /** Live text for this applicant, owned by Phase1ScoringClient as
+   *  Record<applicantId, string>; undefined means "no local edits yet". */
+  draft?: string;
+  /** The text last acknowledged by the server for this applicant, also owned
+   *  by Phase1ScoringClient so it survives the keyed remount — the server props'
+   *  `note` is only a mount/refresh-time snapshot and never advances on save. */
+  savedBaseline?: string;
+  onDraftChange: (value: string) => void;
+  /** Fired with the acknowledged text after a successful save: the parent
+   *  advances its baseline and clears the (matching) unsaved draft entry. */
+  onSaved: (savedText: string) => void;
 }) {
-  const [text, setText] = useState(initialNote);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
 
-  const dirty = text !== initialNote;
+  // Text is controlled from the parent: an unsaved edit, else the last
+  // acknowledged save, else the server snapshot. `dirty` is measured against
+  // the acknowledged baseline, never against `initialNote` alone — that prop
+  // never advances on save, so comparing to it made a successful save report
+  // "Unsaved changes" forever.
+  const text = draft ?? savedBaseline ?? initialNote;
+  const dirty = text !== (savedBaseline ?? initialNote);
 
   function save() {
     setError(null);
     startSave(async () => {
       const res = await savePhaseOneNote(campaignId, applicantId, text);
       if (res.ok) {
-        // Receipt until the next keystroke resets it.
+        // Hand the acknowledged text up before the "Saved" receipt, so the
+        // parent advances its baseline in the same commit and dirty goes
+        // false with the flash, not one render later.
+        onSaved(text);
         setSavedFlash(true);
       } else {
         setError(res.error);
@@ -66,7 +94,7 @@ export function ScoringNote({
         value={text}
         maxLength={NOTE_MAX_LENGTH}
         onChange={(e) => {
-          setText(e.target.value);
+          onDraftChange(e.target.value);
           setSavedFlash(false);
         }}
         rows={3}

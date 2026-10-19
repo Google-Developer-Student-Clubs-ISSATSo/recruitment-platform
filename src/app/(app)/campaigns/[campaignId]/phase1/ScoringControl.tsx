@@ -16,6 +16,13 @@ export function fmtScale(n: number) {
 // Lead configures (0/0.5/1, or 0/0.25/0.5/0.75/1, or a narrowed binary scale)
 // renders here automatically.
 //
+// `saving` is PER-ROW: while this question's write is in flight, a small
+// pulsing dot appears next to the scale and the row's buttons go inert
+// (aria-disabled + reduced opacity, pick clicks ignored) so focus is never
+// yanked mid-sequence. Other rows stay fully usable — the caller tracks
+// in-flight saves per (applicantId, questionId), so a slow save anywhere else
+// on the page freezes nothing here.
+//
 // When not editable it shows the current value read-only with a lock label
 // (e.g. "Scored by Technical Team" for the technical question viewed by a plain
 // reviewer), or a waiting placeholder if nothing has been scored yet.
@@ -23,14 +30,14 @@ export function ScoringControl({
   noteScale,
   value,
   editable,
-  pending,
+  saving,
   lockLabel,
   onSelect,
 }: {
   noteScale: number[];
   value: number | undefined;
   editable: boolean;
-  pending: boolean;
+  saving: boolean;
   lockLabel?: string;
   onSelect: (value: number) => void;
 }) {
@@ -56,12 +63,20 @@ export function ScoringControl({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="group">
+      {/* Saving receipt for THIS row only: a pulsing dot beside the scale while
+          the write is in flight. animate-pulse, killed under reduced motion. */}
+      {saving && (
+        <span
+          aria-hidden
+          className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary motion-reduce:animate-none"
+        />
+      )}
       {noteScale.map((v) => (
         <ScoreButton
           key={v}
           value={v}
           selected={value !== undefined && Math.abs(v - value) < 1e-9}
-          pending={pending}
+          saving={saving}
           onSelect={onSelect}
         />
       ))}
@@ -78,16 +93,21 @@ export function ScoringControl({
  * the page ignored me". A 200ms scale beat gives the click a receipt. It fires
  * on every pick — including re-picking the value that's already selected, which
  * still issues a write and so still deserves feedback.
+ *
+ * `saving` is PER-ROW, not global: while this row's write is in flight its
+ * buttons go inert (`aria-disabled` + reduced opacity, never the `disabled`
+ * attribute — removing the button mid-sequence yanks keyboard focus), and the
+ * click guard ignores picks. Every other row on the page stays usable.
  */
 function ScoreButton({
   value,
   selected,
-  pending,
+  saving,
   onSelect,
 }: {
   value: number;
   selected: boolean;
-  pending: boolean;
+  saving: boolean;
   onSelect: (value: number) => void;
 }) {
   const reduced = useReducedMotion();
@@ -96,9 +116,10 @@ function ScoreButton({
   return (
     <motion.button
       type="button"
-      disabled={pending}
       aria-pressed={selected}
+      aria-disabled={saving}
       onClick={() => {
+        if (saving) return; // This row's save is in flight — ignore the pick.
         if (!reduced) setPulsing(true);
         onSelect(value);
       }}
@@ -107,10 +128,18 @@ function ScoreButton({
         reduced ? { duration: 0 } : { duration: DURATION.base, ease: EASE.out }
       }
       onAnimationComplete={() => setPulsing(false)}
-      className={`min-w-8 cursor-pointer rounded-lg border px-2 py-1.5 text-sm font-semibold transition-colors duration-150 ease-out disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none sm:min-w-9 sm:px-3 ${
+      className={`min-w-8 rounded-lg border px-2 py-1.5 text-sm font-semibold transition-colors duration-150 ease-out motion-reduce:transition-none sm:min-w-9 sm:px-3 ${
+        saving
+          ? "cursor-default opacity-50"
+          : "cursor-pointer"
+      } ${
         selected
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-neutral-300 bg-transparent text-neutral-600 hover:border-primary hover:text-primary dark:border-neutral-700 dark:text-neutral-300"
+          : saving
+            ? // Inert while saving: same chrome as idle, hover suppressed so the
+              // row never invites a click it would ignore.
+              "border-neutral-300 bg-transparent text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
+            : "border-neutral-300 bg-transparent text-neutral-600 hover:border-primary hover:text-primary dark:border-neutral-700 dark:text-neutral-300"
       }`}
     >
       {fmtScale(value)}

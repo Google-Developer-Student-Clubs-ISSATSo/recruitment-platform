@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { motion } from "motion/react";
 
 import { Icon } from "@/components/app-shell/icon";
@@ -22,6 +22,14 @@ import {
   type ViewMode,
 } from "./types";
 
+type FailedScoreAlert = {
+  applicantId: string;
+  questionId: string;
+  /** The value the failed write attempted, so Retry can re-send it verbatim. */
+  value: number;
+  message: string;
+};
+
 export function Phase1ScoringClient({
   campaignId,
   viewMode,
@@ -38,8 +46,23 @@ export function Phase1ScoringClient({
   caps: UserCaps;
 }) {
   const [applicants, setApplicants] = useState(initialApplicants);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  // Saves currently in flight, keyed "applicantId:questionId". Per-row so a
+  // slow write freezes ONLY its own scale: every other question stays fully
+  // interactive while the save lands, instead of the old global `pending`
+  // blanket-disabling every score button on the page.
+  const [savingScores, setSavingScores] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // The last FAILED score write, anchored to the row it belongs to. Rendered
+  // beside the Scoring panel header (role="alert") with a one-click Retry,
+  // instead of the old top-of-page banner that a scrolled rail or answer pane
+  // could take out of view and that was silent to assistive tech. Only the
+  // most recent failure shows — a newer failure replaces it; a success or any
+  // pick for the failed question clears it.
+  const [failedScore, setFailedScore] = useState<FailedScoreAlert | null>(
+    null,
+  );
   const reduced = useReducedMotion();
 
   // Adopt a NEW server payload when one arrives — what makes the Refresh button
@@ -72,6 +95,37 @@ export function Phase1ScoringClient({
     return firstIncomplete?.id ?? initialApplicants[0]?.id ?? null;
   });
 
+  // Unsaved note drafts, keyed by applicant, owned HERE rather than inside
+  // <ScoringNote>: switching applicants remounts that component (keyed on
+  // selected.id), and a keyed textarea would destroy an in-progress note on
+  // every switch. An entry means "this applicant has divergent unsaved text";
+  // <ScoringNote>'s onSaved clears it once the server acknowledges.
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+
+  // The text last acknowledged by the server, per applicant. The server props'
+  // `note` is only a mount/refresh-time snapshot and never advances on a save,
+  // so without this the note's "Saved" state could not survive the keyed
+  // remount — this is ScoringNote's former savedBaseline, hoisted to the owner
+  // of the draft.
+  const [noteBaselines, setNoteBaselines] = useState<Record<string, string>>({});
+
+  // After switching applicants, move focus to the scoring panel heading: the
+  // keyed crossfade remount otherwise drops focus to <body>, orphaning
+  // keyboard users mid-queue. lastViewedApplicant stays null until the first
+  // switch, so the initial page load never steals focus.
+  const scoringHeadingRef = useRef<HTMLHeadingElement>(null);
+  const lastViewedApplicant = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      selectedId &&
+      lastViewedApplicant.current !== null &&
+      lastViewedApplicant.current !== selectedId
+    ) {
+      scoringHeadingRef.current?.focus();
+    }
+    lastViewedApplicant.current = selectedId;
+  }, [selectedId]);
+
   const entries: QueueEntry[] = applicants.map((a) => ({
     id: a.id,
     fullName: a.fullName,
@@ -83,6 +137,14 @@ export function Phase1ScoringClient({
   const processed = entries.filter((e) => e.complete).length;
   const selected = applicants.find((a) => a.id === selectedId) ?? null;
 
+  // Who the failed-save alert describes, for the "saving someone else's row"
+  // case: the alert sits in the currently selected applicant's panel, but the
+  // failed write may belong to an applicant the reviewer already moved away
+  // from, so the name is prefixed to keep the alert self-explanatory.
+  const failedName = failedScore
+    ? applicants.find((a) => a.id === failedScore.applicantId)?.fullName
+    : null;
+
   // Weighted total is only shown to full reviewers — the technical-only viewer
   // never receives the other questions' scores to compute it from.
   const selectedTotal =
@@ -93,11 +155,27 @@ export function Phase1ScoringClient({
     ? selected.scoredCount === totalQuestions
     : false;
 
+  // A pick always targets the currently selected applicant.
   function score(question: Phase1Question, value: number) {
     if (!selected) return;
-    const applicantId = selected.id;
-    const prev = selected.scores[question.id];
+    saveScoreFor(selected.id, question, value);
+  }
+
+  // The single write path for a score pick, parameterised by applicant so
+  // Retry can re-send a failed save for the applicant it failed FOR, even
+  // after the reviewer has moved on to someone else. Bit-for-bit, the
+  // optimistic update and the id-keyed revert below are exactly what they
+  // were before the refactor.
+  function saveScoreFor(
+    applicantId: string,
+    question: Phase1Question,
+    value: number,
+  ) {
+    const target = applicants.find((a) => a.id === applicantId);
+    if (!target) return;
+    const prev = target.scores[question.id];
     const wasScored = prev !== undefined;
+    const saveKey = `${applicantId}:${question.id}`;
 
     // Optimistic update — also bump scoredCount if this question is newly scored.
     setApplicants((list) =>
@@ -111,7 +189,19 @@ export function Phase1ScoringClient({
           : a,
       ),
     );
-    setError(null);
+
+    // A pick for the failed question — a change of mind, or the Retry click
+    // itself — supersedes that row's alert. Alerts on other rows stay put.
+    setFailedScore((f) =>
+      f && f.applicantId === applicantId && f.questionId === question.id
+        ? null
+        : f,
+    );
+
+    // Mark this row as saving BEFORE the transition starts, so its dot appears
+    // and its buttons go inert immediately, while every other row keeps
+    // accepting picks. Cleared on both the failure and success paths below.
+    setSavingScores((prevSaving) => new Set(prevSaving).add(saveKey));
 
     startTransition(async () => {
       const res = await savePhaseOneScore(
@@ -135,9 +225,58 @@ export function Phase1ScoringClient({
             };
           }),
         );
-        setError(res.error);
+        // Surface the failure where it belongs — beside the Scoring panel
+        // header, announced by role="alert", carrying the exact write to
+        // re-send.
+        setFailedScore({
+          applicantId,
+          questionId: question.id,
+          value,
+          message: res.error,
+        });
+      } else {
+        // Success — a retried save, or a fresh pick that finally landed —
+        // clears the alert for this row.
+        setFailedScore((f) =>
+          f && f.applicantId === applicantId && f.questionId === question.id
+            ? null
+            : f,
+        );
       }
+      // The write has landed (or failed and been reverted): free the row.
+      setSavingScores((prevSaving) => {
+        if (!prevSaving.has(saveKey)) return prevSaving;
+        const next = new Set(prevSaving);
+        next.delete(saveKey);
+        return next;
+      });
     });
+  }
+
+  // One-click retry of the failed save captured in the alert: same value,
+  // same question, same applicant. A Retry while that row is already saving
+  // is ignored (the first write would double-fire), and if the rubric or the
+  // queue changed under the alert — the question no longer exists, or the
+  // applicant is gone — the alert describes nothing savable any more and is
+  // dropped instead of retrying at nothing.
+  function retryFailedScore() {
+    if (!failedScore) return;
+    if (
+      savingScores.has(
+        `${failedScore.applicantId}:${failedScore.questionId}`,
+      )
+    ) {
+      return;
+    }
+    const question = questions.find((q) => q.id === failedScore.questionId);
+    const stillListed = applicants.some(
+      (a) => a.id === failedScore.applicantId,
+    );
+    if (!question || !stillListed) {
+      setFailedScore(null);
+      return;
+    }
+    saveScoreFor(failedScore.applicantId, question, failedScore.value);
   }
 
   return (
@@ -161,11 +300,9 @@ export function Phase1ScoringClient({
         total={applicants.length}
       />
 
-      {error && (
-        <p className="rounded-lg bg-status-rejected/10 px-4 py-2 text-sm text-status-rejected">
-          {error}
-        </p>
-      )}
+      {/* (The failed-save alert lives inside the Scoring panel, next to its
+          header — see the role="alert" block below, which replaced the old
+          top-of-page error banner that could scroll out of view.) */}
 
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
         <div className={mobilePane === "detail" ? "hidden lg:block" : "block"}>
@@ -244,12 +381,51 @@ export function Phase1ScoringClient({
                   `questions`, which the server already narrowed to just the
                   Technical Skills question for the technical-only viewer. */}
               <section>
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                {/* tabIndex=-1 makes the heading a focus target below without
+                    putting it in the tab order; the ref+effect above move focus
+                    here after each applicant switch. */}
+                <h3
+                  ref={scoringHeadingRef}
+                  tabIndex={-1}
+                  className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400"
+                >
                   Scoring
                 </h3>
+
+                {/* Failed-save alert for this panel: announced immediately by
+                    role="alert" when it appears, and carrying a one-click
+                    Retry that re-sends the exact failed write (same value,
+                    same question, same applicant). Tinted with the rejected
+                    red; other rows' content is not blocked. */}
+                {failedScore && (
+                  <div
+                    role="alert"
+                    className="mb-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-status-rejected/10 px-3 py-2 text-sm text-status-rejected"
+                  >
+                    <p className="min-w-0">
+                      {failedScore.applicantId !== selected.id &&
+                        failedName && (
+                          <span className="font-semibold">
+                            {failedName} —{" "}
+                          </span>
+                        )}
+                      {failedScore.message}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={retryFailedScore}
+                      className="shrink-0 cursor-pointer rounded-lg border border-status-rejected/30 px-2.5 py-1 text-xs font-semibold text-status-rejected transition-colors duration-150 ease-out hover:bg-status-rejected/20 motion-reduce:transition-none dark:border-status-rejected/40 dark:hover:bg-status-rejected/30"
+                    >
+                      Retry save
+                    </button>
+                  </div>
+                )}
                 <div className="space-y-2.5">
                   {questions.map((q) => {
                     const editable = canEditQuestion(q, caps);
+                    const rowSaving = savingScores.has(
+                      `${selected.id}:${q.id}`,
+                    );
                     return (
                       <div
                         key={q.id}
@@ -267,7 +443,7 @@ export function Phase1ScoringClient({
                             {q.text}
                           </span>
                           {q.requiresTechnicalScorer && (
-                            <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                            <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
                               Technical
                             </span>
                           )}
@@ -280,7 +456,7 @@ export function Phase1ScoringClient({
                             noteScale={q.noteScale}
                             value={selected.scores[q.id]}
                             editable={editable}
-                            pending={pending}
+                            saving={rowSaving}
                             lockLabel={
                               q.requiresTechnicalScorer
                                 ? "Scored by Technical Team"
@@ -304,6 +480,34 @@ export function Phase1ScoringClient({
                       campaignId={campaignId}
                       applicantId={selected.id}
                       initialNote={selected.note ?? ""}
+                      draft={noteDrafts[selected.id]}
+                      savedBaseline={noteBaselines[selected.id]}
+                      onDraftChange={(value) => {
+                        const applicantId = selected.id;
+                        setNoteDrafts((prev) => ({
+                          ...prev,
+                          [applicantId]: value,
+                        }));
+                      }}
+                      onSaved={(savedText) => {
+                        const applicantId = selected.id;
+                        setNoteBaselines((prev) => ({
+                          ...prev,
+                          [applicantId]: savedText,
+                        }));
+                        // Clear the divergent-draft entry once the server has
+                        // acknowledged exactly this text — but keep any typing
+                        // that happened while the save was in flight as a live
+                        // unsaved draft instead of discarding it.
+                        setNoteDrafts((prev) => {
+                          if (prev[applicantId] === savedText) {
+                            const next = { ...prev };
+                            delete next[applicantId];
+                            return next;
+                          }
+                          return prev;
+                        });
+                      }}
                     />
                   </div>
                 )}

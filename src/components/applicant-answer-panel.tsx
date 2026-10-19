@@ -154,7 +154,10 @@ export function ApplicantAnswerPanel({
         />
         <TextCard label="Soft skills" value={readString(rawFormData, SOFT_SKILLS_FIELD)} />
         <TextCard label="Other skills" value={readString(rawFormData, OTHER_SKILLS_FIELD)} />
-        <p className="text-xs text-neutral-400">
+        {/* Muted footnote, deliberately distinct from the transient error
+            banner treatment (which is red-tinted, rounded, text-sm): smaller
+            11px meta type, muted, under a hairline divider. */}
+        <p className="border-t border-neutral-100 pt-2 text-[11px] text-neutral-400 dark:border-neutral-800/60 dark:text-neutral-500">
           Technical scorers only see identifying details, profile links, and
           skills.
         </p>
@@ -185,7 +188,7 @@ export function ApplicantAnswerPanel({
             {answer ? (
               <AnswerValue value={answer} />
             ) : (
-              <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-[color:var(--status-pending)]">
+              <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-status-pending">
                 <Icon name="help" className="text-[16px]" />
                 No answer found for this field
               </p>
@@ -268,7 +271,7 @@ function TextCard({ label, value }: { label: string; value: string }) {
           {value}
         </p>
       ) : (
-        <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-[color:var(--status-pending)]">
+        <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-status-pending">
           <Icon name="help" className="text-[16px]" />
           No answer found for this field
         </p>

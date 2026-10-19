@@ -29,7 +29,7 @@ export function ProcessedRemainingCounter({
       <div className="flex items-center gap-2">
         <Icon
           name="pending"
-          className="text-[20px] text-[color:var(--status-pending)]"
+          className="text-[20px] text-status-pending"
         />
         <span className="text-sm text-neutral-500 dark:text-neutral-400">
           Remaining
@@ -54,6 +54,13 @@ export function ProcessedRemainingCounter({
           {pct}%
         </span>
       </div>
+      {/* The caption that answers "remaining for whom?" — both counters are
+          combined progress across ALL scorers, not the current viewer's own
+          entries, and reviewers chasing this number deserve to know it will
+          not reach zero on their work alone. */}
+      <p className="w-full text-[11px] text-neutral-400 dark:text-neutral-500">
+        Team-wide — counts all scorers combined, not just your own entries.
+      </p>
     </div>
   );
 }
