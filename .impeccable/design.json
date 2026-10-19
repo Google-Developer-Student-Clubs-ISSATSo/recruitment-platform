@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-19T00:00:00.000Z",
+  "title": "Design System: GDGC ISSATSO Recruitment Platform",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "#4285f4", "tonalRamp": ["#0b1e3d", "#123a75", "#1a55ab", "#2f6fd6", "#4285f4", "#7dabf7", "#b3cdfa", "#e2ecfd"] },
+      "pass-green": { "role": "status", "displayName": "Pass Green", "canonical": "#34a853", "tonalRamp": ["#0b3d1e", "#12753a", "#1aa554", "#27bf63", "#34a853", "#6fc581", "#a8dcaf", "#dff2e4"] },
+      "fault-red": { "role": "status", "displayName": "Fault Red", "canonical": "#ea4335", "tonalRamp": ["#4d0f0a", "#8a1c12", "#c62c1f", "#ea4335", "#f17265", "#f79c93", "#fcc5c0", "#feeae8"] },
+      "hold-yellow": { "role": "status", "displayName": "Hold Yellow", "canonical": "#fbbc05", "tonalRamp": ["#4d3600", "#8a6100", "#c68f03", "#fbbc05", "#fdcb41", "#fddc74", "#feeba6", "#fff8e1"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#171717", "tonalRamp": ["#0a0a0a", "#171717", "#3d3d3d", "#5c5c5c", "#7a7a7a", "#a3a3a3", "#d4d4d4", "#f5f5f5"] },
+      "canvas": { "role": "neutral", "displayName": "Canvas", "canonical": "#ffffff", "tonalRamp": ["#171717", "#2e2e2e", "#4a4a4a", "#6e6e6e", "#919191", "#b5b5b5", "#d9d9d9", "#ffffff"] },
+      "card-surface": { "role": "neutral", "displayName": "Card Surface", "canonical": "oklch(1 0 0)", "tonalRamp": ["oklch(0.145 0 0)", "oklch(0.205 0 0)", "oklch(0.269 0 0)", "oklch(0.5 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.97 0 0)", "oklch(1 0 0)"] },
+      "muted-surface": { "role": "neutral", "displayName": "Muted Surface", "canonical": "oklch(0.97 0 0)", "tonalRamp": ["oklch(0.145 0 0)", "oklch(0.205 0 0)", "oklch(0.269 0 0)", "oklch(0.4 0 0)", "oklch(0.6 0 0)", "oklch(0.8 0 0)", "oklch(0.97 0 0)", "oklch(1 0 0)"] },
+      "divider": { "role": "neutral", "displayName": "Divider", "canonical": "oklch(0.922 0 0)", "tonalRamp": ["oklch(0.145 0 0)", "oklch(0.269 0 0)", "oklch(0.4 0 0)", "oklch(0.5 0 0)", "oklch(0.6 0 0)", "oklch(0.75 0 0)", "oklch(0.922 0 0)", "oklch(1 0 0)"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Page headings only — one per page." },
+      "label": { "displayName": "Section Label", "purpose": "Uppercase pane/card headers; the console's wayfinding lettering." },
+      "body": { "displayName": "Body", "purpose": "All reading text: question text, answers, table cells." },
+      "score": { "displayName": "Score", "purpose": "The live weighted total — the only display-size number; tabular-nums mandatory." }
+    },
+    "shadows": [
+      { "name": "rail", "value": "0 1px 2px 0 rgba(0,0,0,0.05)", "purpose": "shadow-sm — persistent rails (queue, note card) only; never used to fake depth." },
+      { "name": "focus-ring", "value": "0 0 0 3px var(--ring) / 50%", "purpose": "The system's 'currently here' glow on every focusable control." }
+    ],
+    "motion": [
+      { "name": "fast", "value": "150ms cubic-bezier(0, 0, 0.2, 1)", "purpose": "Micro-feedback: hovers, badge swaps, colour changes." },
+      { "name": "base", "value": "200ms cubic-bezier(0, 0, 0.2, 1)", "purpose": "Default for entrances, exits, state changes; score-button receipt beat." },
+      { "name": "slow", "value": "300ms cubic-bezier(0, 0, 0.2, 1)", "purpose": "Hard ceiling; reserved for larger travel (mobile drawer, progress bar)." },
+      { "name": "exit", "value": "cubic-bezier(0.4, 0, 1, 1)", "purpose": "Exits accelerate; entrances decelerate." },
+      { "name": "stagger", "value": "40ms", "purpose": "Sibling stagger step; ~7 widgets finish under 0.35s." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Signal Blue fill, 32px, 10px radius; the operator's main action.",
+      "html": "<button class=\"ds-btn-primary\">Save note</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: #4285f4; color: #ffffff; font: 500 14px/1 'Geist Sans', Arial, Helvetica, sans-serif; white-space: nowrap; cursor: pointer; transition: all 150ms cubic-bezier(0,0,0.2,1); } .ds-btn-primary:hover { background: rgb(66 133 244 / 0.8); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { border-color: #4285f4; box-shadow: 0 0 0 3px rgb(66 133 244 / 0.5); outline: none; } .ds-btn-primary:disabled { pointer-events: none; opacity: 0.5; }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Red tint fill, never solid — destructive reads as a warning, not a wall.",
+      "html": "<button class=\"ds-btn-destructive\">Delete</button>",
+      "css": ".ds-btn-destructive { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: rgb(234 67 53 / 0.1); color: #ea4335; font: 500 14px/1 'Geist Sans', Arial, Helvetica, sans-serif; cursor: pointer; transition: all 150ms cubic-bezier(0,0,0.2,1); } .ds-btn-destructive:hover { background: rgb(234 67 53 / 0.2); } .ds-btn-destructive:focus-visible { border-color: rgb(234 67 53 / 0.4); box-shadow: 0 0 0 3px rgb(234 67 53 / 0.2); outline: none; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "20px status pill; tint carries the meaning, not a solid fill.",
+      "html": "<span class=\"ds-badge\">Pending</span> <span class=\"ds-badge ds-badge-destructive\">Rejected</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border: 1px solid transparent; border-radius: 9999px; background: #4285f4; color: #ffffff; font: 500 12px/1 'Geist Sans', Arial, Helvetica, sans-serif; } .ds-badge-destructive { background: rgb(234 67 53 / 0.1); color: #ea4335; } .ds-badge:focus-visible { border-color: #4285f4; box-shadow: 0 0 0 3px rgb(66 133 244 / 0.5); outline: none; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "32px hairline field; focus shifts border + 3px ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search applicants\" />",
+      "css": ".ds-input { height: 32px; width: 100%; min-width: 0; padding: 0 10px; border: 1px solid oklch(0.922 0 0); border-radius: 10px; background: transparent; color: #171717; font: 400 14px/1.5 'Geist Sans', Arial, Helvetica, sans-serif; transition: border-color 150ms cubic-bezier(0,0,0.2,1); } .ds-input::placeholder { color: oklch(0.556 0 0); } .ds-input:focus-visible { border-color: #4285f4; box-shadow: 0 0 0 3px rgb(66 133 244 / 0.5); outline: none; } .ds-input:disabled { opacity: 0.5; cursor: not-allowed; background: rgb(236 236 236 / 0.5); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat surface: hairline border, no resting shadow.",
+      "html": "<div class=\"ds-card\"><span class=\"ds-card-label\">Note</span><p>Anything to flag for the ranking stage.</p></div>",
+      "css": ".ds-card { border: 1px solid oklch(0.922 0 0); border-radius: 14px; background: oklch(1 0 0); color: #171717; padding: 14px 16px; } .ds-card-label { display: block; font: 600 11px/1 'Geist Sans', Arial, Helvetica, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: oklch(0.556 0 0); margin-bottom: 6px; } .ds-card p { margin: 0; font: 400 14px/1.5 'Geist Sans', Arial, Helvetica, sans-serif; }"
+    },
+    {
+      "name": "Score Button Group",
+      "kind": "custom",
+      "refersTo": "score-button-selected",
+      "description": "One button per noteScale value; selection is instant-write with a 200ms scale receipt.",
+      "html": "<div role=\"group\" class=\"ds-scoregroup\"><button class=\"ds-score ds-score-selected\" aria-pressed=\"true\">0.5</button><button class=\"ds-score\" aria-pressed=\"false\">1</button></div>",
+      "css": ".ds-scoregroup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; } .ds-score { min-width: 32px; padding: 6px 12px; border: 1px solid oklch(0.922 0 0); border-radius: 10px; background: transparent; color: oklch(0.556 0 0); font: 600 14px/1 'Geist Sans', Arial, Helvetica, sans-serif; cursor: pointer; transition: border-color 150ms cubic-bezier(0,0,0.2,1), background 150ms cubic-bezier(0,0,0.2,1), color 150ms cubic-bezier(0,0,0.2,1); } .ds-score:hover { border-color: #4285f4; color: #4285f4; } .ds-score-selected { border-color: #4285f4; background: #4285f4; color: #ffffff; } .ds-score:focus-visible { box-shadow: 0 0 0 3px rgb(66 133 244 / 0.5); outline: none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Operator's Console",
+    "overview": "This is an instrument panel, not a billboard. The people using it score applicants one by one, dozens of times per hour, on laptops — so every surface is built for repeated contact: compact 32px controls, a strict color vocabulary that means exactly one thing per hue, and motion quick enough to read as feedback rather than theatricality (0.3s is a hard ceiling). Color is the console's language: signal blue speaks with the platform's voice, and green/red/yellow are status ink — never decoration. The neutrality is deliberate and OKLCH-based: flat tonal surfaces with hairline dividers carry all structure, letting the four status inks stay loud because nothing around them competes.",
+    "keyCharacteristics": [
+      "One palette, aliased everywhere — brand blue, three status inks, no second red, no decorative color",
+      "Flat-by-default surfaces with hairline borders; elevation only as a response to intent",
+      "Compact, consistent 32px control height across buttons, inputs, and selects",
+      "Motion capped at 0.3s with instant reduced-motion fallbacks that never leave content hidden",
+      "Dark-first friendliness: every surface token has a tuned .dark override"
+    ],
+    "rules": [
+      { "name": "The One Ink Rule", "body": "Each status hue says one thing app-wide: green = accepted/complete, red = rejected/destructive, yellow = pending, blue = primary action. A color never picks up a second meaning within a status role.", "section": "colors" },
+      { "name": "The No Second Palette Rule", "body": "Never restate a hex. New tokens alias the canonical ones, and no component hardcodes a hex — every color resolves through globals.css.", "section": "colors" },
+      { "name": "The Dark-Night Rule", "body": "Every color token ships a .dark override tuned by hand; nothing is left to browser default blending.", "section": "colors" },
+      { "name": "The Tabular Numbers Rule", "body": "Any number that updates in place renders with tabular-nums, so digits never twitch as values change.", "section": "typography" }
+    ],
+    "dos": [
+      "Do reference tokens (bg-primary, text-status-rejected, border-border) — never hardcode a hex.",
+      "Do import all motion from motion-tokens.ts and collapse every animation under prefers-reduced-motion.",
+      "Do use the Icon wrapper (lucide-react) exclusively.",
+      "Do reserve status ink for its one meaning and pull destructive confirmations through the shared ConfirmDialog.",
+      "Do keep controls at the compact scale (32px control height, 14px body)."
+    ],
+    "donts": [
+      "Don't introduce marketing-site gloss — no gradients, no glassy blur, no oversized type, no motion slower than 0.3s.",
+      "Don't restyle a primitive into a one-off; extend the cva variants or the shared component instead.",
+      "Don't let a color acquire a second meaning within status roles.",
+      "Don't invent a second icon system or an unlabeled icon-only control without an accessible name.",
+      "Don't cache or persist computed values in the UI when they are live-derived on read."
+    ]
+  }
+}
