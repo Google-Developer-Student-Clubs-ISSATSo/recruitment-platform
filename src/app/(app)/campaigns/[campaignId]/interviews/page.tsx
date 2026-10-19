@@ -71,7 +71,12 @@ export default async function InterviewsPage({
         fullName: true,
         interviewSlot: { select: { scheduledTime: true, room: true } },
       },
-      orderBy: { fullName: "asc" },
+      orderBy: [
+        // Submission order, first submitted → last — matching the Applicants
+        // page, so the booking table walks the shortlist in arrival order.
+        { createdAt: "asc" },
+        { fullName: "asc" },
+      ],
     }),
     prisma.emailLog.findMany({
       where: {
@@ -140,7 +145,12 @@ export default async function InterviewsPage({
           },
         },
       },
-      orderBy: { fullName: "asc" },
+      orderBy: [
+        // Submission order within the board, matching the Applicants page —
+        // day grouping stays first (the board re-buckets these).
+        { createdAt: "asc" },
+        { fullName: "asc" },
+      ],
     }),
   ]);
 

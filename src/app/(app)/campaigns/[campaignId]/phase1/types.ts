@@ -34,6 +34,12 @@ export type Phase1Applicant = {
   // questions or whose values in the restricted view.
   scoredCount: number;
   weightedTotal: number | null;
+  /**
+   * The shared screening note. Only sent in "full" mode (SCREEN_PHASE1
+   * holders) — the technical-only viewer's restricted payload excludes it
+   * entirely, exactly like the other questions' answers and scores.
+   */
+  note?: string | null;
 };
 
 // What the current viewer is allowed to do, resolved once on the server.

@@ -38,6 +38,7 @@ model User {
   activityLogs          ActivityLogEntry[]
   sentInvites           AdminTransferInvite[] @relation("InviteInitiator")
   phaseOneScoresGiven   PhaseOneScore[]
+  phaseOneNotesWritten  PhaseOneNote[]
   emailLogsSent         EmailLog[]
   interviewSlotsEntered InterviewSlot[]
   panelSeatsClaimed     PanelSeat[]
@@ -360,6 +361,7 @@ model Applicant {
 
   campaign       Campaign        @relation(fields: [campaignId], references: [id])
   phaseOneScores PhaseOneScore[]
+  phaseOneNote   PhaseOneNote?
   phaseOneResult PhaseOneResult?
   emailLogs      EmailLog[]
   interviewSlot  InterviewSlot?
@@ -427,6 +429,24 @@ model PhaseOneResult {
   updatedAt      DateTime               @updatedAt
 
   applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+}
+
+// One shared screening note per applicant, written while scoring in the Phase 1
+// Scoring Queue — free text for whatever a reviewer wants to flag for the
+// ranking stage or the decision meeting (why a score moved, a red flag the
+// rubric can't capture). Deliberately SHARED rather than per-scorer, exactly
+// like InterviewNote: one note an applicant's screeners collectively maintain,
+// each save carrying the author so the log can attribute who last wrote it.
+model PhaseOneNote {
+  id          String   @id @default(cuid())
+  applicantId String   @unique
+  text        String
+  authorId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applicant Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
 }
 
 model PhaseOneConfig {

@@ -11,6 +11,7 @@ import { savePhaseOneScore } from "./actions";
 import { ApplicantQueueList, type QueueEntry } from "./ApplicantQueueList";
 import { ApplicantAnswerPanel } from "@/components/applicant-answer-panel";
 import { ScoringControl } from "./ScoringControl";
+import { ScoringNote } from "./ScoringNote";
 import { WeightedTotalDisplay } from "./WeightedTotalDisplay";
 import { ProcessedRemainingCounter } from "./ProcessedRemainingCounter";
 import {
@@ -252,39 +253,60 @@ export function Phase1ScoringClient({
                     return (
                       <div
                         key={q.id}
-                        className="rounded-xl border border-neutral-200 bg-white p-3.5 dark:border-neutral-800 dark:bg-neutral-900"
+                        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
                       >
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium text-foreground">
+                        {/* ONE row: the question (text + technical badge +
+                            coefficient) leans left and wraps within its own
+                            column, and the score control sits at the right
+                            edge on the same line — reading a question flows
+                            straight into its scale without a vertical hop.
+                            flex-wrap lets very narrow widths stack them
+                            rather than crushing the text. */}
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="min-w-0 text-sm font-medium text-foreground">
                             {q.text}
                           </span>
-                          <span className="flex shrink-0 items-center gap-2">
-                            {q.requiresTechnicalScorer && (
-                              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                                Technical
-                              </span>
-                            )}
-                            <span className="text-[11px] text-neutral-400">
-                              ×{q.coefficient}
+                          {q.requiresTechnicalScorer && (
+                            <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                              Technical
                             </span>
+                          )}
+                          <span className="shrink-0 text-[11px] text-neutral-400">
+                            ×{q.coefficient}
                           </span>
                         </div>
-                        <ScoringControl
-                          noteScale={q.noteScale}
-                          value={selected.scores[q.id]}
-                          editable={editable}
-                          pending={pending}
-                          lockLabel={
-                            q.requiresTechnicalScorer
-                              ? "Scored by Technical Team"
-                              : undefined
-                          }
-                          onSelect={(v) => score(q, v)}
-                        />
+                        <div className="flex items-center sm:justify-end">
+                          <ScoringControl
+                            noteScale={q.noteScale}
+                            value={selected.scores[q.id]}
+                            editable={editable}
+                            pending={pending}
+                            lockLabel={
+                              q.requiresTechnicalScorer
+                                ? "Scored by Technical Team"
+                                : undefined
+                            }
+                            onSelect={(v) => score(q, v)}
+                          />
+                        </div>
                       </div>
                     );
                   })}
                 </div>
+
+                {/* Shared screening note — the same audience that scores the
+                    non-technical questions, so capped by canScreen: the
+                    technical-only viewer's payload never carries the note. */}
+                {caps.canScreen && (
+                  <div className="mt-4">
+                    <ScoringNote
+                      key={selected.id}
+                      campaignId={campaignId}
+                      applicantId={selected.id}
+                      initialNote={selected.note ?? ""}
+                    />
+                  </div>
+                )}
               </section>
             </div>
           </motion.div>

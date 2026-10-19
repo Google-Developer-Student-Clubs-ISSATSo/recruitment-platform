@@ -75,13 +75,20 @@ export default async function Phase1Page({
     }),
     prisma.applicant.findMany({
       where: { campaignId, status: ApplicantStatus.SUBMITTED },
-      orderBy: { fullName: "asc" },
+      // Submission order, first submitted → last — the same order the
+      // Applicants page renders, so reviewers work the form in the order it
+      // arrived. fullName is the tiebreak for same-instant import batches.
+      orderBy: [{ createdAt: "asc" }, { fullName: "asc" }],
       select: {
         id: true,
         fullName: true,
         rawFormData: true,
         phaseOneScores: { select: { questionId: true, value: true } },
         phaseOneResult: { select: { weightedTotal: true } },
+        // The shared screening note. Read unconditionally here and handed to
+        // the client ONLY in full mode below — the technical-only payload
+        // strips it, same rule as the answers behind it.
+        phaseOneNote: { select: { text: true } },
       },
     }),
   ]);
@@ -113,6 +120,7 @@ export default async function Phase1Page({
         scores,
         scoredCount,
         weightedTotal: a.phaseOneResult?.weightedTotal ?? null,
+        note: a.phaseOneNote?.text ?? null,
       };
     }
 

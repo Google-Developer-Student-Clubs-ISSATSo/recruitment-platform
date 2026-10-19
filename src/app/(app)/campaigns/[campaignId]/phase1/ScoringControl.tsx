@@ -107,7 +107,7 @@ function ScoreButton({
         reduced ? { duration: 0 } : { duration: DURATION.base, ease: EASE.out }
       }
       onAnimationComplete={() => setPulsing(false)}
-      className={`min-w-9 cursor-pointer rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ease-out disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none ${
+      className={`min-w-8 cursor-pointer rounded-lg border px-2 py-1.5 text-sm font-semibold transition-colors duration-150 ease-out disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none sm:min-w-9 sm:px-3 ${
         selected
           ? "border-primary bg-primary text-primary-foreground"
           : "border-neutral-300 bg-transparent text-neutral-600 hover:border-primary hover:text-primary dark:border-neutral-700 dark:text-neutral-300"
