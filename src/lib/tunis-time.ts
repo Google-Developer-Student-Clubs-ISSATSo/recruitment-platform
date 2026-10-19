@@ -6,6 +6,8 @@
 
 const TUNIS_UTC_OFFSET = "+01:00";
 const LOCAL_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+/** The "YYYY-MM-DD" calendar-day key `tunisDateKey` produces. */
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Parse the "YYYY-MM-DDTHH:MM" a `datetime-local` input produces (wall-clock
@@ -57,6 +59,36 @@ export function tunisDateKey(d: Date): string {
     month: "2-digit",
     day: "2-digit",
   }).format(d);
+}
+
+/**
+ * The instants covering the whole Tunis calendar day "YYYY-MM-DD", as a
+ * half-open [start, end) range — filter with `gte: start, lt: end` so the
+ * boundary never double-counts or misses an edge record.
+ *
+ * Null for a malformed key, so callers can fall back to "no filter" rather than
+ * building a query around an Invalid Date.
+ */
+export function tunisDayRange(
+  key: string,
+): { start: Date; end: Date } | null {
+  if (!DAY_KEY_RE.test(key)) return null;
+  const start = parseTunisLocal(`${key}T00:00`);
+  if (!start) return null;
+  // Tunis is UTC+1 all year with no DST, so adding exactly 24h always lands on
+  // the next local midnight — with a DST-offset zone this would be wrong.
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+/**
+ * Noon of a Tunis calendar day "YYYY-MM-DD" — an anchor placed mid-day so any
+ * day-level formatting built from it (weekday labels, dates) can never roll
+ * over onto the neighbouring day. Null for a malformed key.
+ */
+export function tunisDayAnchor(key: string): Date | null {
+  if (!DAY_KEY_RE.test(key)) return null;
+  return parseTunisLocal(`${key}T12:00`);
 }
 
 /** e.g. "Tuesday, July 21" — the panel board's day header. */

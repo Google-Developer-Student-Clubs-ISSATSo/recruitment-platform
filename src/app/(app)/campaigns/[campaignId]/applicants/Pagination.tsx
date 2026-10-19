@@ -31,6 +31,7 @@ export function Pagination({
     if (filters.q) params.set("q", filters.q);
     if (filters.status) params.set("status", filters.status);
     if (filters.committee) params.set("committee", filters.committee);
+    if (filters.day) params.set("day", filters.day);
     if (n > 1) params.set("page", String(n));
     const qs = params.toString();
     return qs ? `${basePath}?${qs}` : basePath;

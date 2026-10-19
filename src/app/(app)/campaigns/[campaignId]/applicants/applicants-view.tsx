@@ -7,6 +7,7 @@ import { Pagination } from "./Pagination";
 import {
   ApplicantsFilters,
   type ApplicantFilters,
+  type SubmittedDayOption,
 } from "./applicants-filters";
 
 export type ApplicantRow = {
@@ -16,6 +17,8 @@ export type ApplicantRow = {
   preferredCommittee: Committee;
   isIssatsoStudent: boolean;
   status: ApplicantStatus;
+  /** Submission instant, ISO — the list is ordered by it, first → last. */
+  createdAt: string;
   /**
    * The complete submitted row, behind VIEW_FULL_POOL. Optional because the
    * server OMITS it from the query for a viewer without that permission rather
@@ -44,6 +47,7 @@ export function ApplicantsView({
   pageCount,
   pageSize,
   presentStatuses,
+  submittedDays,
   filters,
   canViewAnswers,
   answerQuestions,
@@ -62,6 +66,8 @@ export function ApplicantsView({
   pageCount: number;
   pageSize: number;
   presentStatuses: ApplicantStatus[];
+  /** Every day the form received submissions in this campaign, ascending. */
+  submittedDays: SubmittedDayOption[];
   filters: ApplicantFilters;
   /**
    * VIEW_FULL_POOL — the key whose description promises complete answers.
@@ -74,7 +80,7 @@ export function ApplicantsView({
 }) {
   const basePath = `/campaigns/${campaignId}/applicants`;
   const anyFilterActive = Boolean(
-    filters.q || filters.status || filters.committee,
+    filters.q || filters.status || filters.committee || filters.day,
   );
 
   const first = matching === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -82,7 +88,7 @@ export function ApplicantsView({
 
   // Identifies the currently rendered slice. Both layouts re-run their fade when
   // this changes — i.e. exactly when paging or filtering produced new rows.
-  const sliceSignature = `${page}|${filters.q}|${filters.status}|${filters.committee}`;
+  const sliceSignature = `${page}|${filters.q}|${filters.status}|${filters.committee}|${filters.day}`;
 
   const emptyMessage =
     counts.total === 0
@@ -132,6 +138,7 @@ export function ApplicantsView({
         basePath={basePath}
         filters={filters}
         presentStatuses={presentStatuses}
+        submittedDays={submittedDays}
       />
 
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">

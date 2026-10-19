@@ -13,6 +13,19 @@ export type ApplicantFilters = {
   status: string;
   /** Raw Committee value, or "" for all. */
   committee: string;
+  /** "YYYY-MM-DD" Tunis day the applicant submitted on, or "" for all. */
+  day: string;
+};
+
+/**
+ * One day the form received submissions on, for the "Submitted on" dropdown.
+ * Ascending by `value`, so the options read first-submission-day first — the
+ * same direction the list itself is ordered.
+ */
+export type SubmittedDayOption = {
+  value: string;
+  label: string;
+  count: number;
 };
 
 const ALL = "";
@@ -26,7 +39,7 @@ const ALL = "";
  * Every change drops `page`, resetting to 1 — narrowing to three results while
  * still on page 4 would show an empty table and read as a broken filter.
  *
- * The two selects navigate immediately. The search box cannot: a router push per
+ * The selects navigate immediately. The search box cannot: a router push per
  * keystroke would be a server round-trip per character, so it keeps its own
  * local state for responsiveness and pushes on a short debounce.
  */
@@ -34,10 +47,12 @@ export function ApplicantsFilters({
   basePath,
   filters,
   presentStatuses,
+  submittedDays,
 }: {
   basePath: string;
   filters: ApplicantFilters;
   presentStatuses: ApplicantStatus[];
+  submittedDays: SubmittedDayOption[];
 }) {
   const router = useRouter();
   const [q, setQ] = useState(filters.q);
@@ -52,6 +67,7 @@ export function ApplicantsFilters({
     if (next.q) params.set("q", next.q);
     if (next.status) params.set("status", next.status);
     if (next.committee) params.set("committee", next.committee);
+    if (next.day) params.set("day", next.day);
     const qs = params.toString();
     return qs ? `${basePath}?${qs}` : basePath;
   }
@@ -73,12 +89,12 @@ export function ApplicantsFilters({
     router.push(hrefFor({ ...filters, q, ...patch }));
   }
 
-  const anyActive = Boolean(q || filters.status || filters.committee);
+  const anyActive = Boolean(q || filters.status || filters.committee || filters.day);
 
   return (
-    // At 375px the search box takes the full first line and the two selects
-    // split the second, rather than the search claiming a 220px minimum and
-    // shoving one select onto a line of its own.
+    // At 375px the search box takes the full first line and the three selects
+    // wrap across the second, rather than the search claiming a 220px minimum
+    // and shoving one select onto a line of its own.
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="relative w-full sm:min-w-[220px] sm:flex-1">
         <Icon
@@ -119,6 +135,19 @@ export function ApplicantsFilters({
         ))}
       </FilterSelect>
 
+      <FilterSelect
+        value={filters.day}
+        onChange={(v) => applySelect({ day: v })}
+        ariaLabel="Filter by submission day"
+      >
+        <option value={ALL}>All days</option>
+        {submittedDays.map((d) => (
+          <option key={d.value} value={d.value}>
+            {d.label} ({d.count})
+          </option>
+        ))}
+      </FilterSelect>
+
       {anyActive && (
         <button
           type="button"
@@ -152,7 +181,7 @@ function FilterSelect({
       aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      // flex-1 below sm so the two selects share the row evenly instead of
+      // flex-1 below sm so the selects share each row evenly instead of
       // sizing to their longest option and wrapping.
       className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-none dark:bg-input/30"
     >

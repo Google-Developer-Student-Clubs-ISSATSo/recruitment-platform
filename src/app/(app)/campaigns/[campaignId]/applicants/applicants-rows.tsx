@@ -21,6 +21,24 @@ import type { ApplicantRow } from "./applicants-view";
 // desktop can never disagree about what an applicant submitted. The layout
 // reasoning for the table/card split itself is documented at each block below,
 // unchanged from when it lived in the view.
+/** "Nov 1, 3:04 PM" — short submission stamp for table rows and cards. */
+const SUBMITTED_FORMAT = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Africa/Tunis",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+// Same fixed Tunis convention as src/lib/tunis-time.ts. The zone is pinned
+// rather than read from the environment, so server and client render the exact
+// same string — determinism that also makes it hydration-safe.
+function formatSubmitted(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : SUBMITTED_FORMAT.format(d);
+}
+
 export function ApplicantsRows({
   applicants,
   sliceSignature,
@@ -62,6 +80,7 @@ export function ApplicantsRows({
               <th className="px-5 py-3">Committee</th>
               <th className="px-5 py-3">ISSATSO</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Submitted</th>
             </tr>
           </thead>
           <AnimatedTableBody
@@ -71,7 +90,7 @@ export function ApplicantsRows({
             {applicants.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-5 py-10 text-center text-sm italic text-neutral-400"
                 >
                   {emptyMessage}
@@ -119,6 +138,9 @@ export function ApplicantsRows({
                   </td>
                   <td className="px-5 py-3">
                     <StatusBadge status={a.status} />
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-3 text-neutral-500 dark:text-neutral-400">
+                    {a.createdAt ? formatSubmitted(a.createdAt) : "—"}
                   </td>
                 </tr>
               ))
@@ -207,6 +229,12 @@ function ApplicantCard({
           a long one has nowhere else to go at 375px. */}
       <p className="break-all text-sm text-neutral-500 dark:text-neutral-400">
         {applicant.email}
+      </p>
+
+      {/* Submission order is the point of the list's sort, so each card states
+          exactly when its applicant arrived. */}
+      <p className="text-xs text-neutral-400 dark:text-neutral-500">
+        Submitted {formatSubmitted(applicant.createdAt)}
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
