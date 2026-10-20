@@ -22,7 +22,7 @@ import type { Phase1Question } from "./types";
 // stacks — answer, then its score card.
 //
 // After the scored rows the Answers column continues with nothing beside it,
-// in one "Other submitted answers" section: first `links` (GitHub, LinkedIn),
+// in one "Other submitted answers" section: first `links` (GitHub, LinkedIn, then Soft/Other skills),
 // then `others` — every submitted field that isn't a scored question or a
 // profile field. The whole submission reads top to bottom in one column, and
 // only the questions that carry a score get a card on the right.
@@ -89,8 +89,13 @@ export function QuestionRows({
                     {f.icon && <Icon name={f.icon} className="text-sm" />}
                     {f.label}
                   </h4>
-                  {f.value ? (
+                  {f.value && f.kind === "link" ? (
                     <AnswerValue value={f.value} />
+                  ) : f.value ? (
+                    // Skills are free text, never run through link detection.
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                      {f.value}
+                    </p>
                   ) : (
                     <p className="mt-1.5 text-sm italic text-neutral-400">
                       Not provided

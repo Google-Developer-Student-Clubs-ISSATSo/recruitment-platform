@@ -9,7 +9,6 @@ import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { computeWeightedTotal, totalCoefficient } from "@/lib/phase1-score";
 import { savePhaseOneScore } from "./actions";
 import { ApplicantQueueList, type QueueEntry } from "./ApplicantQueueList";
-import { ApplicantProfile } from "./ApplicantProfile";
 import { QuestionRow, QuestionRows } from "./QuestionRow";
 import { otherAnswers, profileFields, rowAnswer } from "./row-data";
 import { ScoringNote } from "./ScoringNote";
@@ -158,16 +157,14 @@ export function Phase1ScoringClient({
     ? selected.scoredCount === totalQuestions
     : false;
 
-  // The submission split into the workstation's regions: skills above the
-  // rows, question rows (answers are looked up per row), then the GitHub /
-  // LinkedIn links and the read-only rest after them in the Answers column.
+  // The submission split into the workstation's regions: question rows
+  // (answers are looked up per row), then the profile fields (links, skills)
+  // and the read-only rest after them in the Answers column.
   // "Other" answers are a full-mode concept only — the technical-only payload
   // is pre-stripped to the profile fields, and this view never lists extras.
   const profile = selected
     ? profileFields(questions, selected.rawFormData)
     : [];
-  const skills = profile.filter((f) => f.kind === "text");
-  const links = profile.filter((f) => f.kind === "link");
   const extras =
     selected && viewMode === "full"
       ? otherAnswers(questions, selected.rawFormData, profile)
@@ -451,8 +448,6 @@ export function Phase1ScoringClient({
               )}
             </div>
 
-            <ApplicantProfile fields={skills} />
-
             {/* Answers column beside Scoring column, one aligned row per
                 question in rubric order: `questions` is already narrowed by
                 the server to just the Technical question for the
@@ -463,7 +458,7 @@ export function Phase1ScoringClient({
                 scores the non-technical questions, so capped by canScreen:
                 the technical-only viewer's payload never carries the note. */}
             <QuestionRows
-              links={links}
+              links={profile}
               others={extras}
               note={
                 caps.canScreen && (
