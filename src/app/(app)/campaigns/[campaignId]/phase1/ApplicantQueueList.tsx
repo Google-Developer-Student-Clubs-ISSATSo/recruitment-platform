@@ -67,7 +67,7 @@ export function ApplicantQueueList({
 
   return (
     <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+      <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
         Queue ·{" "}
         {filteredEntries.length === entries.length
           ? entries.length
@@ -77,7 +77,7 @@ export function ApplicantQueueList({
           strip, so it scrolls with neither. The input follows the textarea's
           token treatment (hairline border, ring focus) at the rail's compact
           h-7 height. */}
-      <div className="flex items-center gap-1.5 border-b border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex items-center gap-1.5 border-b border-neutral-200 bg-white px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-900">
         <input
           type="text"
           value={query}

@@ -10,7 +10,7 @@ import { computeWeightedTotal, totalCoefficient } from "@/lib/phase1-score";
 import { savePhaseOneScore } from "./actions";
 import { ApplicantQueueList, type QueueEntry } from "./ApplicantQueueList";
 import { ApplicantAnswerPanel } from "@/components/applicant-answer-panel";
-import { ScoringControl } from "./ScoringControl";
+import { ScoringControl, fmtScale } from "./ScoringControl";
 import { ScoringNote } from "./ScoringNote";
 import { WeightedTotalDisplay } from "./WeightedTotalDisplay";
 import { ProcessedRemainingCounter } from "./ProcessedRemainingCounter";
@@ -291,14 +291,19 @@ export function Phase1ScoringClient({
               ? "Enter the Technical Skills score for each applicant. Scores save the moment you pick a value."
               : "Score each applicant against the active rubric. Scores save the moment you pick a value."}
           </p>
+          {/* Progress lives in the title block as a slim inline strip rather
+              than a full-width banner card: the counts answer "how much work
+              is left" and belong beside the heading, not above a third
+              chrome band pushing the workstation down the page. */}
+          <div className="mt-3">
+            <ProcessedRemainingCounter
+              processed={processed}
+              total={applicants.length}
+            />
+          </div>
         </div>
         <RefreshButton ariaLabel="Refresh scoring queue" />
       </div>
-
-      <ProcessedRemainingCounter
-        processed={processed}
-        total={applicants.length}
-      />
 
       {/* (The failed-save alert lives inside the Scoring panel, next to its
           header — see the role="alert" block below, which replaced the old
@@ -343,12 +348,16 @@ export function Phase1ScoringClient({
               onClick={() => setMobilePane("list")}
               className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-primary transition-opacity duration-150 ease-out hover:opacity-80 motion-reduce:transition-none lg:hidden"
             >
-              <Icon name="arrow_back" className="text-[18px]" />
+              <Icon name="arrow_back" className="text-base" />
               Back to queue
             </button>
 
-            {/* Applicant header + (full mode only) live total */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Applicant header + (full mode only) live total. Sticky from lg
+                up so the name and the live weighted total stay on screen while
+                the two capped scroll columns cycle answers and scores beneath
+                them; the muted pb keeps the gap under the bar opaque so rows
+                never peek through while scrolling. */}
+            <div className="flex flex-wrap items-center justify-between gap-4 lg:sticky lg:top-16 lg:z-20 lg:bg-background lg:pb-3">
               <h2 className="text-lg font-semibold text-foreground">
                 {selected.fullName}
               </h2>
@@ -362,11 +371,14 @@ export function Phase1ScoringClient({
             </div>
 
             {/* Reading pane beside scoring from lg up; stacked below, with the
-                answers first — you read before you score. */}
-            <div className="grid gap-6 lg:grid-cols-2">
+                answers first — you read before you score. Both columns are
+                capped, independently scrolling work areas below lg's siblings,
+                so the answers and the scales for every question stay reachable
+                in place instead of owning the page scroll. */}
+            <div className="grid gap-6 lg:mt-0 lg:grid-cols-2">
               {/* Reading pane */}
-              <section>
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+              <section className="lg:h-[calc(100dvh-16rem)] lg:overflow-y-auto">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400 lg:sticky lg:top-0 lg:z-10 lg:mb-0 lg:pb-2.5 lg:bg-background">
                   {viewMode === "technical-only" ? "Applicant" : "Answers"}
                 </h3>
                 <ApplicantAnswerPanel
@@ -380,14 +392,15 @@ export function Phase1ScoringClient({
               {/* Compact scoring panel — renders one control per question in
                   `questions`, which the server already narrowed to just the
                   Technical Skills question for the technical-only viewer. */}
-              <section>
+              <section className="lg:h-[calc(100dvh-16rem)] lg:overflow-y-auto">
                 {/* tabIndex=-1 makes the heading a focus target below without
                     putting it in the tab order; the ref+effect above move focus
-                    here after each applicant switch. */}
+                    here after each applicant switch. Pinned to the top of its
+                    column's internal scroll, same treatment as "Answers". */}
                 <h3
                   ref={scoringHeadingRef}
                   tabIndex={-1}
-                  className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400"
+                  className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400 lg:sticky lg:top-0 lg:z-10 lg:mb-0 lg:pb-2.5 lg:bg-background"
                 >
                   Scoring
                 </h3>
@@ -398,27 +411,39 @@ export function Phase1ScoringClient({
                     same question, same applicant). Tinted with the rejected
                     red; other rows' content is not blocked. */}
                 {failedScore && (
-                  <div
+                  /* Height-animated so a failed save reveals the alert as a
+                     quick smooth push rather than a jump that shifts every
+                     score row down at once on an already-failing save. */
+                  <motion.div
                     role="alert"
-                    className="mb-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-status-rejected/10 px-3 py-2 text-sm text-status-rejected"
+                    initial={reduced ? false : { height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    transition={
+                      reduced
+                        ? { duration: 0 }
+                        : { duration: DURATION.fast, ease: EASE.out }
+                    }
+                    className="overflow-hidden"
                   >
-                    <p className="min-w-0">
-                      {failedScore.applicantId !== selected.id &&
-                        failedName && (
-                          <span className="font-semibold">
-                            {failedName} —{" "}
-                          </span>
-                        )}
-                      {failedScore.message}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={retryFailedScore}
-                      className="shrink-0 cursor-pointer rounded-lg border border-status-rejected/30 px-2.5 py-1 text-xs font-semibold text-status-rejected transition-colors duration-150 ease-out hover:bg-status-rejected/20 motion-reduce:transition-none dark:border-status-rejected/40 dark:hover:bg-status-rejected/30"
-                    >
-                      Retry save
-                    </button>
-                  </div>
+                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-status-rejected/10 px-3 py-2 text-sm text-status-rejected">
+                      <p className="min-w-0">
+                        {failedScore.applicantId !== selected.id &&
+                          failedName && (
+                            <span className="font-semibold">
+                              {failedName} —{" "}
+                            </span>
+                          )}
+                        {failedScore.message}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={retryFailedScore}
+                        className="shrink-0 cursor-pointer rounded-lg border border-status-rejected/30 px-2.5 py-1 text-xs font-semibold text-status-rejected transition-colors duration-150 ease-out hover:bg-status-rejected/20 motion-reduce:transition-none dark:border-status-rejected/40 dark:hover:bg-status-rejected/30"
+                      >
+                        Retry save
+                      </button>
+                    </div>
+                  </motion.div>
                 )}
                 <div className="space-y-2.5">
                   {questions.map((q) => {
@@ -429,17 +454,20 @@ export function Phase1ScoringClient({
                     return (
                       <div
                         key={q.id}
-                        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
+                        className="grid items-center gap-x-3 gap-y-1.5 rounded-xl border border-neutral-200 bg-white px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] dark:border-neutral-800 dark:bg-neutral-900"
                       >
                         {/* ONE row: the question (text + technical badge +
-                            coefficient) leans left and wraps within its own
-                            column, and the score control sits at the right
-                            edge on the same line — reading a question flows
-                            straight into its scale without a vertical hop.
-                            flex-wrap lets very narrow widths stack them
-                            rather than crushing the text. */}
+                            coefficient) leans left in its own grid cell, and
+                            the score control sits in a fixed right cell —
+                            reading a question flows straight into its scale
+                            without a vertical hop. The two-cell grid (instead
+                            of flex-wrap) and the 2-line clamp on the text keep
+                            every row height predictable, so the long questions
+                            don't blow the column's rhythm open right where
+                            edge-alignment matters most; below sm the two cells
+                            stack. */}
                         <div className="flex min-w-0 flex-1 items-center gap-2">
-                          <span className="min-w-0 text-sm font-medium text-foreground">
+                          <span className="line-clamp-2 min-w-0 text-sm font-medium text-neutral-500 dark:text-neutral-300">
                             {q.text}
                           </span>
                           {q.requiresTechnicalScorer && (
@@ -447,8 +475,8 @@ export function Phase1ScoringClient({
                               Technical
                             </span>
                           )}
-                          <span className="shrink-0 text-[11px] text-neutral-400">
-                            ×{q.coefficient}
+                          <span className="shrink-0 text-xs font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
+                            ×{fmtScale(q.coefficient)}
                           </span>
                         </div>
                         <div className="flex items-center sm:justify-end">

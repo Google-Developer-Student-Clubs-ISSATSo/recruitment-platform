@@ -128,7 +128,7 @@ function ScoreButton({
         reduced ? { duration: 0 } : { duration: DURATION.base, ease: EASE.out }
       }
       onAnimationComplete={() => setPulsing(false)}
-      className={`min-w-8 rounded-lg border px-2 py-1.5 text-sm font-semibold transition-colors duration-150 ease-out motion-reduce:transition-none sm:min-w-9 sm:px-3 ${
+      className={`min-w-8 rounded-lg border px-2 py-1 text-sm font-semibold transition-colors duration-150 ease-out motion-reduce:transition-none sm:min-w-9 sm:px-3 ${
         saving
           ? "cursor-default opacity-50"
           : "cursor-pointer"

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import {
   answerKey,
@@ -56,7 +58,9 @@ function isLikelyUrl(value: string): boolean {
 // normalizing a bare domain to an https:// href the same way the
 // technical-only view's LinkCard already does — or as plain text otherwise.
 // Shared by the per-question cards and "Other Submitted Answers" so a URL
-// reads identically wherever it appears.
+// reads identically wherever it appears. Plain text runs through
+// <ExpandableText>, because long free-text answers are where the reading
+// pane's vertical cost balloons.
 function AnswerValue({ value }: { value: string }) {
   if (isLikelyUrl(value)) {
     const href = /^https?:\/\//i.test(value) ? value : `https://${value}`;
@@ -68,14 +72,58 @@ function AnswerValue({ value }: { value: string }) {
         className="mt-1.5 inline-flex items-center gap-1 break-all text-sm font-medium text-primary hover:underline"
       >
         {value}
-        <Icon name="open_in_new" className="text-[14px]" />
+        <Icon name="open_in_new" className="text-sm" />
       </a>
     );
   }
+  return <ExpandableText value={value} />;
+}
+
+// Long free-text answers collapse to 3 lines with a Show more/less toggle, so
+// a one-line "github.com/x" and a twelve-line motivation letter stop costing
+// the same column height — short answers scan at a glance, and expansion is a
+// deliberate click by the reviewer who actually needs the rest. Answer text is
+// the brightest ink in the card: it is the thing being judged, while the
+// question label above it reads as a muted 12px field label.
+function ExpandableText({ value }: { value: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+
+  // Measured after paint by comparing scrollHeight against clientHeight:
+  // true only when the 3-line clamp is genuinely truncating, so short answers
+  // never grow a toggle. Re-measured whenever expansion flips — expanded text
+  // reports scrollHeight === clientHeight, and without this guard the toggle
+  // would hide itself the moment it worked. `value` keys the effect so a
+  // different answer never inherits the previous one's measurement.
+  useEffect(() => {
+    if (expanded) return;
+    const el = ref.current;
+    if (!el) return;
+    setClamped(el.scrollHeight > el.clientHeight + 1);
+  }, [value, expanded]);
+
   return (
-    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-      {value}
-    </p>
+    <>
+      <p
+        ref={ref}
+        className={`mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground ${
+          expanded ? "" : "line-clamp-3"
+        }`}
+      >
+        {value}
+      </p>
+      {clamped && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-1 cursor-pointer text-xs font-semibold text-primary transition-opacity duration-150 ease-out hover:underline motion-reduce:transition-none"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -182,9 +230,13 @@ export function ApplicantAnswerPanel({
         return (
           <div
             key={q.id}
-            className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
+            className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900"
           >
-            <p className="text-sm font-semibold text-foreground">{q.text}</p>
+            {/* 12px muted label carries the question so the answer below it is
+                the brightest ink in the card — the thing being judged. */}
+            <p className="text-sm font-medium text-neutral-500 dark:text-neutral-300">
+              {q.text}
+            </p>
             {answer ? (
               <AnswerValue value={answer} />
             ) : (
@@ -213,9 +265,9 @@ export function ApplicantAnswerPanel({
               return (
                 <div
                   key={key}
-                  className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
+                  className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900"
                 >
-                  <p className="text-sm font-semibold text-foreground">
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-300">
                     {key}
                   </p>
                   {trimmed ? (
@@ -246,7 +298,7 @@ function readString(
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
         {label}
       </p>
@@ -262,14 +314,12 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 // per-question cards use, rather than LinkCard's "Not provided".
 function TextCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
         {label}
       </p>
       {value ? (
-        <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          {value}
-        </p>
+        <ExpandableText value={value} />
       ) : (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-status-pending">
           <Icon name="help" className="text-[16px]" />
@@ -291,9 +341,9 @@ function LinkCard({
 }) {
   const href = url ? (/^https?:\/\//i.test(url) ? url : `https://${url}`) : null;
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-        <Icon name={icon} className="text-[15px]" />
+        <Icon name={icon} className="text-sm" />
         {label}
       </p>
       {href ? (
@@ -304,7 +354,7 @@ function LinkCard({
           className="mt-1 inline-flex items-center gap-1 break-all text-sm font-medium text-primary hover:underline"
         >
           {url}
-          <Icon name="open_in_new" className="text-[14px]" />
+          <Icon name="open_in_new" className="text-sm" />
         </a>
       ) : (
         <p className="mt-1 text-sm italic text-neutral-400">Not provided</p>
