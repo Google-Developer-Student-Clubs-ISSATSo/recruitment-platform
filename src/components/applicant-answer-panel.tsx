@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import {
   answerKey,
@@ -58,10 +56,10 @@ function isLikelyUrl(value: string): boolean {
 // normalizing a bare domain to an https:// href the same way the
 // technical-only view's LinkCard already does — or as plain text otherwise.
 // Shared by the per-question cards and "Other Submitted Answers" so a URL
-// reads identically wherever it appears. Plain text runs through
-// <ExpandableText>, because long free-text answers are where the reading
-// pane's vertical cost balloons.
-function AnswerValue({ value }: { value: string }) {
+// reads identically wherever it appears. Exported for the Phase 1 scoring
+// workstation, which renders answers aligned with their score controls
+// instead of through this panel.
+export function AnswerValue({ value }: { value: string }) {
   if (isLikelyUrl(value)) {
     const href = /^https?:\/\//i.test(value) ? value : `https://${value}`;
     return (
@@ -76,54 +74,19 @@ function AnswerValue({ value }: { value: string }) {
       </a>
     );
   }
-  return <ExpandableText value={value} />;
+  return <AnswerText value={value} />;
 }
 
-// Long free-text answers collapse to 3 lines with a Show more/less toggle, so
-// a one-line "github.com/x" and a twelve-line motivation letter stop costing
-// the same column height — short answers scan at a glance, and expansion is a
-// deliberate click by the reviewer who actually needs the rest. Answer text is
-// the brightest ink in the card: it is the thing being judged, while the
-// question label above it reads as a muted 12px field label.
-function ExpandableText({ value }: { value: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const [clamped, setClamped] = useState(false);
-  const ref = useRef<HTMLParagraphElement>(null);
-
-  // Measured after paint by comparing scrollHeight against clientHeight:
-  // true only when the 3-line clamp is genuinely truncating, so short answers
-  // never grow a toggle. Re-measured whenever expansion flips — expanded text
-  // reports scrollHeight === clientHeight, and without this guard the toggle
-  // would hide itself the moment it worked. `value` keys the effect so a
-  // different answer never inherits the previous one's measurement.
-  useEffect(() => {
-    if (expanded) return;
-    const el = ref.current;
-    if (!el) return;
-    setClamped(el.scrollHeight > el.clientHeight + 1);
-  }, [value, expanded]);
-
+// A free-text answer, always shown in full — never clamped behind a
+// "Show more": the reviewer reads exactly what the applicant wrote, as they
+// wrote it (line breaks preserved). Answer text is the brightest ink in the
+// card: it is the thing being judged, while the question label above it reads
+// as a muted field label.
+function AnswerText({ value }: { value: string }) {
   return (
-    <>
-      <p
-        ref={ref}
-        className={`mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground ${
-          expanded ? "" : "line-clamp-3"
-        }`}
-      >
-        {value}
-      </p>
-      {clamped && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="mt-1 cursor-pointer text-xs font-semibold text-primary transition-opacity duration-150 ease-out hover:underline motion-reduce:transition-none"
-        >
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
-    </>
+    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+      {value}
+    </p>
   );
 }
 
@@ -319,7 +282,7 @@ function TextCard({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       {value ? (
-        <ExpandableText value={value} />
+        <AnswerText value={value} />
       ) : (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm italic text-status-pending">
           <Icon name="help" className="text-[16px]" />

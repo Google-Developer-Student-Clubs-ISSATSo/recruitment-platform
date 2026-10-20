@@ -9,8 +9,9 @@ import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { computeWeightedTotal, totalCoefficient } from "@/lib/phase1-score";
 import { savePhaseOneScore } from "./actions";
 import { ApplicantQueueList, type QueueEntry } from "./ApplicantQueueList";
-import { ApplicantAnswerPanel } from "@/components/applicant-answer-panel";
-import { ScoringControl, fmtScale } from "./ScoringControl";
+import { ApplicantProfile } from "./ApplicantProfile";
+import { QuestionRow, QuestionRows } from "./QuestionRow";
+import { otherAnswers, profileFields, rowAnswer } from "./row-data";
 import { ScoringNote } from "./ScoringNote";
 import { WeightedTotalDisplay } from "./WeightedTotalDisplay";
 import { ProcessedRemainingCounter } from "./ProcessedRemainingCounter";
@@ -109,11 +110,13 @@ export function Phase1ScoringClient({
   // of the draft.
   const [noteBaselines, setNoteBaselines] = useState<Record<string, string>>({});
 
-  // After switching applicants, move focus to the scoring panel heading: the
+  // After switching applicants, move focus to the applicant heading: the
   // keyed crossfade remount otherwise drops focus to <body>, orphaning
-  // keyboard users mid-queue. lastViewedApplicant stays null until the first
-  // switch, so the initial page load never steals focus.
-  const scoringHeadingRef = useRef<HTMLHeadingElement>(null);
+  // keyboard users mid-queue. Focusing also scrolls the heading into view, so
+  // the next applicant opens at the top rather than mid-list.
+  // lastViewedApplicant stays null until the first switch, so the initial
+  // page load never steals focus.
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const lastViewedApplicant = useRef<string | null>(null);
   useEffect(() => {
     if (
@@ -121,7 +124,7 @@ export function Phase1ScoringClient({
       lastViewedApplicant.current !== null &&
       lastViewedApplicant.current !== selectedId
     ) {
-      scoringHeadingRef.current?.focus();
+      detailHeadingRef.current?.focus();
     }
     lastViewedApplicant.current = selectedId;
   }, [selectedId]);
@@ -154,6 +157,21 @@ export function Phase1ScoringClient({
   const selectedComplete = selected
     ? selected.scoredCount === totalQuestions
     : false;
+
+  // The submission split into the workstation's regions: skills above the
+  // rows, question rows (answers are looked up per row), then the GitHub /
+  // LinkedIn links and the read-only rest after them in the Answers column.
+  // "Other" answers are a full-mode concept only — the technical-only payload
+  // is pre-stripped to the profile fields, and this view never lists extras.
+  const profile = selected
+    ? profileFields(questions, selected.rawFormData)
+    : [];
+  const skills = profile.filter((f) => f.kind === "text");
+  const links = profile.filter((f) => f.kind === "link");
+  const extras =
+    selected && viewMode === "full"
+      ? otherAnswers(questions, selected.rawFormData, profile)
+      : [];
 
   // A pick always targets the currently selected applicant.
   function score(question: Phase1Question, value: number) {
@@ -305,9 +323,8 @@ export function Phase1ScoringClient({
         <RefreshButton ariaLabel="Refresh scoring queue" />
       </div>
 
-      {/* (The failed-save alert lives inside the Scoring panel, next to its
-          header — see the role="alert" block below, which replaced the old
-          top-of-page error banner that could scroll out of view.) */}
+      {/* (The failed-save alert lives in the applicant header — see the
+          role="alert" block below.) */}
 
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
         <div className={mobilePane === "detail" ? "hidden lg:block" : "block"}>
@@ -352,195 +369,162 @@ export function Phase1ScoringClient({
               Back to queue
             </button>
 
-            {/* Applicant header + (full mode only) live total. Sticky from lg
-                up so the name and the live weighted total stay on screen while
-                the two capped scroll columns cycle answers and scores beneath
-                them; the muted pb keeps the gap under the bar opaque so rows
-                never peek through while scrolling. */}
-            <div className="flex flex-wrap items-center justify-between gap-4 lg:sticky lg:top-16 lg:z-20 lg:bg-background lg:pb-3">
-              <h2 className="text-lg font-semibold text-foreground">
-                {selected.fullName}
-              </h2>
-              {viewMode === "full" && (
-                <WeightedTotalDisplay
-                  total={selectedTotal}
-                  max={coefficientTotal}
-                  complete={selectedComplete}
-                />
+            {/* Applicant header: name, this applicant's progress, (full mode
+                only) the live weighted total, and the failed-save alert, in a
+                rounded card like every other box on the page. A plain block in
+                normal flow — it scrolls away with the page. */}
+            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="min-w-0">
+                  {/* tabIndex=-1 makes the heading a focus target without
+                      putting it in the tab order; the ref+effect above move
+                      focus here after each applicant switch. */}
+                  <h2
+                    ref={detailHeadingRef}
+                    tabIndex={-1}
+                    className="text-lg font-semibold text-foreground"
+                  >
+                    {selected.fullName}
+                  </h2>
+                  {/* Team-wide, like the queue's per-row counts: every
+                      scorer's entries, not just this viewer's. */}
+                  <p
+                    className={`mt-0.5 flex items-center gap-1 text-xs font-medium tabular-nums ${
+                      selectedComplete
+                        ? "text-status-accepted"
+                        : "text-neutral-500 dark:text-neutral-400"
+                    }`}
+                  >
+                    {selectedComplete && (
+                      <Icon name="check_circle" className="text-sm" />
+                    )}
+                    {selected.scoredCount}/{totalQuestions} scored
+                  </p>
+                </div>
+                {viewMode === "full" && (
+                  <WeightedTotalDisplay
+                    total={selectedTotal}
+                    max={coefficientTotal}
+                    complete={selectedComplete}
+                  />
+                )}
+              </div>
+
+              {/* Failed-save alert: announced immediately by role="alert"
+                  when it appears, and carrying a one-click Retry that
+                  re-sends the exact failed write (same value, same question,
+                  same applicant). Tinted with the rejected red; other rows'
+                  content is not blocked. */}
+              {failedScore && (
+                /* Height-animated so a failed save reveals the alert as a
+                   quick smooth push rather than a jump. */
+                <motion.div
+                  role="alert"
+                  initial={reduced ? false : { height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  transition={
+                    reduced
+                      ? { duration: 0 }
+                      : { duration: DURATION.fast, ease: EASE.out }
+                  }
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-status-rejected/10 px-3 py-2 text-sm text-status-rejected">
+                    <p className="min-w-0">
+                      {failedScore.applicantId !== selected.id &&
+                        failedName && (
+                          <span className="font-semibold">
+                            {failedName} —{" "}
+                          </span>
+                        )}
+                      {failedScore.message}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={retryFailedScore}
+                      className="shrink-0 cursor-pointer rounded-lg border border-status-rejected/30 px-2.5 py-1 text-xs font-semibold text-status-rejected transition-colors duration-150 ease-out hover:bg-status-rejected/20 motion-reduce:transition-none dark:border-status-rejected/40 dark:hover:bg-status-rejected/30"
+                    >
+                      Retry save
+                    </button>
+                  </div>
+                </motion.div>
               )}
             </div>
 
-            {/* Reading pane beside scoring from lg up; stacked below, with the
-                answers first — you read before you score. Both columns are
-                capped, independently scrolling work areas below lg's siblings,
-                so the answers and the scales for every question stay reachable
-                in place instead of owning the page scroll. */}
-            <div className="grid gap-6 lg:mt-0 lg:grid-cols-2">
-              {/* Reading pane */}
-              <section className="lg:h-[calc(100dvh-16rem)] lg:overflow-y-auto">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400 lg:sticky lg:top-0 lg:z-10 lg:mb-0 lg:pb-2.5 lg:bg-background">
-                  {viewMode === "technical-only" ? "Applicant" : "Answers"}
-                </h3>
-                <ApplicantAnswerPanel
-                  viewMode={viewMode}
-                  fullName={selected.fullName}
-                  questions={questions}
-                  rawFormData={selected.rawFormData}
+            <ApplicantProfile fields={skills} />
+
+            {/* Answers column beside Scoring column, one aligned row per
+                question in rubric order: `questions` is already narrowed by
+                the server to just the Technical question for the
+                technical-only viewer, so that view is a single row.
+
+                The shared screening note closes the Scoring column, under the
+                last score card (see <QuestionRows>). Same audience that
+                scores the non-technical questions, so capped by canScreen:
+                the technical-only viewer's payload never carries the note. */}
+            <QuestionRows
+              links={links}
+              others={extras}
+              note={
+                caps.canScreen && (
+                  <ScoringNote
+                    key={selected.id}
+                    campaignId={campaignId}
+                    applicantId={selected.id}
+                    initialNote={selected.note ?? ""}
+                    draft={noteDrafts[selected.id]}
+                    savedBaseline={noteBaselines[selected.id]}
+                    onDraftChange={(value) => {
+                      const applicantId = selected.id;
+                      setNoteDrafts((prev) => ({
+                        ...prev,
+                        [applicantId]: value,
+                      }));
+                    }}
+                    onSaved={(savedText) => {
+                      const applicantId = selected.id;
+                      setNoteBaselines((prev) => ({
+                        ...prev,
+                        [applicantId]: savedText,
+                      }));
+                      // Clear the divergent-draft entry once the server has
+                      // acknowledged exactly this text — but keep any typing
+                      // that happened while the save was in flight as a live
+                      // unsaved draft instead of discarding it.
+                      setNoteDrafts((prev) => {
+                        if (prev[applicantId] === savedText) {
+                          const next = { ...prev };
+                          delete next[applicantId];
+                          return next;
+                        }
+                        return prev;
+                      });
+                    }}
+                  />
+                )
+              }
+            >
+              {questions.map((q) => (
+                <QuestionRow
+                  key={q.id}
+                  question={q}
+                  answer={rowAnswer(q, selected.rawFormData)}
+                  value={selected.scores[q.id]}
+                  editable={canEditQuestion(q, caps)}
+                  saving={savingScores.has(`${selected.id}:${q.id}`)}
+                  onSelect={(v) => score(q, v)}
                 />
-              </section>
+              ))}
+            </QuestionRows>
 
-              {/* Compact scoring panel — renders one control per question in
-                  `questions`, which the server already narrowed to just the
-                  Technical Skills question for the technical-only viewer. */}
-              <section className="lg:h-[calc(100dvh-16rem)] lg:overflow-y-auto">
-                {/* tabIndex=-1 makes the heading a focus target below without
-                    putting it in the tab order; the ref+effect above move focus
-                    here after each applicant switch. Pinned to the top of its
-                    column's internal scroll, same treatment as "Answers". */}
-                <h3
-                  ref={scoringHeadingRef}
-                  tabIndex={-1}
-                  className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400 lg:sticky lg:top-0 lg:z-10 lg:mb-0 lg:pb-2.5 lg:bg-background"
-                >
-                  Scoring
-                </h3>
-
-                {/* Failed-save alert for this panel: announced immediately by
-                    role="alert" when it appears, and carrying a one-click
-                    Retry that re-sends the exact failed write (same value,
-                    same question, same applicant). Tinted with the rejected
-                    red; other rows' content is not blocked. */}
-                {failedScore && (
-                  /* Height-animated so a failed save reveals the alert as a
-                     quick smooth push rather than a jump that shifts every
-                     score row down at once on an already-failing save. */
-                  <motion.div
-                    role="alert"
-                    initial={reduced ? false : { height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    transition={
-                      reduced
-                        ? { duration: 0 }
-                        : { duration: DURATION.fast, ease: EASE.out }
-                    }
-                    className="overflow-hidden"
-                  >
-                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-status-rejected/10 px-3 py-2 text-sm text-status-rejected">
-                      <p className="min-w-0">
-                        {failedScore.applicantId !== selected.id &&
-                          failedName && (
-                            <span className="font-semibold">
-                              {failedName} —{" "}
-                            </span>
-                          )}
-                        {failedScore.message}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={retryFailedScore}
-                        className="shrink-0 cursor-pointer rounded-lg border border-status-rejected/30 px-2.5 py-1 text-xs font-semibold text-status-rejected transition-colors duration-150 ease-out hover:bg-status-rejected/20 motion-reduce:transition-none dark:border-status-rejected/40 dark:hover:bg-status-rejected/30"
-                      >
-                        Retry save
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-                <div className="space-y-2.5">
-                  {questions.map((q) => {
-                    const editable = canEditQuestion(q, caps);
-                    const rowSaving = savingScores.has(
-                      `${selected.id}:${q.id}`,
-                    );
-                    return (
-                      <div
-                        key={q.id}
-                        className="grid items-center gap-x-3 gap-y-1.5 rounded-xl border border-neutral-200 bg-white px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] dark:border-neutral-800 dark:bg-neutral-900"
-                      >
-                        {/* ONE row: the question (text + technical badge +
-                            coefficient) leans left in its own grid cell, and
-                            the score control sits in a fixed right cell —
-                            reading a question flows straight into its scale
-                            without a vertical hop. The two-cell grid (instead
-                            of flex-wrap) and the 2-line clamp on the text keep
-                            every row height predictable, so the long questions
-                            don't blow the column's rhythm open right where
-                            edge-alignment matters most; below sm the two cells
-                            stack. */}
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                          <span className="line-clamp-2 min-w-0 text-sm font-medium text-neutral-500 dark:text-neutral-300">
-                            {q.text}
-                          </span>
-                          {q.requiresTechnicalScorer && (
-                            <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary">
-                              Technical
-                            </span>
-                          )}
-                          <span className="shrink-0 text-xs font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
-                            ×{fmtScale(q.coefficient)}
-                          </span>
-                        </div>
-                        <div className="flex items-center sm:justify-end">
-                          <ScoringControl
-                            noteScale={q.noteScale}
-                            value={selected.scores[q.id]}
-                            editable={editable}
-                            saving={rowSaving}
-                            lockLabel={
-                              q.requiresTechnicalScorer
-                                ? "Scored by Technical Team"
-                                : undefined
-                            }
-                            onSelect={(v) => score(q, v)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Shared screening note — the same audience that scores the
-                    non-technical questions, so capped by canScreen: the
-                    technical-only viewer's payload never carries the note. */}
-                {caps.canScreen && (
-                  <div className="mt-4">
-                    <ScoringNote
-                      key={selected.id}
-                      campaignId={campaignId}
-                      applicantId={selected.id}
-                      initialNote={selected.note ?? ""}
-                      draft={noteDrafts[selected.id]}
-                      savedBaseline={noteBaselines[selected.id]}
-                      onDraftChange={(value) => {
-                        const applicantId = selected.id;
-                        setNoteDrafts((prev) => ({
-                          ...prev,
-                          [applicantId]: value,
-                        }));
-                      }}
-                      onSaved={(savedText) => {
-                        const applicantId = selected.id;
-                        setNoteBaselines((prev) => ({
-                          ...prev,
-                          [applicantId]: savedText,
-                        }));
-                        // Clear the divergent-draft entry once the server has
-                        // acknowledged exactly this text — but keep any typing
-                        // that happened while the save was in flight as a live
-                        // unsaved draft instead of discarding it.
-                        setNoteDrafts((prev) => {
-                          if (prev[applicantId] === savedText) {
-                            const next = { ...prev };
-                            delete next[applicantId];
-                            return next;
-                          }
-                          return prev;
-                        });
-                      }}
-                    />
-                  </div>
-                )}
-              </section>
-            </div>
+            {viewMode === "technical-only" && (
+              // Muted footnote, deliberately distinct from the transient
+              // error treatment: 11px meta type under a hairline divider.
+              <p className="border-t border-neutral-100 pt-2 text-[11px] text-neutral-500 dark:border-neutral-800/60 dark:text-neutral-400">
+                Technical scorers only see identifying details, profile links,
+                and skills.
+              </p>
+            )}
           </motion.div>
         ) : (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-16 text-center dark:border-neutral-700 dark:bg-neutral-800/40">

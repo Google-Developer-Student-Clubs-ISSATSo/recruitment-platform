@@ -26,7 +26,12 @@ export function fmtScale(n: number) {
 // When not editable it shows the current value read-only with a lock label
 // (e.g. "Scored by Technical Team" for the technical question viewed by a plain
 // reviewer), or a waiting placeholder if nothing has been scored yet.
+//
+// `label` is the group's accessible name ("Score for <question>"): the buttons
+// themselves only say "0.5", so without it a screen reader hears a bare scale
+// with no question attached.
 export function ScoringControl({
+  label,
   noteScale,
   value,
   editable,
@@ -34,6 +39,7 @@ export function ScoringControl({
   lockLabel,
   onSelect,
 }: {
+  label: string;
   noteScale: number[];
   value: number | undefined;
   editable: boolean;
@@ -42,8 +48,14 @@ export function ScoringControl({
   onSelect: (value: number) => void;
 }) {
   if (!editable) {
+    // Value over lock label, stacked: side by side, the read-only state would
+    // be the widest thing in the score column and widen it for every row.
     return (
-      <div className="flex items-center gap-2">
+      <div
+        role="group"
+        aria-label={label}
+        className="flex flex-col items-start gap-1"
+      >
         {value === undefined ? (
           <span className="text-sm italic text-neutral-400">
             Not scored yet
@@ -62,15 +74,11 @@ export function ScoringControl({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="group">
-      {/* Saving receipt for THIS row only: a pulsing dot beside the scale while
-          the write is in flight. animate-pulse, killed under reduced motion. */}
-      {saving && (
-        <span
-          aria-hidden
-          className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary motion-reduce:animate-none"
-        />
-      )}
+    <div
+      className="flex flex-wrap items-center gap-1.5"
+      role="group"
+      aria-label={label}
+    >
       {noteScale.map((v) => (
         <ScoreButton
           key={v}
@@ -80,6 +88,18 @@ export function ScoringControl({
           onSelect={onSelect}
         />
       ))}
+      {/* Saving receipt for THIS row only: a pulsing dot after the scale while
+          the write is in flight. Its slot is always reserved (transparent at
+          rest) so the buttons never shift when a save starts or lands.
+          animate-pulse, killed under reduced motion. */}
+      <span
+        aria-hidden
+        className={`size-1.5 shrink-0 rounded-full ${
+          saving
+            ? "animate-pulse bg-primary motion-reduce:animate-none"
+            : "bg-transparent"
+        }`}
+      />
     </div>
   );
 }

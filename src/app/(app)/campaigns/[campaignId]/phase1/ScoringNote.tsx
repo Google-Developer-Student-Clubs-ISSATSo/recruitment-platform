@@ -77,20 +77,62 @@ export function ScoringNote({
     });
   }
 
+  // Lives at the end of the narrow Scoring column (full width when the layout
+  // stacks), so it is one control strip (label, save status, Save) over the
+  // textarea. The card is its own size container: in the narrow column the
+  // short caption drops and the strip wraps rather than overflowing; full-width
+  // it shows everything on one line. The full guidance sentence stays available
+  // to assistive tech via aria-describedby.
+  const noteId = `phase1-note-${applicantId}`;
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-3.5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-      <label
-        htmlFor={`phase1-note-${applicantId}`}
-        className="text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400"
-      >
-        Note
-      </label>
-      <p className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
-        Anything to flag for the ranking stage or the decision meeting. Shared
-        by everyone screening this applicant.
-      </p>
+    <div className="@container rounded-xl border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <label
+            htmlFor={noteId}
+            className="text-xs font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400"
+          >
+            Note
+          </label>
+          <span
+            aria-hidden
+            className="hidden truncate text-[11px] text-neutral-500 @md:inline dark:text-neutral-400"
+          >
+            Shared by everyone screening this applicant
+          </span>
+          <span id={`${noteId}-desc`} className="sr-only">
+            Anything to flag for the ranking stage or the decision meeting.
+            Shared by everyone screening this applicant.
+          </span>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <p
+            aria-live="polite"
+            className={`text-[11px] ${
+              error
+                ? "text-status-rejected"
+                : dirty
+                  ? "text-neutral-500 dark:text-neutral-400"
+                  : savedFlash
+                    ? "text-status-accepted"
+                    : "text-transparent"
+            }`}
+          >
+            {error ?? (dirty ? "Unsaved changes" : savedFlash ? "Saved" : "")}
+          </p>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || !dirty}
+            className="cursor-pointer rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-primary-foreground transition-opacity duration-150 ease-out hover:opacity-90 disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none"
+          >
+            {saving ? "Saving…" : "Save note"}
+          </button>
+        </div>
+      </div>
       <textarea
-        id={`phase1-note-${applicantId}`}
+        id={noteId}
+        aria-describedby={`${noteId}-desc`}
         value={text}
         maxLength={NOTE_MAX_LENGTH}
         onChange={(e) => {
@@ -99,32 +141,8 @@ export function ScoringNote({
         }}
         rows={3}
         placeholder="e.g. To discuss — claimed higher skill than the CV shows…"
-        className="mt-2 w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-foreground outline-none transition-colors duration-150 ease-out placeholder:text-neutral-400 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder:text-neutral-500"
+        className="mt-2 block w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-foreground outline-none transition-colors duration-150 ease-out placeholder:text-neutral-400 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder:text-neutral-500"
       />
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <p
-          aria-live="polite"
-          className={`text-[11px] ${
-            error
-              ? "text-status-rejected"
-              : dirty
-                ? "text-neutral-400 dark:text-neutral-500"
-                : savedFlash
-                  ? "text-status-accepted"
-                  : "text-transparent"
-          }`}
-        >
-          {error ?? (dirty ? "Unsaved changes" : savedFlash ? "Saved" : "")}
-        </p>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || !dirty}
-          className="cursor-pointer rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-opacity duration-150 ease-out hover:opacity-90 disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none"
-        >
-          {saving ? "Saving…" : "Save note"}
-        </button>
-      </div>
     </div>
   );
 }
