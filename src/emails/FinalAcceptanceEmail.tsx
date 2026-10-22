@@ -101,7 +101,7 @@ export function FinalAcceptanceEmail({
       <Text style={paragraph}>Welcome Onboard!</Text>
 
       <Text style={teamName}>
-        The Google Developer Groups On Campus - ISSATSo Team
+        The Google Developer Group On Campus - ISSATSo Team
       </Text>
     </BaseEmailLayout>
   );

@@ -106,7 +106,7 @@ export function PhaseOneAcceptanceEmail({
       </Text>
       <Text style={signOff}>Sincerely,</Text>
       <Text style={teamName}>
-        The Google Developer Groups On Campus - ISSATSo Team
+        The Google Developer Group On Campus - ISSATSo Team
       </Text>
     </BaseEmailLayout>
   );

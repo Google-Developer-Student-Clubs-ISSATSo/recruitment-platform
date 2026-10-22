@@ -20,9 +20,9 @@ export function PhaseOneRejectionEmail({ name }: { name: string }) {
         application.
       </Text>
       <Text style={paragraph}>
-        Unfortunately, in reference to your application to join GDGC ISSATSo core
-        team, our team did not select you for further consideration and decided
-        to proceed with the selection process with other candidates.
+        Unfortunately, in reference to your application to join GDGC ISSATSo
+        core team, our team did not select you for further consideration and
+        decided to proceed with the selection process with other candidates.
       </Text>
       <Text style={paragraph}>
         We were impressed by your skills and experiences and we highly encourage
@@ -39,12 +39,12 @@ export function PhaseOneRejectionEmail({ name }: { name: string }) {
         guidelines and policies.
       </Text>
       <Text style={paragraph}>
-        Thank you again for your interest, time, and effort and we are excited to
-        see you in our upcoming events.
+        Thank you again for your interest, time, and effort and we are excited
+        to see you in our upcoming events.
       </Text>
       <Text style={signOff}>Sincerely,</Text>
       <Text style={teamName}>
-        The Google Developer Groups on Campus - ISSATSo Team
+        The Google Developer Group On Campus - ISSATSo Team
       </Text>
     </BaseEmailLayout>
   );

@@ -28,7 +28,6 @@ import {
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
 
 const BANNER_SRC = `${APP_URL}/banner.png`; // the blue-patterned GDGC banner graphic
-const FOOTER_LOGO_SRC = `${APP_URL}/logo-kamel.png`; // at the very bottom
 
 // Club social links shown in the footer, laid out in two columns:
 //   left  → Facebook, then LinkedIn
@@ -258,7 +257,7 @@ export function BaseEmailLayout({
     <Section style={bannerSection}>
       <Img
         src={BANNER_SRC}
-        alt="Google Developer Groups On Campus - ISSATSo"
+        alt="Google Developer Group On Campus - ISSATSo"
         style={bannerImg}
       />
     </Section>
@@ -301,15 +300,6 @@ export function BaseEmailLayout({
                 ))}
               </Column>
             </Row>
-          </Section>
-
-          {/* logo-kamel.png at the very bottom */}
-          <Section style={footerLogoSection}>
-            <Img
-              src={FOOTER_LOGO_SRC}
-              alt="Google Developer Group — GDG on Campus ISSATSo"
-              style={footerLogoImg}
-            />
           </Section>
         </Container>
       </Body>
