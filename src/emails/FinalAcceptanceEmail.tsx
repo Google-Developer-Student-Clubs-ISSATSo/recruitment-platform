@@ -18,9 +18,8 @@ import {
  * three links are required props with no default, read from the campaign, so a
  * cycle that hasn't configured them can't quietly send last year's URLs.
  *
- * Uses the same BaseEmailLayout as the Phase 1 and interview emails — identical
- * background, font, spacing and footer. The one difference is bannerPosition:
- * these two open with the banner rather than closing with it.
+ * Uses the same BaseEmailLayout as every other email — identical background,
+ * font, spacing, banner (at the bottom) and footer.
  */
 export function FinalAcceptanceEmail({
   name,
@@ -38,7 +37,7 @@ export function FinalAcceptanceEmail({
   return (
     <BaseEmailLayout
       preview="You've been selected for the GDGC ISSATSo Core Team"
-      bannerPosition="top"
+      justify
     >
       <Text style={paragraph}>Dear {name} ,</Text>
 

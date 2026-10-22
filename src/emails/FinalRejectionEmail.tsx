@@ -18,8 +18,7 @@ import {
  * for interview feedback, so a stale or missing invite would break the one
  * thing this email is offering.
  *
- * Uses the same BaseEmailLayout as the Phase 1 and interview emails, with the
- * banner at the top rather than the bottom — see FinalAcceptanceEmail.
+ * Uses the same BaseEmailLayout as every other email, banner at the bottom.
  */
 export function FinalRejectionEmail({
   name,
@@ -31,7 +30,7 @@ export function FinalRejectionEmail({
   return (
     <BaseEmailLayout
       preview="Response to joining GDGC - ISSATSo Core Team"
-      bannerPosition="top"
+      justify
     >
       <Text style={paragraph}>Dear {name} ,</Text>
 

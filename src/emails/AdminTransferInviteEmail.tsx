@@ -30,10 +30,7 @@ export function AdminTransferInviteEmail({
   acceptUrl: string;
 }) {
   return (
-    <BaseEmailLayout
-      preview="You have been invited to take over the GDGC ISSATSo Administrator role"
-      bannerPosition="top"
-    >
+    <BaseEmailLayout preview="You have been invited to take over the GDGC ISSATSo Administrator role">
       <Text style={paragraph}>Dear {recipientName},</Text>
       <Text style={paragraph}>
         <strong>{initiatorName}</strong> has invited you to take over the{" "}

@@ -13,7 +13,7 @@ import {
   Text,
 } from "@react-email/components";
 
-// Both footer images are referenced as ordinary hosted URLs served from public/,
+// The banner is referenced as ordinary hosted URLs served from public/,
 // NOT as CID attachments. Nothing image-related travels inside the message, which
 // is what keeps the delivered mail small and free of any attachment chip — a
 // CID part is still an attachment as far as the client is concerned, however it
@@ -68,27 +68,39 @@ const SOCIAL_RIGHT: Social[] = [
 // falls through to Roboto, then Helvetica Neue/Arial, which are the closest
 // widely-installed matches. Every text style in this file uses this one
 // constant, so the stack can never drift between elements.
-const FONT_STACK = '"Google Sans", Roboto, "Helvetica Neue", Arial, sans-serif';
+// Single quotes on purpose: React serialises the inline style attribute with
+// double quotes, so a double-quoted family name becomes &quot; inside it, and some
+// clients (Outlook, occasionally Gmail) drop the whole font-family declaration
+// when they see that — the email then renders in the client's default font.
+const FONT_STACK = "'Google Sans', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
-const PAGE_BACKGROUND = "#F3F3F2";
+const PAGE_BACKGROUND = "#F3F3F3"; // same grey as the previous project's emails
 
-// Outer wrapper: full width, plain white. Deliberately NOT the page background —
-// keeping it white is what leaves visible margins either side of the card below
-// instead of letting the grey stretch edge-to-edge across the whole window.
+// Horizontal inset of the body text inside the 600px card. The banner ignores
+// this and always goes edge to edge.
+const CONTENT_PAD = "20px";
+
+// Outer wrapper: full width, NO padding. It used to carry 40px of padding, which
+// stacked with the card's own 24px and squeezed the text into a narrow column on
+// phones, and left grey/white gutters either side of the banner.
 const main: React.CSSProperties = {
-  backgroundColor: "#ffffff",
+  backgroundColor: PAGE_BACKGROUND,
   fontFamily: FONT_STACK,
   color: "#000000",
   margin: 0,
-  padding: "40px",
+  padding: 0,
 };
 
 // Inner container: the fixed-width content card. Capped at 600px, centred, and
 // the only element carrying the #F3F3F2 background.
 const container: React.CSSProperties = {
   backgroundColor: PAGE_BACKGROUND,
+  // FIXED 600px (not 100% / max-width): this is what lets Gmail's phone app
+  // scale the whole card down like a web page instead of reflowing the text.
+  width: "600px",
   maxWidth: "600px",
   margin: "0 auto",
+  padding: 0,
 };
 
 // `Container` renders as a <table align="center">, and that align attribute is
@@ -97,14 +109,17 @@ const container: React.CSSProperties = {
 // block therefore states its own alignment explicitly rather than relying on
 // inheritance; this section re-establishes left as the default for the body.
 const contentSection: React.CSSProperties = {
-  padding: "24px 24px 0px",
+  padding: `24px ${CONTENT_PAD} 0px`,
   textAlign: "left",
 };
 
+// Edge to edge: NO horizontal padding, so the banner fills the whole card like
+// the 11/4/2024 acceptance email. Only the text blocks below carry padding.
 const bannerSection: React.CSSProperties = {
-  padding: "0px 24px",
+  padding: 0,
   margin: 0,
   lineHeight: 0,
+  fontSize: 0,
 };
 
 const bannerImg: React.CSSProperties = {
@@ -116,8 +131,11 @@ const bannerImg: React.CSSProperties = {
   textDecoration: "none",
 };
 
+// With the footer logo gone, the social row is the last thing in the email, so
+// it gets generous space above (the old layout had a big gap before it) and a
+// comfortable bottom margin.
 const socialSection: React.CSSProperties = {
-  padding: "16px 24px",
+  padding: `32px ${CONTENT_PAD} 32px`,
 };
 
 const socialColumn: React.CSSProperties = {
@@ -129,10 +147,11 @@ const socialColumn: React.CSSProperties = {
 // One social row: bold "Label :" then a space then the underlined blue link.
 const socialLine: React.CSSProperties = {
   fontFamily: FONT_STACK,
-  fontSize: "14px",
+  fontSize: "13px",
   color: "#000000",
   lineHeight: "1.4",
-  margin: "0 0 8px",
+  margin: "0 0 10px",
+  whiteSpace: "nowrap",
 };
 
 const socialLabel: React.CSSProperties = {
@@ -151,23 +170,6 @@ const socialLinkStyle: React.CSSProperties = {
   textDecoration: "underline",
 };
 
-const footerLogoSection: React.CSSProperties = {
-  padding: "8px 24px 24px",
-  textAlign: "center",
-};
-
-const footerLogoImg: React.CSSProperties = {
-  // Roughly double the previous 240px, so the sign-off logo reads clearly.
-  width: "480px",
-  maxWidth: "100%",
-  height: "auto",
-  margin: "0 auto",
-  display: "block",
-  border: "none",
-  outline: "none",
-  textDecoration: "none",
-};
-
 // Shared body-copy styles, so both templates render identically: plain black
 // text in FONT_STACK, one paragraph per block with even 16px spacing between them.
 // Bold/underline emphasis is applied inline in the templates with <strong>/<u>
@@ -178,12 +180,12 @@ const footerLogoImg: React.CSSProperties = {
 // block or join them with <br />.
 export const paragraph: React.CSSProperties = {
   fontFamily: FONT_STACK,
-  fontSize: "18px",
+  fontSize: "15px",
   fontWeight: 400,
-  lineHeight: "1.1",
+  lineHeight: "1.35",
   color: "#000000",
   textAlign: "left",
-  margin: "0 0 16px",
+  margin: "0 0 18px",
 };
 
 /**
@@ -221,34 +223,35 @@ export const subheading: React.CSSProperties = {
 /** The team name: the one body line that stays centred, and is bold. */
 export const teamName: React.CSSProperties = {
   ...paragraph,
-  fontSize: "12px",
+  fontSize: "14px",
   fontWeight: 700,
   textAlign: "center",
-  marginTop: "10px",
+  margin: "28px 0 10px 0",
 };
 
 /**
  * Shared shell for every outbound applicant email — the Phase 1 results, the
  * interview booking invite/reminder, and the final acceptance/rejection: a
  * white page holding a centred 600px #F3F3F2 card, left-aligned black body
- * copy, the GDGC banner, a two-column social links row (Facebook/LinkedIn |
- * Youtube/Twitter), and the logo-kamel graphic at the very bottom. Both images
- * are hosted URLs, not attachments. Templates supply the body via `children`;
+ * copy, the GDGC banner (full width, edge to edge) and a two-column social
+ * links row (Facebook/LinkedIn | Youtube/Twitter). The banner is a hosted URL,
+ * not an attachment. Templates supply the body via `children`;
  * `preview` sets the inbox snippet.
  *
- * `bannerPosition` moves ONLY the banner: "bottom" (the default, so the Phase 1
- * and interview templates keep rendering exactly as they always have) puts it
- * under the body copy; "top" puts it above, which is what the final-decision
- * emails use. The social links and the logo stay below the content either way —
- * the footer order never changes.
+ * `bannerPosition` moves ONLY the banner: "bottom" (the default, matching the
+ * old Phase 1 and interview emails) puts it under the body copy and team name;
+ * "top" puts it above, as the old final accept/reject emails did. `justify`
+ * justifies the body text, as the old final emails did; the rest were left-aligned. The social links stay below the content either way.
  */
 export function BaseEmailLayout({
   preview,
   bannerPosition = "bottom",
+  justify = false,
   children,
 }: {
   preview: string;
   bannerPosition?: "top" | "bottom";
+  justify?: boolean;
   children: React.ReactNode;
 }) {
   // One element, rendered in one of two places — so the two positions can never
@@ -265,13 +268,28 @@ export function BaseEmailLayout({
 
   return (
     <Html lang="en">
-      <Head />
+      <Head>
+        {/* Deliberately NO viewport meta, NO color-scheme meta and NO @media
+            queries. Gmail treats an email with none of those as a fixed-width
+            "desktop" email: on a phone it shrinks the whole 600px card to fit
+            the screen (the web-page feel), and in dark mode it inverts the colours
+            automatically. Adding any of them switches that off. */}
+        <style>{`
+          /* Justify body paragraphs, but leave the centred team name alone. */
+          .email-justify p:not([style*="center"]) { text-align: justify !important; }
+        `}</style>
+      </Head>
       <Preview>{preview}</Preview>
       <Body style={main}>
         <Container style={container}>
           {bannerPosition === "top" && banner}
 
-          <Section style={contentSection}>{children}</Section>
+          <Section
+            style={contentSection}
+            className={justify ? "email-justify" : undefined}
+          >
+            {children}
+          </Section>
 
           {bannerPosition === "bottom" && banner}
 
