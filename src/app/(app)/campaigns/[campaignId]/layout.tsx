@@ -58,10 +58,14 @@ export default async function CampaignLayout({
           <Icon name="arrow_back" className="text-[18px]" />
           All Campaigns
         </Link>
-        <span className="text-neutral-300 dark:text-neutral-600">/</span>
+        {/* Pure decoration — the link and the name carry the meaning — so it
+            is hidden from screen readers and exempt from text contrast. */}
+        <span aria-hidden className="text-neutral-300 dark:text-neutral-600">
+          /
+        </span>
         <span className="font-semibold text-foreground">{campaign.name}</span>
         {!campaign.isOpen && (
-          <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500 dark:bg-neutral-700 dark:text-neutral-300">
+          <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300">
             Archived
           </span>
         )}

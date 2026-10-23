@@ -67,7 +67,7 @@ export function AnswerValue({ value }: { value: string }) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-1.5 inline-flex items-center gap-1 break-all text-sm font-medium text-primary hover:underline"
+        className="mt-1.5 inline-flex items-center gap-1 break-all text-sm font-medium text-primary-text hover:underline"
       >
         {value}
         <Icon name="open_in_new" className="text-sm" />
@@ -314,7 +314,7 @@ function LinkCard({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1 inline-flex items-center gap-1 break-all text-sm font-medium text-primary hover:underline"
+          className="mt-1 inline-flex items-center gap-1 break-all text-sm font-medium text-primary-text hover:underline"
         >
           {url}
           <Icon name="open_in_new" className="text-sm" />

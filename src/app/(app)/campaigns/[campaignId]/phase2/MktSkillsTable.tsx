@@ -59,10 +59,10 @@ export function MktSkillsTable({
             the list below, and a label naming only half of that is how it got
             misread the first time. */}
         <p className="flex items-baseline gap-2 rounded-lg bg-primary/10 px-3 py-1.5">
-          <span className="text-lg font-bold tabular-nums text-primary">
+          <span className="text-lg font-bold tabular-nums text-primary-text">
             {mktPreferredCount}
           </span>
-          <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+          <span className="text-xs font-semibold uppercase tracking-wider text-primary-text">
             chose MKT with a listed skill
           </span>
         </p>
@@ -87,7 +87,8 @@ export function MktSkillsTable({
                     Applicant
                   </th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:px-6 dark:text-neutral-400">
-                    Preferred Committee
+                    <span className="sm:hidden">Committee</span>
+                    <span className="hidden sm:inline">Preferred Committee</span>
                   </th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:px-6 dark:text-neutral-400">
                     Skills
@@ -100,8 +101,14 @@ export function MktSkillsTable({
                     <td className="px-4 py-3 text-sm font-medium text-foreground sm:px-6">
                       {a.fullName}
                     </td>
+                    {/* The code below sm: at 375px the full label made this
+                        table 495px wide and pushed Skills — the column that
+                        matters — off-screen with no scroll cue. */}
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-neutral-600 sm:px-6 dark:text-neutral-300">
-                      {committeeLabel(a.preferredCommittee)}
+                      <span className="sm:hidden">{a.preferredCommittee}</span>
+                      <span className="hidden sm:inline">
+                        {committeeLabel(a.preferredCommittee)}
+                      </span>
                     </td>
                     <td className="px-4 py-3 sm:px-6">
                       <SkillChips listed={a.skills} writeIns={a.writeIns} />

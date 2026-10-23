@@ -34,7 +34,7 @@ export function SkillChips({
       {listed.map((skill) => (
         <span
           key={skill}
-          className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+          className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary-text"
         >
           {skill}
         </span>

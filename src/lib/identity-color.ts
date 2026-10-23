@@ -72,20 +72,22 @@ export function resolveIdentityColor({
  * `tint` is the badge/avatar treatment (washed background + saturated ink);
  * `solid` is for the rare element that needs the colour at full strength.
  */
+// Both maps colour TEXT, so both use the identity colour's *-text ink (see
+// globals.css): the bright fills failed AA as text on their own tint.
 export const IDENTITY_TINT_CLASS: Record<IdentityColor, string> = {
-  "committee-tm": "bg-committee-tm/10 text-committee-tm",
-  "committee-mkt": "bg-committee-mkt/10 text-committee-mkt",
-  "committee-eer": "bg-committee-eer/10 text-committee-eer",
-  "lead-club": "bg-lead-club/10 text-lead-club",
-  "lead-technical": "bg-lead-technical/10 text-lead-technical",
+  "committee-tm": "bg-committee-tm/10 text-committee-tm-text",
+  "committee-mkt": "bg-committee-mkt/10 text-committee-mkt-text",
+  "committee-eer": "bg-committee-eer/10 text-committee-eer-text",
+  "lead-club": "bg-lead-club/10 text-lead-club-text",
+  "lead-technical": "bg-lead-technical/10 text-lead-technical-text",
 };
 
 export const IDENTITY_TEXT_CLASS: Record<IdentityColor, string> = {
-  "committee-tm": "text-committee-tm",
-  "committee-mkt": "text-committee-mkt",
-  "committee-eer": "text-committee-eer",
-  "lead-club": "text-lead-club",
-  "lead-technical": "text-lead-technical",
+  "committee-tm": "text-committee-tm-text",
+  "committee-mkt": "text-committee-mkt-text",
+  "committee-eer": "text-committee-eer-text",
+  "lead-club": "text-lead-club-text",
+  "lead-technical": "text-lead-technical-text",
 };
 
 /** Convenience: resolve straight to the tint classes most call sites want. */

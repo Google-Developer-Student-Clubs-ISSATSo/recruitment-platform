@@ -34,10 +34,10 @@ function TallyPill({
       title={`${count} ${section.label.toLowerCase()}`}
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
         section.tone === "rejected"
-          ? "bg-status-rejected/10 text-status-rejected"
+          ? "bg-status-rejected/10 text-status-rejected-text"
           : section.tone === "accepted"
-            ? "bg-status-accepted/10 text-status-accepted"
-            : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+            ? "bg-status-accepted/10 text-status-accepted-text"
+            : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
       }`}
     >
       <Icon name={section.icon} className="text-[13px]" />
@@ -49,7 +49,7 @@ function TallyPill({
 /** The fallback under a field the applicant's form row has nothing for. */
 function NoAnswer() {
   return (
-    <p className="mt-1 flex items-center gap-1.5 text-sm italic text-[color:var(--status-pending)]">
+    <p className="mt-1 flex items-center gap-1.5 text-sm italic text-status-pending-text">
       <Icon name="help" className="text-[16px]" />
       No answer found for this field
     </p>
@@ -109,6 +109,13 @@ export function ApplicantCard({
   const flagCounts = counts.filter(
     (c) => surfaceOfEntryType(c.section.type) === "flags",
   );
+  // Below sm the tally columns don't fit, so the red-flag count alone moves
+  // up beside the name — the one count that must never hide behind a closed
+  // card, whatever the screen width.
+  const redFlag =
+    showFlagsColumn && applicant.canViewFlags
+      ? flagCounts.find((c) => c.section.tone === "rejected" && c.count > 0)
+      : undefined;
 
   // A column can be present on the page while this particular applicant is out
   // of the viewer's reach — a committee-matched Lead sees the column because
@@ -120,112 +127,157 @@ export function ApplicantCard({
       : showFlagsColumn && applicant.canViewFlags,
   );
 
+  // The form stores the year as a bare number ("1"), so it gets a "Year"
+  // prefix unless the answer already says it.
+  const yearLabel =
+    applicant.yearOfStudy &&
+    (/year/i.test(applicant.yearOfStudy)
+      ? applicant.yearOfStudy
+      : `Year ${applicant.yearOfStudy}`);
+  // After the committee on the second line; blanks dropped so an unanswered
+  // field never leaves a dangling separator.
+  const studyLine = [yearLabel, applicant.currentDiploma].filter(Boolean);
+
+  // What a screen reader announces for the toggle. Without it the name was
+  // every span run together — "1 Amir Cherif Marketing (MKT) · Year 1 ·
+  // Licence 55.00 / 100" — with nothing saying which number was the rank and
+  // which the score. Starts with the visible name so voice control still
+  // matches it.
+  const visibleTallies = [
+    ...(showNotesColumn && applicant.canViewNotes ? noteCounts : []),
+    ...(showFlagsColumn && applicant.canViewFlags ? flagCounts : []),
+  ].filter((c) => c.count > 0);
+  const toggleLabel = [
+    applicant.fullName,
+    `rank ${applicant.position}`,
+    committeeLabel(applicant.preferredCommittee),
+    ...studyLine,
+    mktSkillCount > 0 &&
+      `${mktSkillCount} MKT skill${mktSkillCount === 1 ? "" : "s"}`,
+    ...visibleTallies.map(
+      (c) => `${c.count} ${c.section.label.toLowerCase()}`,
+    ),
+    applicant.score === null
+      ? "no score yet"
+      : `score ${formatScore(applicant.score)} of ${Number(maxScore.toFixed(2))}`,
+    !applicant.complete && "partial score",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return (
     <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-neutral-50 sm:px-6 dark:hover:bg-neutral-800/50"
-      >
-        <span className="w-7 shrink-0 text-sm font-bold tabular-nums text-neutral-400">
-          {applicant.position}
-        </span>
+      {/* A heading around the toggle (the WAI-ARIA accordion pattern), so
+          heading navigation can step through the applicants. h2: the cards sit
+          directly under the page's h1, beside the MKT sections' h2s. */}
+      <h2>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={toggleLabel}
+          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-neutral-50 sm:px-6 dark:hover:bg-neutral-800/50"
+        >
+          <span className="w-7 shrink-0 text-sm font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+            {applicant.position}
+          </span>
 
-        <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm font-semibold text-foreground sm:text-base">
-              {applicant.fullName}
-            </span>
-            {/* MKT committee members only — mktSkills is null for everyone
-                else, dropped on the server. Whitelisted skills are what's
-                counted; write-ins show in the expanded answers. */}
-            {mktSkillCount > 0 && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                <Icon name="campaign" className="text-[13px]" />
-                {mktSkillCount} MKT
-                <span className="hidden sm:inline">
-                  {" "}
-                  skill{mktSkillCount === 1 ? "" : "s"}
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-semibold text-foreground sm:text-base">
+                {applicant.fullName}
+              </span>
+              {/* MKT committee members only — mktSkills is null for everyone
+                  else, dropped on the server. Whitelisted skills are what's
+                  counted; write-ins show in the expanded answers. */}
+              {mktSkillCount > 0 && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary-text">
+                  <Icon name="campaign" className="text-[13px]" />
+                  {mktSkillCount} MKT
+                  <span className="hidden sm:inline">
+                    {" "}
+                    skill{mktSkillCount === 1 ? "" : "s"}
+                  </span>
                 </span>
+              )}
+              {redFlag && (
+                <span className="shrink-0 sm:hidden">
+                  <TallyPill section={redFlag.section} count={redFlag.count} />
+                </span>
+              )}
+            </span>
+            {/* Committee, then study year and diploma. Below sm the committee is
+                its code ("MKT") and the line may wrap: at 375px the full label
+                ("Events & External Relations (EER)") pushed the year and diploma
+                out of a truncated line, and they appear nowhere else on the
+                card. From sm up there's room for the full label on one line. */}
+            <span className="block text-xs text-neutral-500 sm:truncate dark:text-neutral-400">
+              <span className="sm:hidden">{applicant.preferredCommittee}</span>
+              <span className="hidden sm:inline">
+                {committeeLabel(applicant.preferredCommittee)}
               </span>
-            )}
-          </span>
-          {/* Committee first, then study year and diploma — blanks dropped so
-              an unanswered field never leaves a dangling separator. The form
-              stores the year as a bare number ("1"), so it gets a "Year"
-              prefix unless the answer already says it. */}
-          <span className="block truncate text-xs text-neutral-500 dark:text-neutral-400">
-            {[
-              committeeLabel(applicant.preferredCommittee),
-              applicant.yearOfStudy &&
-                (/year/i.test(applicant.yearOfStudy)
-                  ? applicant.yearOfStudy
-                  : `Year ${applicant.yearOfStudy}`),
-              applicant.currentDiploma,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-        </span>
-
-        {/* Notes and Flags, each its own fixed column — visible while collapsed,
-            so a red flag can't hide behind a closed card. A column absent here
-            is absent for the whole table (the viewer may not read that surface
-            anywhere); a "—" inside a present column is this one applicant being
-            out of a committee-matched Lead's reach. */}
-        {showNotesColumn && (
-          <span className="hidden w-16 shrink-0 items-center gap-1 sm:flex">
-            {!applicant.canViewNotes ? (
-              <span className="text-xs text-neutral-300 dark:text-neutral-600">
-                —
-              </span>
-            ) : (
-              noteCounts
-                .filter((c) => c.count > 0)
-                .map(({ section, count }) => (
-                  <TallyPill key={section.type} section={section} count={count} />
-                ))
-            )}
-          </span>
-        )}
-
-        {showFlagsColumn && (
-          <span className="hidden w-24 shrink-0 items-center gap-1 sm:flex">
-            {!applicant.canViewFlags ? (
-              <span className="text-xs text-neutral-300 dark:text-neutral-600">
-                —
-              </span>
-            ) : (
-              flagCounts
-                .filter((c) => c.count > 0)
-                .map(({ section, count }) => (
-                  <TallyPill key={section.type} section={section} count={count} />
-                ))
-            )}
-          </span>
-        )}
-
-        <span className="shrink-0 text-right">
-          <span className="block text-base font-bold tabular-nums text-foreground sm:text-lg">
-            {formatScore(applicant.score)}
-            <span className="text-xs font-semibold text-neutral-400">
-              {" "}
-              / {Number(maxScore.toFixed(2))}
+              {studyLine.map((part) => ` · ${part}`).join("")}
             </span>
           </span>
-          {!applicant.complete && (
-            <span className="block text-[11px] text-[color:var(--status-pending)]">
-              Partial score
+
+          {/* Notes and Flags, each its own fixed column — visible while collapsed,
+              so a red flag can't hide behind a closed card. A column absent here
+              is absent for the whole table (the viewer may not read that surface
+              anywhere); a "—" inside a present column is this one applicant being
+              out of a committee-matched Lead's reach. */}
+          {showNotesColumn && (
+            <span className="hidden w-16 shrink-0 items-center gap-1 sm:flex">
+              {!applicant.canViewNotes ? (
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                  —
+                </span>
+              ) : (
+                noteCounts
+                  .filter((c) => c.count > 0)
+                  .map(({ section, count }) => (
+                    <TallyPill key={section.type} section={section} count={count} />
+                  ))
+              )}
             </span>
           )}
-        </span>
 
-        <Icon
-          name={open ? "expand_less" : "expand_more"}
-          className="shrink-0 text-[20px] text-neutral-400"
-        />
-      </button>
+          {showFlagsColumn && (
+            <span className="hidden w-24 shrink-0 items-center gap-1 sm:flex">
+              {!applicant.canViewFlags ? (
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                  —
+                </span>
+              ) : (
+                flagCounts
+                  .filter((c) => c.count > 0)
+                  .map(({ section, count }) => (
+                    <TallyPill key={section.type} section={section} count={count} />
+                  ))
+              )}
+            </span>
+          )}
+
+          <span className="shrink-0 text-right">
+            <span className="block text-base font-bold tabular-nums text-foreground sm:text-lg">
+              {formatScore(applicant.score)}
+              <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+                {" "}
+                / {Number(maxScore.toFixed(2))}
+              </span>
+            </span>
+            {!applicant.complete && (
+              <span className="block text-[11px] text-status-pending-text">
+                Partial score
+              </span>
+            )}
+          </span>
+
+          <Icon
+            name={open ? "expand_less" : "expand_more"}
+            className="shrink-0 text-[20px] text-neutral-500 dark:text-neutral-400"
+          />
+        </button>
+      </h2>
 
       <AnimatePresence initial={false}>
         {open && (
@@ -251,7 +303,7 @@ export function ApplicantCard({
                 </h3>
                 <div className="mt-2 space-y-3">
                   {applicant.answers.length === 0 && (
-                    <p className="text-sm italic text-neutral-400">
+                    <p className="text-sm italic text-neutral-500 dark:text-neutral-400">
                       This campaign has no configured questions.
                     </p>
                   )}

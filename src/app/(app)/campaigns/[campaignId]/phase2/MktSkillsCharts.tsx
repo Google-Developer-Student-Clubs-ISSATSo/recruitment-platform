@@ -5,7 +5,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -62,6 +61,19 @@ function TooltipCard({
 const plural = (n: number) => `${n} applicant${n === 1 ? "" : "s"}`;
 
 /**
+ * A count axis that ends at (a whole step past) the data, with integer ticks.
+ * recharts' default "nice" scale ran both axes to 4 for a maximum of 2, so the
+ * bars filled half the plot. Steps of 1 up to 6, then about five ticks.
+ */
+function countAxis(max: number): { domain: [number, number]; ticks: number[] } {
+  const top = Math.max(1, max);
+  const step = top <= 6 ? 1 : Math.ceil(top / 5);
+  const end = Math.ceil(top / step) * step;
+  const ticks = Array.from({ length: end / step + 1 }, (_, i) => i * step);
+  return { domain: [0, end], ticks };
+}
+
+/**
  * The colour key. Only rendered when both kinds are on screen — with one kind
  * there is one series, and the chart titles already name it.
  */
@@ -94,6 +106,7 @@ function SkillsChart({ skills }: { skills: SkillCount[] }) {
   // Comfortable row pitch for a 12px label; grows with the list rather than
   // squeezing bars, since write-ins can add many rows.
   const height = Math.max(160, skills.length * 32 + 32);
+  const axis = countAxis(Math.max(0, ...skills.map((s) => s.count)));
 
   return (
     <div style={{ height }} className="w-full">
@@ -109,6 +122,8 @@ function SkillsChart({ skills }: { skills: SkillCount[] }) {
           <CartesianGrid horizontal={false} stroke="var(--border)" />
           <XAxis
             type="number"
+            domain={axis.domain}
+            ticks={axis.ticks}
             allowDecimals={false}
             tickLine={false}
             axisLine={{ stroke: "var(--border)" }}
@@ -191,6 +206,11 @@ function CommitteeChart({ applicants }: { applicants: MktSkillApplicant[] }) {
       total: mine.length,
     };
   });
+  const axis = countAxis(Math.max(0, ...rows.map((r) => r.total)));
+  // Each stack's total rides on its axis label ("MKT · 2") rather than on a
+  // LabelList: a label hung off the top segment vanished whenever that segment
+  // was zero-height — which, with no write-ins, was every stack.
+  const totalOf = new Map(rows.map((r) => [r.committee, r.total]));
 
   return (
     <div className="h-56 w-full">
@@ -198,7 +218,7 @@ function CommitteeChart({ applicants }: { applicants: MktSkillApplicant[] }) {
         <BarChart
           accessibilityLayer
           data={rows}
-          margin={{ top: 20, right: 8, bottom: 0, left: -20 }}
+          margin={{ top: 8, right: 8, bottom: 0, left: -20 }}
           barCategoryGap="30%"
         >
           <CartesianGrid vertical={false} stroke="var(--border)" />
@@ -206,9 +226,12 @@ function CommitteeChart({ applicants }: { applicants: MktSkillApplicant[] }) {
             dataKey="committee"
             tickLine={false}
             axisLine={{ stroke: "var(--border)" }}
-            tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+            tickFormatter={(c: Committee) => `${c} · ${totalOf.get(c) ?? 0}`}
+            tick={{ fill: "var(--foreground)", fontSize: 12, fontWeight: 600 }}
           />
           <YAxis
+            domain={axis.domain}
+            ticks={axis.ticks}
             allowDecimals={false}
             tickLine={false}
             axisLine={false}
@@ -257,17 +280,7 @@ function CommitteeChart({ applicants }: { applicants: MktSkillApplicant[] }) {
             animationBegin={0}
             animationDuration={DURATION_MS.slow}
             animationEasing="ease-out"
-          >
-            {/* Three stacks only, so each carries its total. */}
-            <LabelList
-              dataKey="total"
-              position="top"
-              offset={6}
-              fill="var(--foreground)"
-              fontSize={13}
-              fontWeight={600}
-            />
-          </Bar>
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -296,7 +309,7 @@ export function MktSkillsCharts({
         </figure>
         <figure className="min-w-0">
           <figcaption className="mb-3 text-sm font-semibold text-foreground">
-            By preferred committee
+            Applicants with an MKT skill, by preferred committee
           </figcaption>
           <CommitteeChart applicants={applicants} />
         </figure>

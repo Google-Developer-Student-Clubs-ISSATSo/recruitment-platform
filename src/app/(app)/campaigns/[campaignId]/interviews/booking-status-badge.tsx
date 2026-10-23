@@ -12,11 +12,11 @@ export type BookingState = "SCHEDULED" | "NOT_BOOKED" | "NOT_INVITED";
 const BOOKING_STYLES: Record<BookingState, { label: string; className: string }> = {
   SCHEDULED: {
     label: "Scheduled",
-    className: "bg-status-accepted/10 text-status-accepted",
+    className: "bg-status-accepted/10 text-status-accepted-text",
   },
   NOT_BOOKED: {
     label: "Not yet booked",
-    className: "bg-status-pending/15 text-[color:var(--status-pending)]",
+    className: "bg-status-pending/15 text-status-pending-text",
   },
   NOT_INVITED: {
     label: "Not invited",

@@ -86,6 +86,15 @@ export function AppShellChrome({
       className="min-h-screen bg-neutral-50 text-foreground dark:bg-neutral-950"
       style={{ fontFamily: "Inter, var(--font-sans), sans-serif" }}
     >
+      {/* First focusable element on every page: without it a keyboard user
+          tabbed through the whole sidebar and top bar (17 stops) before
+          reaching any page content. Hidden until focused. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:border focus:border-neutral-200 focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-md dark:focus:border-neutral-700 dark:focus:bg-neutral-900"
+      >
+        Skip to content
+      </a>
       {/* Backdrop — mobile only, and only while open. Tapping it closes the
           drawer. aria-hidden because the same dismissal is on Escape and on the
           drawer's own close button, both of which are reachable. */}
@@ -119,9 +128,11 @@ export function AppShellChrome({
         <div className="flex items-center gap-3 p-6">
           <Logo className="h-9 w-9 rounded-lg" alt="GDGC ISSATSO" />
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-bold text-foreground">
+            {/* Not a heading: the brand repeats on every page, so as an <h1>
+                it competed with each page's own title for the top level. */}
+            <p className="truncate text-lg font-bold text-foreground">
               GDGC ISSATSO
-            </h1>
+            </p>
             <p className="truncate text-sm text-neutral-500 dark:text-neutral-400">
               Recruitment Platform
             </p>
@@ -205,9 +216,9 @@ export function AppShellChrome({
               off-canvas, so the mark is repeated here to keep it on screen. */}
           <Logo className="h-8 w-8 shrink-0 rounded-lg md:hidden" alt="GDGC ISSATSO" />
 
-          <h2 className="truncate text-base font-bold text-primary md:text-lg">
+          <p className="truncate text-base font-bold text-primary-text md:text-lg">
             Recruitment Platform
-          </h2>
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-1 text-neutral-500 dark:text-neutral-400">
           <ThemeToggle />
@@ -215,8 +226,13 @@ export function AppShellChrome({
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="pt-16 md:ml-64">
+      {/* Main content. tabIndex -1 so the skip link can move focus here; no
+          ring on it, since it is a landing point, not a control. */}
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="pt-16 focus:outline-none md:ml-64"
+      >
         <div className="p-4 sm:p-6 lg:p-8">{children}</div>
       </main>
     </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Icon } from "@/components/app-shell/icon";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { committeeLabel } from "@/lib/committee";
@@ -86,7 +87,7 @@ export function PanelBoard({
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
               filledSeats === totalSeats
-                ? "bg-status-accepted/10 text-status-accepted"
+                ? "bg-status-accepted/10 text-status-accepted-text"
                 : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
             }`}
           >
@@ -155,45 +156,52 @@ function DaySection({
           : "border-neutral-200 dark:border-neutral-800"
       }`}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full cursor-pointer flex-wrap items-center gap-2 px-4 py-3 text-left transition-colors duration-150 ease-out hover:bg-neutral-50 motion-reduce:transition-none dark:hover:bg-neutral-800/40"
-      >
-        {/* One chevron that rotates, rather than swapping between two glyphs —
-            the rotation is the affordance, and a swap can't be animated. */}
-        <Icon
-          name="chevron_right"
-          className={`text-[18px] text-neutral-400 transition-transform duration-200 ease-out motion-reduce:transition-none ${
-            open ? "rotate-90" : ""
-          }`}
-        />
-        <h3
-          className={`text-sm font-semibold ${
-            day.isToday ? "text-primary" : "text-foreground"
-          }`}
+      {/* The heading wraps the toggle (the WAI-ARIA accordion pattern) rather
+          than sitting inside it: a button may only hold phrasing content, so
+          an <h3> inside one dropped the days out of heading navigation. */}
+      <h3>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex w-full cursor-pointer flex-wrap items-center gap-2 px-4 py-3 text-left transition-colors duration-150 ease-out hover:bg-neutral-50 motion-reduce:transition-none dark:hover:bg-neutral-800/40"
         >
-          {day.dateLabel}
-        </h3>
-        {day.isToday && (
-          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary-foreground">
-            Today
+          {/* One chevron that rotates, rather than swapping between two glyphs —
+              the rotation is the affordance, and a swap can't be animated. */}
+          <Icon
+            name="chevron_right"
+            className={`text-[18px] text-neutral-500 dark:text-neutral-400 transition-transform duration-200 ease-out motion-reduce:transition-none ${
+              open ? "rotate-90" : ""
+            }`}
+          />
+          <span
+            className={`text-sm font-semibold ${
+              day.isToday ? "text-primary-text" : "text-foreground"
+            }`}
+          >
+            {day.dateLabel}
           </span>
-        )}
-        {day.isPast && (
-          <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300">
-            Past
+          {/* bg-primary-text, not bg-primary: white 10px text on the bright
+              brand blue measured 3.56:1. */}
+          {day.isToday && (
+            <span className="rounded-full bg-primary-text px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white dark:text-neutral-950">
+              Today
+            </span>
+          )}
+          {day.isPast && (
+            <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300">
+              Past
+            </span>
+          )}
+          {/* Basis-full below sm so the seat tally drops to its own line instead
+              of squeezing the date label at 375px. */}
+          <span className="basis-full text-xs font-normal text-neutral-500 sm:ml-auto sm:basis-auto dark:text-neutral-400">
+            <strong>{day.cards.length}</strong> interview
+            {day.cards.length === 1 ? "" : "s"} ·{" "}
+            {dayFilled}/{daySeats} seats
           </span>
-        )}
-        {/* Basis-full below sm so the seat tally drops to its own line instead of
-            squeezing the date label at 375px. */}
-        <span className="basis-full text-xs text-neutral-500 sm:ml-auto sm:basis-auto dark:text-neutral-400">
-          <strong>{day.cards.length}</strong> interview
-          {day.cards.length === 1 ? "" : "s"} ·{" "}
-          {dayFilled}/{daySeats} seats
-        </span>
-      </button>
+        </button>
+      </h3>
 
       {/* Height-animated collapse. Past days start closed, so on a board with a
           few weeks of history this is the control someone actually uses; snapping
@@ -301,7 +309,7 @@ function PanelCard({
                 Sits directly under the name so the state reads as belonging to
                 this applicant, not to the seats below. */}
             {done && (
-              <span className="mt-1 inline-flex items-center rounded-full bg-status-accepted/10 px-2.5 py-0.5 text-[11px] font-semibold text-status-accepted">
+              <span className="mt-1 inline-flex items-center rounded-full bg-status-accepted/10 px-2.5 py-0.5 text-[11px] font-semibold text-status-accepted-text">
                 Completed
               </span>
             )}
@@ -339,7 +347,10 @@ function PanelCard({
             footer already states the count in words; this is for scanning a grid
             of cards for the half-empty one without reading any of them, which is
             the whole reason this section is a board. */}
+        {/* role="img": ARIA ignores aria-label on a plain span, so without it
+            the count this label carries was never announced. */}
         <span
+          role="img"
           className="flex shrink-0 items-center gap-1"
           aria-label={`${filled} of ${card.seats.length} seats filled`}
         >
@@ -363,6 +374,7 @@ function PanelCard({
           <SeatRow
             key={seat.seatId}
             seat={seat}
+            applicantName={card.fullName}
             pending={pending}
             isMine={seat.claimedById === currentUserId}
             currentUserId={currentUserId}
@@ -389,15 +401,23 @@ function PanelCard({
           />
         ))}
         {error && (
-          <p className="rounded-lg bg-status-rejected/10 px-3 py-2 text-xs text-status-rejected">
+          <p
+            role="alert"
+            className="rounded-lg bg-status-rejected/10 px-3 py-2 text-xs text-status-rejected-text"
+          >
             {error}
           </p>
         )}
-        {notice && (
-          <p className="rounded-lg bg-status-pending/10 px-3 py-2 text-xs text-[color:var(--status-pending)]">
-            {notice}
-          </p>
-        )}
+        {/* Always mounted (empty until there's a notice) so "Sent to that
+            seat's lead to approve" is announced when it appears. */}
+        {/* empty:-mt-2 cancels the space-y gap the empty region would add. */}
+        <div role="status" className="empty:-mt-2">
+          {notice && (
+            <p className="rounded-lg bg-status-pending/10 px-3 py-2 text-xs text-status-pending-text">
+              {notice}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Notes link — omitted entirely when this viewer has no access to the
@@ -406,7 +426,7 @@ function PanelCard({
         <div className="px-4 pb-3">
           <Link
             href={`/campaigns/${campaignId}/interviews/${card.applicantId}/notes`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-text hover:underline"
           >
             <Icon
               name={card.noteAccess === "edit" ? "edit_note" : "visibility"}
@@ -421,8 +441,8 @@ function PanelCard({
       <div
         className={`border-t px-4 py-2 text-center text-[10px] font-bold uppercase tracking-widest ${
           complete
-            ? "border-status-accepted/20 bg-status-accepted/10 text-status-accepted"
-            : "border-neutral-200 bg-status-pending/10 text-[color:var(--status-pending)] dark:border-neutral-800"
+            ? "border-status-accepted/20 bg-status-accepted/10 text-status-accepted-text"
+            : "border-neutral-200 bg-status-pending/10 text-status-pending-text dark:border-neutral-800"
         }`}
       >
         {complete
@@ -435,6 +455,7 @@ function PanelCard({
 
 function SeatRow({
   seat,
+  applicantName,
   pending,
   isMine,
   currentUserId,
@@ -446,6 +467,8 @@ function SeatRow({
   onWithdraw,
 }: {
   seat: BoardSeat;
+  /** Whose panel this is — named in the confirmation dialogs. */
+  applicantName: string;
   pending: boolean;
   isMine: boolean;
   currentUserId: string;
@@ -458,6 +481,14 @@ function SeatRow({
 }) {
   const reduced = useReducedMotion();
   const [picking, setPicking] = useState(false);
+  // The member chosen in the picker, not yet committed. Choosing only selects;
+  // the Assign button (or Enter) commits. Committing straight from onChange
+  // meant a mis-click — or, on Windows, the first ArrowDown on the closed
+  // select — seated the wrong person with no chance to back out.
+  const [choice, setChoice] = useState("");
+  const [confirming, setConfirming] = useState<"remove" | "decline" | null>(
+    null,
+  );
   const filled = seat.claimedById !== null;
   // One picker, two meanings: on an empty seat it fills, on a filled one it
   // swaps the occupant. Kept as a single control because the choice being made
@@ -487,6 +518,21 @@ function SeatRow({
     if (reduced) return;
     setFlash((f) => ({ kind, nonce: (f?.nonce ?? 0) + 1 }));
   };
+
+  const closePicker = () => {
+    setPicking(false);
+    setChoice("");
+  };
+
+  /** Seat (or swap in, or propose) the member chosen in the picker. */
+  function commitChoice() {
+    if (!choice) return;
+    const assigneeId = choice;
+    closePicker();
+    trigger("fill");
+    if (filled) onReassign(assigneeId);
+    else onAssign(assigneeId);
+  }
 
   const request = seat.pendingRequest;
   const isMyRequest = request?.requestedById === currentUserId;
@@ -545,7 +591,7 @@ function SeatRow({
                 className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
                   seat.claimedByColor
                     ? IDENTITY_TINT_CLASS[seat.claimedByColor]
-                    : "bg-primary/15 text-primary"
+                    : "bg-primary/15 text-primary-text"
                 }`}
               >
                 {initialsOf(seat.claimedByName ?? "?")}
@@ -558,12 +604,12 @@ function SeatRow({
                   to prevent. */}
               <span
                 className={`truncate text-sm ${
-                  isMine ? "font-semibold text-primary" : "font-medium text-foreground"
+                  isMine ? "font-semibold text-primary-text" : "font-medium text-foreground"
                 }`}
               >
                 {seat.claimedByName}
                 {isMine && (
-                  <span className="ml-1.5 text-xs font-semibold text-primary">
+                  <span className="ml-1.5 text-xs font-semibold text-primary-text">
                     (you)
                   </span>
                 )}
@@ -572,7 +618,7 @@ function SeatRow({
           ) : seat.awaitingApproval ? (
             /* Spoken for but not filled. Shown to everyone, so no second lead
                assigns over the top of a request already in flight. */
-            <span className="truncate text-sm font-medium text-[color:var(--status-pending)]">
+            <span className="truncate text-sm font-medium text-status-pending-text">
               Pending approval
             </span>
           ) : (
@@ -600,10 +646,7 @@ function SeatRow({
               variant="ghost"
               disabled={pending}
               title="Remove this interviewer from the panel"
-              onClick={() => {
-                trigger("empty");
-                onUnassign();
-              }}
+              onClick={() => setConfirming("remove")}
             >
               Remove
             </Button>
@@ -613,7 +656,10 @@ function SeatRow({
               the row is tight enough at two-up that ~22px of redundant chrome is
               what pushes the interviewer's name into an ellipsis. */}
           {filled && !seat.canAssign && (
-            <Icon name="lock" className="text-[16px] text-status-accepted" />
+            <span title="Only this seat's lead can change it">
+              <Icon name="lock" className="text-[16px] text-status-accepted" />
+              <span className="sr-only">Locked — only this seat&apos;s lead can change it</span>
+            </span>
           )}
           {!filled && mayStaff && !picking && (
             <Button
@@ -633,7 +679,7 @@ function SeatRow({
           {/* Nothing to offer this viewer: shown as open so the card reads
               honestly, but with no affordance. */}
           {!filled && !mayStaff && !request && !seat.awaitingApproval && (
-            <span className="text-xs font-medium text-neutral-400">Open</span>
+            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Open</span>
           )}
         </div>
       </div>
@@ -642,41 +688,56 @@ function SeatRow({
           rather than a modal: the choice is short and the row is already the
           context, so a dialog would be more ceremony than the action needs. */}
       {picking && (filled ? seat.canAssign : mayStaff) && (
-        <div className="mt-2 flex items-center gap-2">
-          <select
-            autoFocus
-            defaultValue=""
-            disabled={pending}
-            aria-label={`Choose a member for the ${seatKindLabel(seat.kind)} seat`}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (!value) return;
-              setPicking(false);
-              trigger("fill");
-              if (filled) onReassign(value);
-              else onAssign(value);
-            }}
-            className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
-          >
-            <option value="" disabled>
-              {choices.length === 0
-                ? "No eligible members"
-                : "Choose a member…"}
-            </option>
-            {choices.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
+        <div className="mt-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <select
+              autoFocus
+              value={choice}
+              disabled={pending}
+              aria-label={`Choose a member for the ${seatKindLabel(seat.kind)} seat`}
+              onChange={(e) => setChoice(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && choice) {
+                  e.preventDefault();
+                  commitChoice();
+                }
+              }}
+              className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-neutral-700 dark:bg-neutral-950"
+            >
+              <option value="" disabled>
+                {choices.length === 0
+                  ? "No eligible members"
+                  : "Choose a member…"}
               </option>
-            ))}
-          </select>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={pending}
-            onClick={() => setPicking(false)}
-          >
-            Cancel
-          </Button>
+              {choices.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              disabled={pending || !choice}
+              onClick={commitChoice}
+            >
+              {filled ? "Change" : seat.canAssign ? "Assign" : "Request"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending}
+              onClick={closePicker}
+            >
+              Cancel
+            </Button>
+          </div>
+          {/* Shown, not left to a hover tooltip: the one thing that differs
+              about a request is that someone else decides it. */}
+          {!filled && !seat.canAssign && (
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Your choice goes to this committee&apos;s lead to approve.
+            </p>
+          )}
         </div>
       )}
 
@@ -686,7 +747,7 @@ function SeatRow({
           app that means "waiting on a human". */}
       {request && !filled && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-status-pending/10 px-2.5 py-1.5">
-          <span className="text-xs text-[color:var(--status-pending)]">
+          <span className="text-xs text-status-pending-text">
             {isMyRequest
               ? `Your request to seat ${request.assigneeName} is awaiting this seat's lead.`
               : `${request.requestedByName} is asking for this seat for ${request.assigneeName}.`}
@@ -708,7 +769,7 @@ function SeatRow({
                   size="sm"
                   variant="ghost"
                   disabled={pending}
-                  onClick={() => onRespond(request.requestId, false)}
+                  onClick={() => setConfirming("decline")}
                 >
                   Decline
                 </Button>
@@ -726,6 +787,38 @@ function SeatRow({
             )}
           </span>
         </div>
+      )}
+
+      {/* Removing a seated interviewer and declining a request are the two
+          one-way actions on a seat: the interviewer silently loses their seat,
+          and a declined request can't be taken back. Both go through the
+          shared ConfirmDialog, as clearing an interview time already does. */}
+      <ConfirmDialog
+        open={confirming === "remove"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title="Remove this interviewer?"
+        description={`${seat.claimedByName ?? "This interviewer"} will be taken off ${applicantName}'s panel (${seatKindLabel(seat.kind)} seat). You can assign someone again afterwards.`}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => {
+          setConfirming(null);
+          trigger("empty");
+          onUnassign();
+        }}
+      />
+      {request && (
+        <ConfirmDialog
+          open={confirming === "decline"}
+          onOpenChange={(open) => !open && setConfirming(null)}
+          title="Decline this request?"
+          description={`${request.requestedByName} asked to seat ${request.assigneeName} on ${applicantName}'s panel. Declining can't be undone — they would have to ask again.`}
+          confirmLabel="Decline"
+          destructive
+          onConfirm={() => {
+            setConfirming(null);
+            onRespond(request.requestId, false);
+          }}
+        />
       )}
     </div>
   );

@@ -10,21 +10,29 @@ import { addPhase2EntryAction } from "./actions";
 
 // Per-tone styling. Tokens only — no hex anywhere — and the mapping keeps its
 // app-wide meaning: green = good, red = bad, neutral = neither.
+//
+// Text and button fills use the *-text tokens: the bright fills measured
+// 3.1–3.9:1 for the 12px headers and for white "Add" labels. In dark mode the
+// fills are the light dark-theme inks, so the label flips to near-black there
+// (white on #4ade80 would be 1.7:1).
 const TONE = {
   neutral: {
     header: "text-neutral-500 dark:text-neutral-400",
     entry: "border-neutral-200 dark:border-neutral-800",
-    button: "bg-primary text-white hover:bg-primary/90",
+    button:
+      "bg-primary-text text-white hover:bg-primary-text/90 dark:bg-primary dark:text-neutral-950 dark:hover:bg-primary/90",
   },
   rejected: {
-    header: "text-status-rejected",
+    header: "text-status-rejected-text",
     entry: "border-status-rejected/30 bg-status-rejected/5",
-    button: "bg-status-rejected text-white hover:bg-status-rejected/90",
+    button:
+      "bg-status-rejected-text text-white hover:bg-status-rejected-text/90 dark:text-neutral-950",
   },
   accepted: {
-    header: "text-status-accepted",
+    header: "text-status-accepted-text",
     entry: "border-status-accepted/30 bg-status-accepted/5",
-    button: "bg-status-accepted text-white hover:bg-status-accepted/90",
+    button:
+      "bg-status-accepted-text text-white hover:bg-status-accepted-text/90 dark:text-neutral-950",
   },
 } as const;
 
@@ -121,12 +129,12 @@ export function EntrySection({
       >
         <Icon name={section.icon} className="text-[15px]" />
         {section.label}
-        <span className="font-normal text-neutral-400">({rows.length})</span>
+        <span className="font-normal text-neutral-500 dark:text-neutral-400">({rows.length})</span>
       </h4>
 
       <div className="mt-2 space-y-2">
         {rows.length === 0 ? (
-          <p className="text-sm italic text-neutral-400">
+          <p className="text-sm italic text-neutral-500 dark:text-neutral-400">
             Nothing recorded yet.
           </p>
         ) : (
@@ -169,12 +177,15 @@ export function EntrySection({
             <Icon name="add" className="text-[14px]" />
             {pending ? "Adding…" : "Add"}
           </button>
-          <p className="text-[11px] text-neutral-400">
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
             Permanent — entries can&apos;t be edited or deleted.
           </p>
         </div>
+        {/* role="alert" so a refused entry is announced, not just shown. */}
         {error && (
-          <p className="mt-1.5 text-xs text-status-rejected">{error}</p>
+          <p role="alert" className="mt-1.5 text-xs text-status-rejected-text">
+            {error}
+          </p>
         )}
       </div>
     </div>

@@ -27,6 +27,20 @@
   --status-pending: #fbbc05;
 
   /*
+   * Text-safe siblings of --primary and --status-*. The bright brand hexes
+   * above are for fills, dots, borders and icons; as TEXT they fail WCAG AA
+   * (measured live: pending 1.71:1, accepted 3.06, primary 3.19, rejected
+   * 3.92). Each of these is the same hue darkened just until it clears 4.6:1
+   * on white AND on its own /15 tint, so a status chip's label reads on its
+   * own tinted background. White on them clears 5:1 too, so they double as
+   * solid button fills. Use these for any coloured text.
+   */
+  --primary-text: #3368be;
+  --status-accepted-text: #25793c;
+  --status-rejected-text: #bb362a;
+  --status-pending-text: #8d6903;
+
+  /*
    * Committee + lead identity — the colour a person is rendered in (avatar,
    * committee badge, role badge), resolved by src/lib/identity-color.ts.
    *
@@ -49,6 +63,15 @@
   --committee-eer: var(--status-pending);
   --lead-club: var(--status-rejected);
   --lead-technical: var(--status-rejected);
+
+  /* Their text inks — the same aliasing, onto the text-safe tokens above, for
+     the name/initials sitting on a /10 identity tint (the TM blue measured
+     3.19:1 there; the EER yellow would be ~1.7:1). Dark comes for free. */
+  --committee-tm-text: var(--primary-text);
+  --committee-mkt-text: var(--status-accepted-text);
+  --committee-eer-text: var(--status-pending-text);
+  --lead-club-text: var(--status-rejected-text);
+  --lead-technical-text: var(--status-rejected-text);
 
   /* shadcn neutral surfaces */
   --card: oklch(1 0 0);
@@ -115,6 +138,13 @@
   --status-rejected: #f87171;
   --status-pending: #fde047;
 
+  /* The dark status inks already clear 4.6:1 on the card and their tint;
+     only the brand blue needs lifting (it measured 4.45:1). */
+  --primary-text: #4f8ef5;
+  --status-accepted-text: var(--status-accepted);
+  --status-rejected-text: var(--status-rejected);
+  --status-pending-text: var(--status-pending);
+
   /* Re-stepped for the dark card surface; same hue, same order. */
   --chart-reject-1: #da6d5f;
   --chart-reject-2: #ce4033;
@@ -153,12 +183,21 @@
   --color-status-accepted: var(--status-accepted);
   --color-status-rejected: var(--status-rejected);
   --color-status-pending: var(--status-pending);
+  --color-primary-text: var(--primary-text);
+  --color-status-accepted-text: var(--status-accepted-text);
+  --color-status-rejected-text: var(--status-rejected-text);
+  --color-status-pending-text: var(--status-pending-text);
 
   --color-committee-tm: var(--committee-tm);
   --color-committee-mkt: var(--committee-mkt);
   --color-committee-eer: var(--committee-eer);
   --color-lead-club: var(--lead-club);
   --color-lead-technical: var(--lead-technical);
+  --color-committee-tm-text: var(--committee-tm-text);
+  --color-committee-mkt-text: var(--committee-mkt-text);
+  --color-committee-eer-text: var(--committee-eer-text);
+  --color-lead-club-text: var(--lead-club-text);
+  --color-lead-technical-text: var(--lead-technical-text);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -215,6 +254,18 @@ body {
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  /*
+   * The keyboard focus ring for every control that doesn't draw its own.
+   * Without this, those controls got the browser's 1px outline in ring/50 —
+   * measured ~1.8:1 against white, a hairline you could barely see. A solid
+   * 2px ring in --ring (the brand blue: 3.6:1 light, 4.5:1 dark) clears the
+   * 3:1 a focus indicator needs. shadcn primitives set outline-none plus their
+   * own ring in the utilities layer, which outranks this base rule.
+   */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
   body {
     @apply bg-background text-foreground;

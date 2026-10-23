@@ -24,13 +24,13 @@ export function MyPanelSummary({ count }: { count: number }) {
     <p className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800/40 dark:text-neutral-300">
       <Icon
         name="event_seat"
-        className="shrink-0 text-[18px] text-neutral-400"
+        className="shrink-0 text-[18px] text-neutral-500 dark:text-neutral-400"
         aria-hidden
       />
       {message}
       {count > 0 && (
         <span className="text-neutral-500 dark:text-neutral-400">
-          Look for <strong className="font-semibold text-primary">(you)</strong>{" "}
+          Look for <strong className="font-semibold text-primary-text">(you)</strong>{" "}
           on the board below.
         </span>
       )}

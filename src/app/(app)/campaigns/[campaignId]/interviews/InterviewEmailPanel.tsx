@@ -143,14 +143,14 @@ export function InterviewEmailPanel({
             href={savedLink}
             target="_blank"
             rel="noreferrer"
-            className="mt-2 block truncate text-sm font-medium text-primary underline underline-offset-2"
+            className="mt-2 block truncate text-sm font-medium text-primary-text underline underline-offset-2"
           >
             {savedLink}
           </a>
         ) : (
           <div className="mt-3 space-y-3">
             {needsLink && (
-              <p className="text-xs text-[color:var(--status-pending)]">
+              <p className="text-xs text-status-pending-text">
                 Required before any booking email can be sent.
               </p>
             )}
@@ -188,12 +188,12 @@ export function InterviewEmailPanel({
       </div>
 
       {error && (
-        <p className="rounded-lg bg-status-rejected/10 px-4 py-2 text-sm text-status-rejected">
+        <p className="rounded-lg bg-status-rejected/10 px-4 py-2 text-sm text-status-rejected-text">
           {error}
         </p>
       )}
       {notice && (
-        <p className="rounded-lg bg-primary/10 px-4 py-2 text-sm text-primary">
+        <p className="rounded-lg bg-primary/10 px-4 py-2 text-sm text-primary-text">
           {notice}
         </p>
       )}
@@ -261,14 +261,14 @@ export function InterviewEmailPanel({
         </div>
 
         {needsLink ? (
-          <span className="flex items-center gap-1.5 text-xs text-[color:var(--status-pending)]">
+          <span className="flex items-center gap-1.5 text-xs text-status-pending-text">
             <Icon name="warning" className="text-[14px]" />
             Set the calendar link before sending.
           </span>
         ) : (
           <>
             {inviteTotal > 0 && invitePending === 0 && (
-              <span className="flex items-center gap-1.5 text-xs text-status-accepted">
+              <span className="flex items-center gap-1.5 text-xs text-status-accepted-text">
                 <Icon name="task_alt" className="text-[14px]" />
                 Every shortlisted applicant has been invited
                 {lastInviteSentAtISO
@@ -291,13 +291,13 @@ export function InterviewEmailPanel({
         <div className="space-y-2 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <p className="font-medium text-foreground">
             {result.kind}:{" "}
-            <span className="text-status-accepted">
+            <span className="text-status-accepted-text">
               {result.sent} sent successfully
             </span>
             {", "}
             <span
               className={
-                result.failed > 0 ? "text-status-rejected" : "text-neutral-500"
+                result.failed > 0 ? "text-status-rejected-text" : "text-neutral-500"
               }
             >
               {result.failed} failed
@@ -311,7 +311,7 @@ export function InterviewEmailPanel({
             .
           </p>
           {result.failures.length > 0 && (
-            <ul className="space-y-1 text-xs text-status-rejected">
+            <ul className="space-y-1 text-xs text-status-rejected-text">
               {result.failures.map((f) => (
                 <li key={f.email}>
                   {f.name} ({f.email}) — {f.error}
@@ -378,7 +378,7 @@ function TallyCard({
         <Icon name={icon} className="text-[18px]" />
       </span>
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
           {label}
         </p>
         <p className="text-sm font-semibold text-foreground">
@@ -388,7 +388,7 @@ function TallyCard({
           </span>
         </p>
         {lastSentISO && (
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Last sent {formatSentAt(lastSentISO)}
           </p>
         )}

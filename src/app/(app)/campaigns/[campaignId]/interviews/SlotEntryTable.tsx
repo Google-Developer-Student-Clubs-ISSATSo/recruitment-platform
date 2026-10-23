@@ -33,6 +33,16 @@ export type SlotRow = {
  */
 const PAGE_SIZE = 10;
 
+/** What's typed into one row's inputs but not saved yet. */
+type Draft = { time: string; room: string };
+
+/** One row's draft plus the setter, handed to whichever layout renders it. */
+type DraftBinding = {
+  draft: Draft | undefined;
+  /** null clears it — after a save, or when the inputs match what's saved. */
+  setDraft: (draft: Draft | null) => void;
+};
+
 export function SlotEntryTable({
   campaignId,
   rows,
@@ -41,9 +51,44 @@ export function SlotEntryTable({
   rows: SlotRow[];
 }) {
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const [query, setQuery] = useState("");
+  // The working set while transcribing: everyone still without a time.
+  const [unbookedOnly, setUnbookedOnly] = useState(false);
+  // Drafts live HERE, keyed by applicant, rather than in each row: a row only
+  // exists while its page is showing, so row-local drafts were silently thrown
+  // away by a page change (or a search) before they were saved.
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+
+  const term = query.trim().toLowerCase();
+  const visible = rows.filter(
+    (r) =>
+      (term === "" || r.fullName.toLowerCase().includes(term)) &&
+      (!unbookedOnly || r.scheduledTimeInput === ""),
+  );
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
-  const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageRows = visible.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  // Counted against the server's rows (fresh after every save's revalidate),
+  // so it says exactly how many rows still need their Save pressed.
+  const unsaved = rows.filter((r) => {
+    const d = drafts[r.applicantId];
+    return d && (d.time !== r.scheduledTimeInput || d.room !== r.room);
+  }).length;
+
+  const bind = (row: SlotRow): DraftBinding => ({
+    draft: drafts[row.applicantId],
+    setDraft: (draft) =>
+      setDrafts((prev) => {
+        const next = { ...prev };
+        if (draft) next[row.applicantId] = draft;
+        else delete next[row.applicantId];
+        return next;
+      }),
+  });
 
   return (
     <div className="space-y-5 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6 dark:border-neutral-800 dark:bg-neutral-900">
@@ -62,9 +107,58 @@ export function SlotEntryTable({
         </div>
       </div>
 
+      {rows.length > 0 && (
+        // Same search treatment as Phase 2's ranked list. Changing either
+        // control returns to page 1 — the old page number means nothing in
+        // the new result.
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-0 flex-1 basis-56">
+            <Icon
+              name="search"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-neutral-400"
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search by name…"
+              aria-label="Search shortlisted applicants by name"
+              className="pl-9"
+            />
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+            <input
+              type="checkbox"
+              checked={unbookedOnly}
+              onChange={(e) => {
+                setUnbookedOnly(e.target.checked);
+                setPage(1);
+              }}
+              className="size-4 accent-primary"
+            />
+            Not yet booked only
+          </label>
+          {/* Drafts survive paging and searching, so this is a reminder, not
+              a warning: nothing is lost, but nothing is saved until Save. */}
+          <p role="status" className="text-sm text-status-pending-text">
+            {unsaved > 0 &&
+              `${unsaved} unsaved row${unsaved === 1 ? "" : "s"}`}
+          </p>
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           No shortlisted applicants yet. Finalize Phase 1 first.
+        </p>
+      ) : visible.length === 0 ? (
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          {unbookedOnly && term === ""
+            ? "Everyone has a time recorded."
+            : "No applicant matches this search."}
         </p>
       ) : (
         <>
@@ -97,6 +191,7 @@ export function SlotEntryTable({
                     key={row.applicantId}
                     campaignId={campaignId}
                     row={row}
+                    {...bind(row)}
                   />
                 ))}
               </tbody>
@@ -114,17 +209,18 @@ export function SlotEntryTable({
                 key={row.applicantId}
                 campaignId={campaignId}
                 row={row}
+                {...bind(row)}
               />
             ))}
           </ul>
         </>
       )}
 
-      {rows.length > PAGE_SIZE && (
+      {visible.length > PAGE_SIZE && (
         <Pager
           page={safePage}
           pageCount={pageCount}
-          total={rows.length}
+          total={visible.length}
           pageSize={PAGE_SIZE}
           rowCount={pageRows.length}
           unit="applicant"
@@ -144,7 +240,7 @@ function Th({
 }) {
   return (
     <th
-      className={`px-3 py-2 text-[11px] font-semibold uppercase tracking-widest text-neutral-400 ${className}`}
+      className={`px-3 py-2 text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400 ${className}`}
     >
       {children}
     </th>
@@ -158,8 +254,15 @@ function Th({
  * md are two renderings of the same editable row — if they each kept their own
  * copy of this logic the "Saved" indicator and the dirty-check would inevitably
  * drift apart between the two layouts.
+ *
+ * The typed-but-unsaved values come from the table (`binding`), not from state
+ * in here — see SlotEntryTable — so they outlive this row being paged away.
  */
-function useSlotDraft(campaignId: string, row: SlotRow) {
+function useSlotDraft(
+  campaignId: string,
+  row: SlotRow,
+  { draft, setDraft }: DraftBinding,
+) {
   // The staffed-panel warning the server sent back, held until the user answers
   // it. Non-null is exactly "the dialog is open", so there is no second piece of
   // state that could disagree with it about whether we are waiting on an answer.
@@ -171,13 +274,18 @@ function useSlotDraft(campaignId: string, row: SlotRow) {
     time: row.scheduledTimeInput,
     room: row.room,
   });
-  const [time, setTime] = useState(row.scheduledTimeInput);
-  const [room, setRoom] = useState(row.room);
+  const time = draft?.time ?? saved.time;
+  const room = draft?.room ?? saved.room;
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
 
   const dirty = time !== saved.time || room !== saved.room;
+
+  // Typing back to the saved value drops the draft, so the table's unsaved
+  // count never counts a row that has nothing left to save.
+  const edit = (next: Draft) =>
+    setDraft(next.time === saved.time && next.room === saved.room ? null : next);
 
   // Once a time is recorded the row is Scheduled; before that it's waiting on
   // the applicant, unless they were never sent the link in the first place.
@@ -213,15 +321,24 @@ function useSlotDraft(campaignId: string, row: SlotRow) {
         return;
       }
       setSaved({ time, room });
+      setDraft(null);
       setJustSaved(true);
     });
   }
 
   return {
     time,
-    setTime,
+    setTime: (value: string) => edit({ time: value, room }),
     room,
-    setRoom,
+    setRoom: (value: string) => edit({ time, room: value }),
+    /** Enter in either input saves, so a row is typed and committed without
+     *  reaching for the mouse — the transcription loop this table is for. */
+    saveOnEnter: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && dirty && !pending) {
+        e.preventDefault();
+        save();
+      }
+    },
     pending,
     error,
     justSaved,
@@ -322,13 +439,21 @@ function SaveCell({
 }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      {error && <span className="text-xs text-status-rejected">{error}</span>}
-      {!error && justSaved && !dirty && (
-        <span className="flex items-center gap-1 text-xs text-status-accepted">
-          <Icon name="check" className="text-[14px]" />
-          Saved
+      {error && (
+        <span role="alert" className="text-xs text-status-rejected-text">
+          {error}
         </span>
       )}
+      {/* Always mounted, so screen readers announce "Saved" when it appears —
+          a live region inserted at the same moment as its text often isn't. */}
+      <span role="status" className="flex items-center gap-1 text-xs text-status-accepted-text">
+        {!error && justSaved && !dirty && (
+          <>
+            <Icon name="check" className="text-[14px]" />
+            Saved
+          </>
+        )}
+      </span>
       {/* Wrapped, not passed by reference: `save` takes a confirmClear flag,
           and handing it straight to onClick would feed it the MouseEvent —
           truthy, so every save would silently claim to be confirmed. */}
@@ -347,11 +472,12 @@ function SaveCell({
 function SlotTableRow({
   campaignId,
   row,
+  ...binding
 }: {
   campaignId: string;
   row: SlotRow;
-}) {
-  const d = useSlotDraft(campaignId, row);
+} & DraftBinding) {
+  const d = useSlotDraft(campaignId, row, binding);
 
   return (
     <tr className="border-b border-neutral-100 align-middle dark:border-neutral-800/60">
@@ -366,6 +492,7 @@ function SlotTableRow({
           disabled={d.pending}
           aria-label={`Interview date and time for ${row.fullName}`}
           onChange={(e) => d.setTime(e.target.value)}
+          onKeyDown={d.saveOnEnter}
           className="w-[13.5rem]"
         />
       </td>
@@ -377,6 +504,7 @@ function SlotTableRow({
           placeholder="TBC"
           aria-label={`Interview room for ${row.fullName}`}
           onChange={(e) => d.setRoom(e.target.value)}
+          onKeyDown={d.saveOnEnter}
           className="w-32"
         />
       </td>
@@ -401,8 +529,12 @@ function SlotTableRow({
 
 /** The same editable row at phone width: name and status on top, then the two
  *  fields full-width where they have room to be typed into. */
-function SlotCard({ campaignId, row }: { campaignId: string; row: SlotRow }) {
-  const d = useSlotDraft(campaignId, row);
+function SlotCard({
+  campaignId,
+  row,
+  ...binding
+}: { campaignId: string; row: SlotRow } & DraftBinding) {
+  const d = useSlotDraft(campaignId, row, binding);
 
   return (
     <li className="space-y-3 py-4">
@@ -424,6 +556,7 @@ function SlotCard({ campaignId, row }: { campaignId: string; row: SlotRow }) {
             disabled={d.pending}
             aria-label={`Interview date and time for ${row.fullName}`}
             onChange={(e) => d.setTime(e.target.value)}
+            onKeyDown={d.saveOnEnter}
             className="w-full"
           />
         </label>
@@ -438,6 +571,7 @@ function SlotCard({ campaignId, row }: { campaignId: string; row: SlotRow }) {
             placeholder="TBC"
             aria-label={`Interview room for ${row.fullName}`}
             onChange={(e) => d.setRoom(e.target.value)}
+            onKeyDown={d.saveOnEnter}
             className="w-full"
           />
         </label>
