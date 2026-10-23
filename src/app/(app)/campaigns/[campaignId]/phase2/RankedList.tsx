@@ -41,6 +41,7 @@ export function RankedList({
   campaignId,
   applicants,
   maxScore,
+  showScores,
   authorName,
   showNotesColumn,
   showFlagsColumn,
@@ -48,6 +49,8 @@ export function RankedList({
   campaignId: string;
   applicants: Phase2Applicant[];
   maxScore: number;
+  /** False for MKT/EER viewers — the scores were never sent; see getPhase2Data. */
+  showScores: boolean;
   authorName: string;
   /**
    * Whether each column exists for this viewer at all. Decided on the server
@@ -138,6 +141,7 @@ export function RankedList({
                 campaignId={campaignId}
                 applicant={applicant}
                 maxScore={maxScore}
+                showScores={showScores}
                 authorName={authorName}
                 showNotesColumn={showNotesColumn}
                 showFlagsColumn={showFlagsColumn}

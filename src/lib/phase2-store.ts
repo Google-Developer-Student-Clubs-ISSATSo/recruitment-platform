@@ -50,10 +50,15 @@ export type Phase2Applicant = {
   /**
    * The weighted total as of the last ranking pass, read from PhaseOneResult.
    * Null when a manual override created the row before any recalculation ran —
-   * rendered as an em dash, exactly as Phase 1 Selection does.
+   * rendered as an em dash, exactly as Phase 1 Selection does. Also null for
+   * every row when the viewer may not see scores — see `showScores`.
    */
   score: number | null;
-  /** False when some active question has no score yet, so the total is partial. */
+  /**
+   * False when some active question has no score yet, so the total is partial.
+   * Always true when scores are withheld from this viewer, so the "partial
+   * score" caption can't leak anything either.
+   */
   complete: boolean;
   /** 1-based position in this page's own descending-score ordering. */
   position: number;
@@ -96,8 +101,15 @@ export type MktSkillApplicant = {
 
 export type Phase2Data = {
   applicants: Phase2Applicant[];
-  /** Σ of active coefficients — the denominator scores are shown against. */
+  /** Σ of active coefficients — the denominator scores are shown against. 0 when scores are withheld. */
   maxScore: number;
+  /**
+   * Whether this viewer may see Phase 1 scores at all. False for MKT and EER
+   * committee members (see canViewPhase2Scores); every score, the denominator
+   * and the completeness caption are then dropped server-side, so the column
+   * is omitted rather than blanked and the figures never reach the browser.
+   */
+  showScores: boolean;
   /** Raw rows for the skills tally; kept unshaped so phase2.ts can parse them. */
   skillSources: { rawFormData: unknown }[];
   /** This campaign's approved MKT skill names — what separates listed from write-in. */
@@ -160,6 +172,8 @@ export async function getPhase2Data(
   visibility: Phase2VisibilityState,
   /** From isMktMember — whether each applicant's MKT skills ride along. */
   includeMktSkills: boolean,
+  /** From canViewPhase2Scores — whether the Phase 1 scores ride along. */
+  includeScores: boolean,
 ): Promise<Phase2Data> {
   const [questions, applicants, whitelist] = await Promise.all([
     prisma.phaseOneQuestion.findMany({
@@ -307,8 +321,10 @@ export async function getPhase2Data(
         yearOfStudy: row.yearOfStudy,
         currentDiploma: row.currentDiploma,
         facebookLink: row.facebookLink,
-        score: row.score,
-        complete: row.complete,
+        // Dropped here, AFTER the sort, so the order is the same for everyone —
+        // only the figures behind it are withheld.
+        score: includeScores ? row.score : null,
+        complete: includeScores ? row.complete : true,
         position: i + 1,
         answers: row.answers,
         // THE enforcement point. An entry whose surface this viewer cannot read
@@ -324,7 +340,8 @@ export async function getPhase2Data(
         mktSkills: includeMktSkills ? matched[i].skills : null,
       };
     }),
-    maxScore: totalCoefficient(questions),
+    maxScore: includeScores ? totalCoefficient(questions) : 0,
+    showScores: includeScores,
     // Same population as the ranked list — the skills table counts everyone who
     // passed Phase 1 regardless of preferred committee, so it must not be
     // filtered down to MKT applicants here.
@@ -404,11 +421,41 @@ export async function canViewMktSkills(userId: string): Promise<boolean> {
  * the marketing test.
  */
 export async function isMktMember(userId: string): Promise<boolean> {
+  return (await getViewerCommittee(userId)) === Committee.MKT;
+}
+
+/** The committee this member belongs to, or null if the user no longer exists. */
+export async function getViewerCommittee(
+  userId: string,
+): Promise<Committee | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { committee: true },
   });
-  return user?.committee === Committee.MKT;
+  return user?.committee ?? null;
+}
+
+/**
+ * Committees whose members don't see Phase 1 scores on Phase 2. They review
+ * applicants on the answers, notes and flags alone, so the screening score
+ * can't anchor their judgment.
+ */
+const SCORE_HIDDEN_COMMITTEES: ReadonlySet<Committee> = new Set([
+  Committee.MKT,
+  Committee.EER,
+]);
+
+/**
+ * May this viewer see Phase 1 scores on the Phase 2 page? The Administrator
+ * always can, whatever their committee; otherwise it's decided by committee
+ * membership alone, like isMktMember.
+ */
+export function canViewPhase2Scores(
+  viewer: Phase2Viewer,
+  committee: Committee | null,
+): boolean {
+  if (viewer.isAdministrator) return true;
+  return committee !== null && !SCORE_HIDDEN_COMMITTEES.has(committee);
 }
 
 /**

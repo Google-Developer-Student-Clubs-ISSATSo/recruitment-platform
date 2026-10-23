@@ -78,6 +78,7 @@ export function ApplicantCard({
   campaignId,
   applicant,
   maxScore,
+  showScores,
   authorName,
   showNotesColumn,
   showFlagsColumn,
@@ -85,6 +86,8 @@ export function ApplicantCard({
   campaignId: string;
   applicant: Phase2Applicant;
   maxScore: number;
+  /** Whether the score column exists at all — see <RankedList>. */
+  showScores: boolean;
   /** The signed-in member's display name, for optimistically-added entries. */
   authorName: string;
   /** Whether each column exists on this page at all — see <RankedList>. */
@@ -157,10 +160,11 @@ export function ApplicantCard({
     ...visibleTallies.map(
       (c) => `${c.count} ${c.section.label.toLowerCase()}`,
     ),
-    applicant.score === null
-      ? "no score yet"
-      : `score ${formatScore(applicant.score)} of ${Number(maxScore.toFixed(2))}`,
-    !applicant.complete && "partial score",
+    showScores &&
+      (applicant.score === null
+        ? "no score yet"
+        : `score ${formatScore(applicant.score)} of ${Number(maxScore.toFixed(2))}`),
+    showScores && !applicant.complete && "partial score",
   ]
     .filter(Boolean)
     .join(", ");
@@ -261,20 +265,22 @@ export function ApplicantCard({
             </span>
           )}
 
-          <span className="shrink-0 text-right">
-            <span className="block text-base font-bold tabular-nums text-foreground sm:text-lg">
-              {formatScore(applicant.score)}
-              <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
-                {" "}
-                / {Number(maxScore.toFixed(2))}
+          {showScores && (
+            <span className="shrink-0 text-right">
+              <span className="block text-base font-bold tabular-nums text-foreground sm:text-lg">
+                {formatScore(applicant.score)}
+                <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+                  {" "}
+                  / {Number(maxScore.toFixed(2))}
+                </span>
               </span>
+              {!applicant.complete && (
+                <span className="block text-[11px] text-status-pending-text">
+                  Partial score
+                </span>
+              )}
             </span>
-            {!applicant.complete && (
-              <span className="block text-[11px] text-status-pending-text">
-                Partial score
-              </span>
-            )}
-          </span>
+          )}
 
           <Icon
             name={open ? "expand_less" : "expand_more"}
