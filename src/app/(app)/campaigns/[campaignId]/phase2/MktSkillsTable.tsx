@@ -1,7 +1,7 @@
 import { Icon } from "@/components/app-shell/icon";
-import { committeeLabel } from "@/lib/committee";
 import { type SkillCount } from "@/lib/phase2";
 import type { MktSkillApplicant } from "@/lib/phase2-store";
+import { Committee } from "@/generated/prisma/enums";
 import { MktSkillsCharts } from "./MktSkillsCharts";
 import { SkillChips } from "./SkillChips";
 
@@ -25,10 +25,11 @@ const SUBHEADING_CLASS =
  * as write-ins. All counted live on every page load, so they cannot drift from
  * the applicant rows behind them and a whitelist edit lands on the next load.
  *
- * The TABLE is deliberately not filtered to MKT applicants — the whole point is
- * to find people who can already do marketing work whatever committee they
- * picked. The MKT-preference figure in the header is the one MKT-only number,
- * kept out of the rows so it can't be misread as a skill count.
+ * The CHARTS cover everyone, whatever committee they picked — the committee
+ * chart exists to compare them. The TABLE lists only applicants who chose MKT:
+ * skilled applicants from other committees have their own section below
+ * (<MktSkillsOutsideMkt>), so listing them here too only repeated them. With
+ * every row MKT, the table has no committee column.
  */
 export function MktSkillsTable({
   skills,
@@ -47,6 +48,10 @@ export function MktSkillsTable({
    */
   mktPreferredCount: number;
 }) {
+  const mktApplicants = applicants.filter(
+    (a) => a.preferredCommittee === Committee.MKT,
+  );
+
   return (
     <section className="rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-4 sm:px-6 dark:border-neutral-800">
@@ -78,46 +83,39 @@ export function MktSkillsTable({
           <MktSkillsCharts skills={skills} applicants={applicants} />
           {/* Who they are. Ranked-list order, so someone found here can be
               located in the list above without re-sorting anything. */}
-          <h3 className={SUBHEADING_CLASS}>Applicants with a skill</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="border-b border-neutral-200 dark:border-neutral-800">
-                <tr>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:px-6 dark:text-neutral-400">
-                    Applicant
-                  </th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:px-6 dark:text-neutral-400">
-                    <span className="sm:hidden">Committee</span>
-                    <span className="hidden sm:inline">Preferred Committee</span>
-                  </th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:px-6 dark:text-neutral-400">
-                    Skills
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
-                {applicants.map((a) => (
-                  <tr key={a.id}>
-                    <td className="px-4 py-3 text-sm font-medium text-foreground sm:px-6">
-                      {a.fullName}
-                    </td>
-                    {/* The code below sm: at 375px the full label made this
-                        table 495px wide and pushed Skills — the column that
-                        matters — off-screen with no scroll cue. */}
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-neutral-600 sm:px-6 dark:text-neutral-300">
-                      <span className="sm:hidden">{a.preferredCommittee}</span>
-                      <span className="hidden sm:inline">
-                        {committeeLabel(a.preferredCommittee)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 sm:px-6">
-                      <SkillChips listed={a.skills} writeIns={a.writeIns} />
-                    </td>
+          <h3 className={SUBHEADING_CLASS}>MKT applicants with a skill</h3>
+          {mktApplicants.length === 0 ? (
+            <p className="px-4 pb-6 pt-2 text-sm text-neutral-500 sm:px-6 dark:text-neutral-400">
+              Nobody who chose MKT listed a skill.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="border-b border-neutral-200 dark:border-neutral-800">
+                  <tr>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:px-6 dark:text-neutral-400">
+                      Applicant
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:px-6 dark:text-neutral-400">
+                      Skills
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                  {mktApplicants.map((a) => (
+                    <tr key={a.id}>
+                      <td className="px-4 py-3 text-sm font-medium text-foreground sm:px-6">
+                        {a.fullName}
+                      </td>
+                      <td className="px-4 py-3 sm:px-6">
+                        <SkillChips listed={a.skills} writeIns={a.writeIns} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </section>
