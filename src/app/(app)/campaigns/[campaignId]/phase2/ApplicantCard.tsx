@@ -9,9 +9,14 @@ import { committeeLabel } from "@/lib/committee";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 // Both from phase2.ts, the client-safe half: phase2-visibility.ts reaches
 // prisma through campaign-leads.ts and must not enter a browser bundle.
-import { PHASE2_SECTIONS, surfaceOfEntryType } from "@/lib/phase2";
+import {
+  hasAnySkill,
+  PHASE2_SECTIONS,
+  surfaceOfEntryType,
+} from "@/lib/phase2";
 import type { Phase2Applicant } from "@/lib/phase2-store";
 import { EntrySection } from "./EntrySection";
+import { SkillChips } from "./SkillChips";
 
 /**
  * The tally pill a column shows per entry type — the same shape, icon and tone
@@ -88,6 +93,7 @@ export function ApplicantCard({
 }) {
   const [open, setOpen] = useState(false);
   const reduced = useReducedMotion();
+  const mktSkillCount = applicant.mktSkills?.listed.length ?? 0;
 
   const counts = PHASE2_SECTIONS.map((s) => ({
     section: s,
@@ -127,8 +133,23 @@ export function ApplicantCard({
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-foreground sm:text-base">
-            {applicant.fullName}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-semibold text-foreground sm:text-base">
+              {applicant.fullName}
+            </span>
+            {/* MKT committee members only — mktSkills is null for everyone
+                else, dropped on the server. Whitelisted skills are what's
+                counted; write-ins show in the expanded answers. */}
+            {mktSkillCount > 0 && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                <Icon name="campaign" className="text-[13px]" />
+                {mktSkillCount} MKT
+                <span className="hidden sm:inline">
+                  {" "}
+                  skill{mktSkillCount === 1 ? "" : "s"}
+                </span>
+              </span>
+            )}
           </span>
           {/* Committee first, then study year and diploma — blanks dropped so
               an unanswered field never leaves a dangling separator. The form
@@ -260,6 +281,28 @@ export function ApplicantCard({
                       <NoAnswer />
                     )}
                   </div>
+                  {/* For the MKT committee grading the marketing test: what
+                      this applicant listed under Other skills. Absent for every
+                      other member — the server never sent it. */}
+                  {applicant.mktSkills && (
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        MKT skills
+                      </p>
+                      <div className="mt-1.5">
+                        {hasAnySkill(applicant.mktSkills) ? (
+                          <SkillChips
+                            listed={applicant.mktSkills.listed}
+                            writeIns={applicant.mktSkills.writeIns}
+                          />
+                        ) : (
+                          <p className="text-sm italic text-neutral-500 dark:text-neutral-400">
+                            Nothing listed under Other skills.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

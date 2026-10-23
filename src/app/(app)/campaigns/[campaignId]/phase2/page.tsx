@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/session";
-import { canViewMktSkills, getPhase2Data } from "@/lib/phase2-store";
+import {
+  canViewMktSkills,
+  getPhase2Data,
+  isMktMember,
+} from "@/lib/phase2-store";
 import {
   getPhase2VisibilityState,
   getPhase2Viewer,
@@ -10,6 +14,7 @@ import { tallyMktSkills } from "@/lib/phase2";
 import { RefreshButton } from "@/components/refresh-button";
 import { RankedList } from "./RankedList";
 import { MktSkillsTable } from "./MktSkillsTable";
+import { MktSkillsOutsideMkt } from "./MktSkillsOutsideMkt";
 
 // Phase 2 — the working view for everyone who passed Phase 1.
 //
@@ -45,10 +50,12 @@ export default async function Phase2Page({
 
   // Resolved before the data read, because what getPhase2Data returns DEPENDS
   // on them: notes and flags this viewer may not read are dropped server-side
-  // rather than hidden in the browser.
-  const [viewer, visibility] = await Promise.all([
+  // rather than hidden in the browser — and so are each applicant's MKT skills
+  // for anyone outside the MKT committee.
+  const [viewer, visibility, mktMember] = await Promise.all([
     getPhase2Viewer(campaignId, session.user.id),
     getPhase2VisibilityState(campaignId),
+    isMktMember(session.user.id),
   ]);
 
   const [
@@ -64,7 +71,7 @@ export default async function Phase2Page({
     },
     mayViewSkills,
   ] = await Promise.all([
-    getPhase2Data(campaignId, viewer, visibility),
+    getPhase2Data(campaignId, viewer, visibility, mktMember),
     canViewMktSkills(session.user.id),
   ]);
   // Live tally, every load — the same rule the interview-note AVGs and the
@@ -112,11 +119,14 @@ export default async function Phase2Page({
           skills never reach their page in the first place, rather than being
           hidden client-side. */}
       {mayViewSkills && (
-        <MktSkillsTable
-          skills={skills}
-          applicants={mktSkillApplicants}
-          mktPreferredCount={mktPreferredCount}
-        />
+        <>
+          <MktSkillsTable
+            skills={skills}
+            applicants={mktSkillApplicants}
+            mktPreferredCount={mktPreferredCount}
+          />
+          <MktSkillsOutsideMkt applicants={mktSkillApplicants} />
+        </>
       )}
     </div>
   );

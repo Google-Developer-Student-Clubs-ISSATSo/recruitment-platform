@@ -13,7 +13,7 @@ import {
 import { passedPhaseOneWhere } from "@/lib/phase1-ranking";
 import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { totalCoefficient } from "@/lib/phase1-score";
-import { mktSkillsOf } from "@/lib/phase2";
+import { hasAnySkill, mktSkillsOf, type ApplicantSkills } from "@/lib/phase2";
 import {
   canViewAnyPhase2Surface,
   canViewPhase2Surface,
@@ -72,6 +72,12 @@ export type Phase2Applicant = {
    */
   canViewNotes: boolean;
   canViewFlags: boolean;
+  /**
+   * Their Other-skills answer, split into whitelisted MKT skills and write-ins
+   * — or null when the viewer isn't an MKT committee member. Null is dropped on
+   * the server like the entries above, so other members' pages never carry it.
+   */
+  mktSkills: ApplicantSkills | null;
 };
 
 /** One applicant behind the skills tally, with the skills that put them there. */
@@ -80,8 +86,12 @@ export type MktSkillApplicant = {
   fullName: string;
   /** Their PREFERRED committee — the tally population is not filtered by it. */
   preferredCommittee: Committee;
-  /** Whitelist-matched skills, in the whitelist's own spelling. Never empty. */
+  /** Their position in the ranked list, so they can be found there. */
+  position: number;
+  /** Whitelist-matched skills, in the whitelist's own spelling. */
   skills: string[];
+  /** "Other:" write-ins, in the applicant's spelling. This or `skills` is non-empty. */
+  writeIns: string[];
 };
 
 export type Phase2Data = {
@@ -90,11 +100,11 @@ export type Phase2Data = {
   maxScore: number;
   /** Raw rows for the skills tally; kept unshaped so phase2.ts can parse them. */
   skillSources: { rawFormData: unknown }[];
-  /** This campaign's approved MKT skill names — the only values the tally counts. */
+  /** This campaign's approved MKT skill names — what separates listed from write-in. */
   mktSkillWhitelist: string[];
   /**
-   * The people behind the tally: every applicant with at least one matched
-   * skill, in the same ranked order as the list above. Exactly the population
+   * The people behind the tally: every applicant with at least one listed skill
+   * or write-in, in the same ranked order as the list above. Exactly the population
    * the per-skill counts are computed from, so the detail table and the
    * aggregate table are two views of one set rather than two queries that
    * could drift apart.
@@ -134,7 +144,9 @@ export type Phase2Data = {
  * Ties break by name then id, the same tiebreak the ranking pass uses, so the
  * order is stable across loads.
  *
- * VIEWER-DEPENDENT. Notes and flags are filtered here, on the server, against
+ * VIEWER-DEPENDENT. Each applicant's `mktSkills` rides along only when
+ * `includeMktSkills` is set (an MKT committee member), and notes and flags
+ * are filtered here, on the server, against
  * `viewer` and `visibility` (see lib/phase2-visibility.ts) — the ranking,
  * scores, answers and the skills tally are identical for everyone, but the
  * entries a caller gets back are only the ones they are allowed to read. This
@@ -146,6 +158,8 @@ export async function getPhase2Data(
   campaignId: string,
   viewer: Phase2Viewer,
   visibility: Phase2VisibilityState,
+  /** From isMktMember — whether each applicant's MKT skills ride along. */
+  includeMktSkills: boolean,
 ): Promise<Phase2Data> {
   const [questions, applicants, whitelist] = await Promise.all([
     prisma.phaseOneQuestion.findMany({
@@ -306,6 +320,8 @@ export async function getPhase2Data(
             : access.canViewFlags,
         ),
         ...access,
+        // `matched` is built from `rows` in order, so the index lines up.
+        mktSkills: includeMktSkills ? matched[i].skills : null,
       };
     }),
     maxScore: totalCoefficient(questions),
@@ -315,20 +331,26 @@ export async function getPhase2Data(
     skillSources: rows.map((r) => ({ rawFormData: r.rawFormData })),
     mktSkillWhitelist: skillNames,
     mktSkillApplicants: matched
-      .filter((m) => m.skills.length > 0)
+      .map((m, i) => ({ ...m, position: i + 1 }))
+      .filter((m) => hasAnySkill(m.skills))
       .map((m) => ({
         id: m.row.id,
         fullName: m.row.fullName,
         preferredCommittee: m.row.preferredCommittee,
-        skills: m.skills,
+        position: m.position,
+        skills: m.skills.listed,
+        writeIns: m.skills.writeIns,
       })),
     // The one figure that IS about MKT applicants specifically. Live-counted off
     // the rows above rather than stored, like every other number on this page,
     // and off the same match pass as the detail rows — the header, the detail
     // table and the aggregate table must never be able to disagree about what
-    // counts as a match.
+    // counts as a match. Whitelisted skills only: a write-in is whatever someone
+    // typed, so it can't vouch for "can do MKT work" the way a listed one can.
     mktPreferredCount: matched.filter(
-      (m) => m.row.preferredCommittee === Committee.MKT && m.skills.length > 0,
+      (m) =>
+        m.row.preferredCommittee === Committee.MKT &&
+        m.skills.listed.length > 0,
     ).length,
     showNotesColumn: canViewAnyPhase2Surface({
       viewer,
@@ -372,6 +394,21 @@ export async function getPhase2Data(
  */
 export async function canViewMktSkills(userId: string): Promise<boolean> {
   return hasPermission(userId, PermissionKey.VIEW_MKT_SKILLS_BREAKDOWN);
+}
+
+/**
+ * Whether this member belongs to the MKT committee — the audience for each
+ * applicant's MKT skills inside the ranked list. Deliberately committee
+ * membership, not VIEW_MKT_SKILLS_BREAKDOWN: the breakdown is a lead-level
+ * analysis, while the per-applicant skills are for every MKT member grading
+ * the marketing test.
+ */
+export async function isMktMember(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { committee: true },
+  });
+  return user?.committee === Committee.MKT;
 }
 
 /**

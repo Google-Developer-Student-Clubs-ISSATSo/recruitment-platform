@@ -86,6 +86,15 @@
   --chart-4: #ea4335;
   --chart-5: oklch(0.556 0 0);
 
+  /*
+   * Second categorical slot beside --primary, for the MKT skills charts'
+   * "Other:" write-ins. Orange because it is the warm opposite of the brand
+   * blue; validated as a pair with --primary (CVD ΔE 27.7, normal 33.7,
+   * contrast ≥ 3:1 on the card). Not a status colour — it means "written in",
+   * never good or bad.
+   */
+  --chart-writein: #eb6834;
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: var(--primary);
@@ -110,6 +119,9 @@
   --chart-reject-1: #da6d5f;
   --chart-reject-2: #ce4033;
   --chart-reject-3: #a82e24;
+
+  /* Validated against the dark card with --primary: CVD ΔE 29.1, normal 33.2. */
+  --chart-writein: #d95926;
 
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -172,6 +184,7 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-writein: var(--chart-writein);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
