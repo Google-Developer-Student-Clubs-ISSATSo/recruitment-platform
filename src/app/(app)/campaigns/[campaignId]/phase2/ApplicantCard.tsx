@@ -183,8 +183,12 @@ export function ApplicantCard({
           </span>
 
           <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold text-foreground sm:text-base">
+            {/* The name wraps, never truncates: at 375px "Abderrahmen Ben
+                Abdallah" beside an MKT pill was cut to "Abderrahm…", and no
+                other part of the card shows the full name. When the name and
+                pills don't fit on one line, the pills wrap below it. */}
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 break-words text-sm font-semibold text-foreground sm:text-base">
                 {applicant.fullName}
               </span>
               {/* MKT committee members only — mktSkills is null for everyone
