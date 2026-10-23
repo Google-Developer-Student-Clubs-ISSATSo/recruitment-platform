@@ -9,12 +9,25 @@
 
 // A TM-internal judgment call with no CSV column behind it — its rawFormData
 // lookup will never find anything, so its "No answer found" card reads like a
-// data problem when it's actually expected. Scoped to this exact question by
+// data problem when it's actually expected. Scoped to this one question by
 // TEXT (not "any question with a null sourceField", which would also catch
 // Technical Skills — a different question, not excluded here). Hidden from the
 // answer panes only: the Phase 1 Scoring panel iterates its questions directly
 // and still renders this one's editable score input.
 export const NO_FORM_QUESTION_TEXT = "BIG YES VS BIG NO";
+
+// Compared loosely, not exactly: the question text is typed by hand in
+// Configuration, and an exact match was a real bug — a campaign configured as
+// "Big Yes / Big No" slipped past the filter and showed up on Phase 2 as a
+// blank "No answer found" card. Case, punctuation and the optional "vs" are
+// all ignored.
+const noFormKey = (text: string) =>
+  text.toLowerCase().replace(/[^a-z0-9]/g, "").replace("vs", "");
+
+/** Whether a question is the no-form judgment call above, however it's spelled. */
+export function isNoFormQuestion(text: string): boolean {
+  return noFormKey(text) === noFormKey(NO_FORM_QUESTION_TEXT);
+}
 
 /** The question fields the answer panes need — narrower than Phase1Question. */
 export type AnswerQuestion = {
@@ -58,7 +71,7 @@ export function answerQuestions<T extends AnswerQuestion>(
   questions: readonly T[],
 ): T[] {
   return questions.filter(
-    (q) => !q.requiresTechnicalScorer && q.text !== NO_FORM_QUESTION_TEXT,
+    (q) => !q.requiresTechnicalScorer && !isNoFormQuestion(q.text),
   );
 }
 

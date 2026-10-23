@@ -7,7 +7,7 @@
 import {
   answerKey,
   configuredAnswerKeys,
-  NO_FORM_QUESTION_TEXT,
+  isNoFormQuestion,
 } from "@/lib/phase1-answers";
 import type { Phase1Question } from "./types";
 
@@ -60,7 +60,7 @@ export function rowAnswer(
   rawFormData: Record<string, unknown> | null,
 ): RowAnswer {
   if (question.requiresTechnicalScorer) return { kind: "profile" };
-  if (question.text === NO_FORM_QUESTION_TEXT) return { kind: "no-form" };
+  if (isNoFormQuestion(question.text)) return { kind: "no-form" };
   const value = readString(rawFormData, answerKey(question));
   return value ? { kind: "answer", value } : { kind: "missing" };
 }

@@ -5,6 +5,11 @@
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { answerKey, answerQuestions } from "@/lib/phase1-answers";
+import {
+  readCurrentDiploma,
+  readFacebookLink,
+  readYearOfStudy,
+} from "@/lib/applicant-form-fields";
 import { passedPhaseOneWhere } from "@/lib/phase1-ranking";
 import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { totalCoefficient } from "@/lib/phase1-score";
@@ -38,6 +43,10 @@ export type Phase2Applicant = {
   id: string;
   fullName: string;
   preferredCommittee: Committee;
+  /** Profile fields from the form, each null when the answer was blank. */
+  yearOfStudy: string | null;
+  currentDiploma: string | null;
+  facebookLink: string | null;
   /**
    * The weighted total as of the last ranking pass, read from PhaseOneResult.
    * Null when a manual override created the row before any recalculation ran —
@@ -199,6 +208,9 @@ export async function getPhase2Data(
       fullName: a.fullName,
       preferredCommittee: a.preferredCommittee,
       rawFormData: a.rawFormData as unknown,
+      yearOfStudy: readYearOfStudy(raw),
+      currentDiploma: readCurrentDiploma(raw),
+      facebookLink: readFacebookLink(raw),
       // The score as it stood at the last ranking pass, NOT recomputed from the
       // current PhaseOneScore rows and coefficients. This deliberately matches
       // Phase 1 Selection's convention: the number shown is the one the team
@@ -278,6 +290,9 @@ export async function getPhase2Data(
         id: row.id,
         fullName: row.fullName,
         preferredCommittee: row.preferredCommittee,
+        yearOfStudy: row.yearOfStudy,
+        currentDiploma: row.currentDiploma,
+        facebookLink: row.facebookLink,
         score: row.score,
         complete: row.complete,
         position: i + 1,

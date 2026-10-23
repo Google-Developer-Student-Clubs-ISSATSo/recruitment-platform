@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Icon } from "@/components/app-shell/icon";
+import { AnswerValue } from "@/components/applicant-answer-panel";
 import { committeeLabel } from "@/lib/committee";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 // Both from phase2.ts, the client-safe half: phase2-visibility.ts reaches
@@ -37,6 +38,16 @@ function TallyPill({
       <Icon name={section.icon} className="text-[13px]" />
       {count}
     </span>
+  );
+}
+
+/** The fallback under a field the applicant's form row has nothing for. */
+function NoAnswer() {
+  return (
+    <p className="mt-1 flex items-center gap-1.5 text-sm italic text-[color:var(--status-pending)]">
+      <Icon name="help" className="text-[16px]" />
+      No answer found for this field
+    </p>
   );
 }
 
@@ -119,8 +130,21 @@ export function ApplicantCard({
           <span className="block truncate text-sm font-semibold text-foreground sm:text-base">
             {applicant.fullName}
           </span>
+          {/* Committee first, then study year and diploma — blanks dropped so
+              an unanswered field never leaves a dangling separator. The form
+              stores the year as a bare number ("1"), so it gets a "Year"
+              prefix unless the answer already says it. */}
           <span className="block truncate text-xs text-neutral-500 dark:text-neutral-400">
-            {committeeLabel(applicant.preferredCommittee)}
+            {[
+              committeeLabel(applicant.preferredCommittee),
+              applicant.yearOfStudy &&
+                (/year/i.test(applicant.yearOfStudy)
+                  ? applicant.yearOfStudy
+                  : `Year ${applicant.yearOfStudy}`),
+              applicant.currentDiploma,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </span>
 
@@ -205,29 +229,37 @@ export function ApplicantCard({
                   Phase 1 Answers
                 </h3>
                 <div className="mt-2 space-y-3">
-                  {applicant.answers.length === 0 ? (
+                  {applicant.answers.length === 0 && (
                     <p className="text-sm italic text-neutral-400">
                       This campaign has no configured questions.
                     </p>
-                  ) : (
-                    applicant.answers.map((a) => (
-                      <div key={a.questionId}>
-                        <p className="text-sm font-semibold text-foreground">
-                          {a.question}
-                        </p>
-                        {a.answer ? (
-                          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-                            {a.answer}
-                          </p>
-                        ) : (
-                          <p className="mt-1 flex items-center gap-1.5 text-sm italic text-[color:var(--status-pending)]">
-                            <Icon name="help" className="text-[16px]" />
-                            No answer found for this field
-                          </p>
-                        )}
-                      </div>
-                    ))
                   )}
+                  {applicant.answers.map((a) => (
+                    <div key={a.questionId}>
+                      <p className="text-sm font-semibold text-foreground">
+                        {a.question}
+                      </p>
+                      {a.answer ? (
+                        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+                          {a.answer}
+                        </p>
+                      ) : (
+                        <NoAnswer />
+                      )}
+                    </div>
+                  ))}
+                  {/* Where the no-form "Big Yes / Big No" card used to sit —
+                      that one never had an answer to show, this one does. */}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Facebook profile link
+                    </p>
+                    {applicant.facebookLink ? (
+                      <AnswerValue value={applicant.facebookLink} />
+                    ) : (
+                      <NoAnswer />
+                    )}
+                  </div>
                 </div>
               </div>
 
