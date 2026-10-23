@@ -29,8 +29,7 @@ const OTHER_COMMITTEES = (Object.keys(COMMITTEE_LABEL) as Committee[]).filter(
  * Listed separately per preferred committee, in the fixed committee order;
  * a committee nobody qualifies from is left out. Within each, most MKT skills
  * first — the section exists to spot the strongest candidates — then by
- * ranked-list position, which is also shown in its own column so each person
- * can be found in the list above.
+ * ranked-list position, which is only a stable tiebreak and isn't shown.
  */
 export function MktSkillsOutsideMkt({
   applicants,
@@ -97,13 +96,11 @@ export function MktSkillsOutsideMkt({
                   up regardless of content. */}
               <table className="w-full table-fixed text-left">
                 <colgroup>
-                  <col className="w-20 sm:w-24" />
                   <col className="w-[40%]" />
                   <col />
                 </colgroup>
                 <thead className="border-b border-neutral-200 dark:border-neutral-800">
                   <tr>
-                    <th className={TH_CLASS}>Rank</th>
                     <th className={TH_CLASS}>Applicant</th>
                     <th className={TH_CLASS}>Skills</th>
                   </tr>
@@ -111,9 +108,6 @@ export function MktSkillsOutsideMkt({
                 <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
                   {rows.map((a) => (
                     <tr key={a.id}>
-                      <td className="px-4 py-3 text-sm font-semibold tabular-nums text-neutral-500 sm:px-6 dark:text-neutral-400">
-                        {a.position}
-                      </td>
                       <td className="break-words px-4 py-3 text-sm font-medium text-foreground sm:px-6">
                         {a.fullName}
                       </td>
