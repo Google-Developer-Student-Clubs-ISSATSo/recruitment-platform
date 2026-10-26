@@ -574,8 +574,8 @@ function SeatRow({
         )}
       </AnimatePresence>
 
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
             {seatKindLabel(seat.kind)}
           </span>
@@ -588,7 +588,7 @@ function SeatRow({
                   restating "filled" — and on the floating seat, which any
                   committee can fill, it says at a glance whose member is in it. */}
               <span
-                className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                className={`hidden size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold sm:flex ${
                   seat.claimedByColor
                     ? IDENTITY_TINT_CLASS[seat.claimedByColor]
                     : "bg-primary/15 text-primary-text"
@@ -603,7 +603,7 @@ function SeatRow({
                   effectively invisible, which is the thing the marker exists
                   to prevent. */}
               <span
-                className={`truncate text-sm ${
+                className={`text-sm break-words sm:truncate ${
                   isMine ? "font-semibold text-primary-text" : "font-medium text-foreground"
                 }`}
               >
