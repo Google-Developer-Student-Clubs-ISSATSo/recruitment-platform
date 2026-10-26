@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { studyLineOf } from "@/lib/applicant-form-fields";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { CapacityBar } from "./CapacityBar";
 import { ShortlistPool } from "./ShortlistPool";
@@ -399,6 +400,7 @@ export function FinalDecisionClient({
                     </p>
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">
                       {row.assignedCommittee ?? row.preferredCommittee}
+                      {studyLineOf(row) && ` · ${studyLineOf(row)}`}
                       {" · "}
                       {avg === null ? "No interview" : `${formatScore(avg)} avg`}
                     </p>
@@ -439,7 +441,7 @@ export function FinalDecisionClient({
                     <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-base text-neutral-500 dark:text-neutral-400">
                       <span className="flex items-center gap-1.5">
                         <Icon name="school" className="text-[18px]" />
-                        {selected.yearOfStudy ?? "Year not given"}
+                        {studyLineOf(selected) ?? "Year not given"}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <Icon name="favorite" className="text-[18px]" />

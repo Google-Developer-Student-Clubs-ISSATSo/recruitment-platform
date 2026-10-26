@@ -8,7 +8,7 @@ import { FINAL_TEMPLATE } from "@/lib/final-email-templates";
 import { missingLinkLabels } from "@/lib/final-email-links";
 import { getCapacityUsage } from "@/lib/committee-capacity-store";
 import { buildJury } from "@/lib/panel-seat-kind";
-import { readYearOfStudy } from "@/lib/applicant-form-fields";
+import { readCurrentDiploma, readYearOfStudy } from "@/lib/applicant-form-fields";
 import { DASHBOARD_STATUSES, type DecisionRow } from "@/lib/final-decision";
 import { PermissionGate } from "@/components/permission-gate";
 import { FinalDecisionClient } from "./FinalDecisionClient";
@@ -122,6 +122,7 @@ export default async function FinalDecisionPage({
       id: a.id,
       fullName: a.fullName,
       yearOfStudy: readYearOfStudy(a.rawFormData),
+      currentDiploma: readCurrentDiploma(a.rawFormData),
       preferredCommittee: a.preferredCommittee,
       assignedCommittee: a.assignedCommittee,
       status: a.status,

@@ -12,7 +12,11 @@ import { PermissionKey } from "@/generated/prisma/enums";
 import { formatTunisDateTime } from "@/lib/tunis-time";
 import { buildJury, seatKindLabel } from "@/lib/panel-seat-kind";
 import { noteCloseEligibility, type NoteScores } from "@/lib/interview-note";
-import { readYearOfStudy } from "@/lib/applicant-form-fields";
+import {
+  readCurrentDiploma,
+  readYearOfStudy,
+  studyLineOf,
+} from "@/lib/applicant-form-fields";
 import { Icon, type IconName } from "@/components/app-shell/icon";
 import { NoteEditor, type NoteMode } from "./NoteEditor";
 import { NoteClosingControls } from "./NoteClosingControls";
@@ -46,7 +50,6 @@ export default async function InterviewNotesPage({
       campaignId: true,
       fullName: true,
       rawFormData: true,
-      phaseOneResult: { select: { weightedTotal: true } },
       interviewSlot: { select: { scheduledTime: true, room: true } },
       interviewNote: {
         include: { closedBy: { select: { name: true, email: true } } },
@@ -106,8 +109,11 @@ export default async function InterviewNotesPage({
   // panel's gaps are visible here too, not just on the board.
   const jury = buildJury(applicant.interviewPanel?.seats ?? []);
 
-  const formScore = applicant.phaseOneResult?.weightedTotal ?? null;
   const yearOfStudy = readYearOfStudy(applicant.rawFormData);
+  const currentDiploma = readCurrentDiploma(applicant.rawFormData);
+  // Same "Year X · Diploma" line Phase 2 and Final Decision show under a name;
+  // null when the form has neither, in which case the Meta reads "Not set".
+  const studyLine = studyLineOf({ yearOfStudy, currentDiploma });
   const scheduled = applicant.interviewSlot?.scheduledTime ?? null;
 
   // Whether closing is available yet. Evaluated on the server so the control
@@ -132,9 +138,9 @@ export default async function InterviewNotesPage({
       </div>
 
       {/* Header: who they are, and who's interviewing them.
-          Below md the three blocks stack in reading order — name, then the
-          score, then the jury — rather than trying to hold a two-up row at a
-          width where the jury names would truncate to initials. */}
+          Below md the two blocks stack in reading order — name, then the
+          jury — rather than trying to hold a two-up row at a width where
+          the jury names would truncate to initials. */}
       <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-6">
         <div className="flex flex-col gap-5 md:flex-row md:flex-wrap md:items-start md:justify-between">
           <div className="min-w-0">
@@ -142,7 +148,7 @@ export default async function InterviewNotesPage({
               {applicant.fullName}
             </h1>
             <div className="mt-2 flex flex-col gap-1 text-sm text-neutral-500 dark:text-neutral-400 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5">
-              <Meta icon="school" label="Year of study" value={yearOfStudy} />
+              <Meta icon="school" label="Studies" value={studyLine} />
               <Meta
                 icon="schedule"
                 label="Interview"
@@ -158,34 +164,24 @@ export default async function InterviewNotesPage({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
-                Form Score
-              </p>
-              <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
-                {formScore === null ? "—" : formScore.toFixed(2)}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
-                Jury
-              </p>
-              <ul className="mt-1 space-y-0.5">
-                {jury.map((j) => (
-                  <li key={j.kind} className="flex items-center gap-2 text-sm">
-                    <span className="inline-flex min-w-10 shrink-0 justify-center rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-                      {seatKindLabel(j.kind)}
-                    </span>
-                    {j.name ? (
-                      <span className="truncate text-foreground">{j.name}</span>
-                    ) : (
-                      <span className="italic text-neutral-400">Open</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+              Jury
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {jury.map((j) => (
+                <li key={j.kind} className="flex items-center gap-2 text-sm">
+                  <span className="inline-flex min-w-10 shrink-0 justify-center rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+                    {seatKindLabel(j.kind)}
+                  </span>
+                  {j.name ? (
+                    <span className="truncate text-foreground">{j.name}</span>
+                  ) : (
+                    <span className="italic text-neutral-400">Open</span>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 

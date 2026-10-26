@@ -11,6 +11,7 @@ import {
 } from "@/lib/final-decision";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/app-shell/icon";
+import { studyLineOf } from "@/lib/applicant-form-fields";
 
 // The waitlist pass, run after the main pass: everyone still PENDING, best
 // interview first, so capacity that frees up gets filled from the top down.
@@ -90,7 +91,7 @@ export function ShortlistPool({
                     </span>
                     {row.yearOfStudy && (
                       <span className="ml-2 text-sm text-neutral-500 dark:text-neutral-400">
-                        {row.yearOfStudy}
+                        {studyLineOf(row)}
                       </span>
                     )}
                   </td>

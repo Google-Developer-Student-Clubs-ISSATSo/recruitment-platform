@@ -95,6 +95,8 @@ export type DecisionRow = {
   id: string;
   fullName: string;
   yearOfStudy: string | null;
+  /** Current diploma as entered on the form — the field they study. */
+  currentDiploma: string | null;
   preferredCommittee: Committee;
   assignedCommittee: Committee | null;
   status: ApplicantStatus;

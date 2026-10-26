@@ -48,6 +48,25 @@ export function readCurrentDiploma(data: unknown): string | null {
 }
 
 /**
+ * The study line Phase 2 shows under each name — year of study, prefixed with
+ * "Year" when the form stored a bare number, plus the current diploma — joined
+ * with " · ". Null when the row's form has neither field filled, so callers can
+ * drop the part instead of showing a dangling separator.
+ */
+export function studyLineOf(fields: {
+  yearOfStudy: string | null;
+  currentDiploma: string | null;
+}): string | null {
+  const year =
+    fields.yearOfStudy &&
+    (/year/i.test(fields.yearOfStudy)
+      ? fields.yearOfStudy
+      : `Year ${fields.yearOfStudy}`);
+  const line = [year, fields.currentDiploma].filter(Boolean).join(" · ");
+  return line !== "" ? line : null;
+}
+
+/**
  * The Facebook profile link, or null. Found by its key containing "facebook"
  * rather than by one exact header — the same rule Phase 1 uses for
  * GitHub/LinkedIn, since link column titles vary per form ("Facebook link",
