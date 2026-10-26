@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeftRight, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -631,24 +632,26 @@ function SeatRow({
         <div className="flex shrink-0 items-center gap-1.5">
           {filled && seat.canAssign && !picking && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               disabled={pending}
               title="Put a different interviewer in this seat"
+              aria-label="Change interviewer"
               onClick={() => setPicking(true)}
             >
-              Change
+              <ArrowLeftRight />
             </Button>
           )}
           {filled && seat.canAssign && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               disabled={pending}
               title="Remove this interviewer from the panel"
+              aria-label="Remove interviewer"
               onClick={() => setConfirming("remove")}
             >
-              Remove
+              <Trash2 className="text-status-rejected" />
             </Button>
           )}
           {/* The padlock only earns its space when there is no button beside it:
