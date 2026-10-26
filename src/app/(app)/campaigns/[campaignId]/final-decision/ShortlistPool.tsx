@@ -25,12 +25,14 @@ export function ShortlistPool({
   onCommitteeChange,
   onDecide,
   pending,
+  showFormScore,
 }: {
   rows: DecisionRow[];
   committeeFor: (row: DecisionRow) => Committee;
   onCommitteeChange: (applicantId: string, committee: Committee) => void;
   onDecide: (row: DecisionRow, decision: FinalDecision) => void;
   pending: boolean;
+  showFormScore: boolean;
 }) {
   const ranked = [...rows].sort(compareForPool);
 
@@ -63,9 +65,11 @@ export function ShortlistPool({
               <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
                 Interview
               </th>
-              <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
-                Form
-              </th>
+              {showFormScore && (
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
+                  Form
+                </th>
+              )}
               <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
                 Committee
               </th>
@@ -106,9 +110,11 @@ export function ShortlistPool({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-medium tabular-nums text-neutral-600 dark:text-neutral-300">
-                    {formatScore(row.formScore, 2)}
-                  </td>
+                  {showFormScore && (
+                    <td className="px-4 py-3 font-medium tabular-nums text-neutral-600 dark:text-neutral-300">
+                      {formatScore(row.formScore, 2)}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <select
                       aria-label={`Committee for ${row.fullName}`}

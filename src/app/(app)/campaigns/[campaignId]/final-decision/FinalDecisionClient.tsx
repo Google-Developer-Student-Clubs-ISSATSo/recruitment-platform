@@ -80,6 +80,7 @@ export function FinalDecisionClient({
   usage,
   completedAtISO,
   emailPanel,
+  showFormScore,
 }: {
   campaignId: string;
   initialRows: DecisionRow[];
@@ -94,6 +95,11 @@ export function FinalDecisionClient({
    * beyond rendering it in place.
    */
   emailPanel: React.ReactNode;
+  /**
+   * False for MKT and EER members (see canViewPhase2Scores). Every formScore is
+   * already null server-side then; this only drops the column/tile around it.
+   */
+  showFormScore: boolean;
 }) {
   // Rows come straight from the server on every render: each action calls
   // revalidatePath, so the RSC payload is the single source of truth. Mirroring
@@ -327,6 +333,7 @@ export function FinalDecisionClient({
           onCommitteeChange={setCommittee}
           onDecide={decide}
           pending={pending}
+          showFormScore={showFormScore}
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -391,9 +398,11 @@ export function FinalDecisionClient({
                         />
                         {style.label}
                       </span>
-                      <span className="text-xs font-medium tabular-nums text-neutral-400">
-                        {formatScore(row.formScore, 2)}
-                      </span>
+                      {showFormScore && (
+                        <span className="text-xs font-medium tabular-nums text-neutral-400">
+                          {formatScore(row.formScore, 2)}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-base font-semibold text-foreground">
                       {row.fullName}
@@ -505,12 +514,16 @@ export function FinalDecisionClient({
                 </div>
 
                 {/* Scores */}
-                <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  <ScoreTile
-                    label="Form Score"
-                    value={formatScore(selected.formScore, 2)}
-                    hint="Phase 1 weighted total"
-                  />
+                <div
+                  className={`mt-6 grid gap-4 ${showFormScore ? "sm:grid-cols-2" : ""}`}
+                >
+                  {showFormScore && (
+                    <ScoreTile
+                      label="Form Score"
+                      value={formatScore(selected.formScore, 2)}
+                      hint="Phase 1 weighted total"
+                    />
+                  )}
                   <ScoreTile
                     label="Interview Score"
                     value={

@@ -7,6 +7,8 @@ import { CAMPAIGN_PAGE_PERMISSIONS } from "@/lib/route-permissions";
 import { FINAL_TEMPLATE } from "@/lib/final-email-templates";
 import { missingLinkLabels } from "@/lib/final-email-links";
 import { getCapacityUsage } from "@/lib/committee-capacity-store";
+import { canViewPhase2Scores, getViewerCommittee } from "@/lib/phase2-store";
+import { getPhase2Viewer } from "@/lib/phase2-visibility-store";
 import { buildJury } from "@/lib/panel-seat-kind";
 import { readCurrentDiploma, readYearOfStudy } from "@/lib/applicant-form-fields";
 import { DASHBOARD_STATUSES, type DecisionRow } from "@/lib/final-decision";
@@ -31,11 +33,12 @@ export default async function FinalDecisionPage({
   params: Promise<{ campaignId: string }>;
 }) {
   const { campaignId } = await params;
-  await requirePermission(CAMPAIGN_PAGE_PERMISSIONS["final-decision"], {
-    redirectTo: `/campaigns/${campaignId}/dashboard?denied=1`,
-  });
+  const userId = await requirePermission(
+    CAMPAIGN_PAGE_PERMISSIONS["final-decision"],
+    { redirectTo: `/campaigns/${campaignId}/dashboard?denied=1` },
+  );
 
-  const [campaign, applicants, usage] = await Promise.all([
+  const [campaign, applicants, usage, viewer, committee] = await Promise.all([
     prisma.campaign.findUnique({
       where: { id: campaignId },
       select: {
@@ -87,7 +90,14 @@ export default async function FinalDecisionPage({
       },
     }),
     getCapacityUsage(campaignId),
+    getPhase2Viewer(campaignId, userId),
+    getViewerCommittee(userId),
   ]);
+
+  // Same rule as Phase 2: MKT and EER members never see the Phase 1 form score,
+  // so it can't anchor their judgment of the interview. Dropped server-side
+  // below rather than hidden in the browser, so the figure never reaches them.
+  const showFormScore = canViewPhase2Scores(viewer, committee);
 
   if (!campaign) notFound();
 
@@ -126,7 +136,7 @@ export default async function FinalDecisionPage({
       preferredCommittee: a.preferredCommittee,
       assignedCommittee: a.assignedCommittee,
       status: a.status,
-      formScore: a.phaseOneResult?.weightedTotal ?? null,
+      formScore: showFormScore ? (a.phaseOneResult?.weightedTotal ?? null) : null,
       // The 7 raw ratings travel to the client, which averages them with the same
       // computeAverage the interview note UI uses. Sending a pre-computed number
       // would fork that definition in two.
@@ -182,6 +192,7 @@ export default async function FinalDecisionPage({
       usage={usage}
       completedAtISO={campaign.finalDecisionCompletedAt?.toISOString() ?? null}
       emailPanel={emailPanel}
+      showFormScore={showFormScore}
     />
   );
 }
