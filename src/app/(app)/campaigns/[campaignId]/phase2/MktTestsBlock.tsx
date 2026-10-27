@@ -19,20 +19,21 @@ import { removeMktTestLinkAction, setMktTestLinkAction } from "./actions";
  * Drive link to the applicant's work or a clear "Not submitted". There is no
  * grade — whether the work exists is the whole record.
  *
- * Only rendered when the server sent `mktTests` at all (MKT members and the
- * Administrator, for applicants who listed an MKT skill), so everyone who sees
- * it may also edit it.
+ * Readable by the whole club; only MKT committee members get the add, change
+ * and remove controls (`editable`). The actions enforce the same rule.
  */
 export function MktTestsBlock({
   campaignId,
   applicantId,
   applicantName,
   tests,
+  editable,
 }: {
   campaignId: string;
   applicantId: string;
   applicantName: string;
   tests: MktTests;
+  editable: boolean;
 }) {
   return (
     <div>
@@ -47,6 +48,7 @@ export function MktTestsBlock({
             kind={t.kind}
             label={t.label}
             submission={tests[t.kind]}
+            editable={editable}
           />
         ))}
       </ul>
@@ -61,6 +63,7 @@ function MktTestRow({
   kind,
   label,
   submission,
+  editable,
 }: {
   campaignId: string;
   applicantId: string;
@@ -68,6 +71,7 @@ function MktTestRow({
   kind: MktTestKind;
   label: string;
   submission: MktTests[MktTestKind];
+  editable: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -152,17 +156,22 @@ function MktTestRow({
                 Open
               </a>
             )}
-            <button
-              type="button"
-              onClick={startEditing}
-              disabled={pending}
-              aria-label={`${submission ? "Change" : "Add"} the ${label.toLowerCase()} link`}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              <Icon name={submission ? "edit" : "add"} className="text-[14px]" />
-              {submission ? "Change" : "Add link"}
-            </button>
-            {submission && (
+            {editable && (
+              <button
+                type="button"
+                onClick={startEditing}
+                disabled={pending}
+                aria-label={`${submission ? "Change" : "Add"} the ${label.toLowerCase()} link`}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                <Icon
+                  name={submission ? "edit" : "add"}
+                  className="text-[14px]"
+                />
+                {submission ? "Change" : "Add link"}
+              </button>
+            )}
+            {editable && submission && (
               <button
                 type="button"
                 onClick={() => setConfirmRemove(true)}

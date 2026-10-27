@@ -81,6 +81,7 @@ export function ApplicantCard({
   applicant,
   maxScore,
   showScores,
+  canEditMktTests,
   authorName,
   showNotesColumn,
   showFlagsColumn,
@@ -90,6 +91,8 @@ export function ApplicantCard({
   maxScore: number;
   /** Whether the score column exists at all — see <RankedList>. */
   showScores: boolean;
+  /** Whether the test links can be edited here — see <RankedList>. */
+  canEditMktTests: boolean;
   /** The signed-in member's display name, for optimistically-added entries. */
   authorName: string;
   /** Whether each column exists on this page at all — see <RankedList>. */
@@ -98,7 +101,7 @@ export function ApplicantCard({
 }) {
   const [open, setOpen] = useState(false);
   const reduced = useReducedMotion();
-  const mktSkillCount = applicant.mktSkills?.listed.length ?? 0;
+  const mktSkillCount = applicant.mktSkills.listed.length;
 
   const counts = PHASE2_SECTIONS.map((s) => ({
     section: s,
@@ -198,9 +201,8 @@ export function ApplicantCard({
               <span className="min-w-0 break-words text-sm font-semibold text-foreground sm:text-base">
                 {applicant.fullName}
               </span>
-              {/* MKT committee members only — mktSkills is null for everyone
-                  else, dropped on the server. Whitelisted skills are what's
-                  counted; write-ins show in the expanded answers. */}
+              {/* Whitelisted skills are what's counted; write-ins show in the
+                  expanded answers. */}
               {mktSkillCount > 0 && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary-text">
                   <Icon name="campaign" className="text-[13px]" />
@@ -211,8 +213,7 @@ export function ApplicantCard({
                   </span>
                 </span>
               )}
-              {/* MKT members and the Administrator only, and only for
-                  applicants expected to take the test — so a missing
+              {/* Only for applicants expected to take the test — so a missing
                   submission shows without opening the card. */}
               {applicant.mktTests && (
                 <MktTestStatus tests={applicant.mktTests} compact />
@@ -352,34 +353,31 @@ export function ApplicantCard({
                       <NoAnswer />
                     )}
                   </div>
-                  {/* For the MKT committee grading the marketing test: what
-                      this applicant listed under Other skills. Absent for every
-                      other member — the server never sent it. */}
-                  {applicant.mktSkills && (
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        MKT skills
-                      </p>
-                      <div className="mt-1.5">
-                        {hasAnySkill(applicant.mktSkills) ? (
-                          <SkillChips
-                            listed={applicant.mktSkills.listed}
-                            writeIns={applicant.mktSkills.writeIns}
-                          />
-                        ) : (
-                          <p className="text-sm italic text-neutral-500 dark:text-neutral-400">
-                            Nothing listed under Other skills.
-                          </p>
-                        )}
-                      </div>
+                  {/* What this applicant listed under Other skills. */}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      MKT skills
+                    </p>
+                    <div className="mt-1.5">
+                      {hasAnySkill(applicant.mktSkills) ? (
+                        <SkillChips
+                          listed={applicant.mktSkills.listed}
+                          writeIns={applicant.mktSkills.writeIns}
+                        />
+                      ) : (
+                        <p className="text-sm italic text-neutral-500 dark:text-neutral-400">
+                          Nothing listed under Other skills.
+                        </p>
+                      )}
                     </div>
-                  )}
+                  </div>
                   {applicant.mktTests && (
                     <MktTestsBlock
                       campaignId={campaignId}
                       applicantId={applicant.id}
                       applicantName={applicant.fullName}
                       tests={applicant.mktTests}
+                      editable={canEditMktTests}
                     />
                   )}
                 </div>

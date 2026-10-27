@@ -42,6 +42,7 @@ export function RankedList({
   applicants,
   maxScore,
   showScores,
+  canEditMktTests,
   authorName,
   showNotesColumn,
   showFlagsColumn,
@@ -51,6 +52,8 @@ export function RankedList({
   maxScore: number;
   /** False for MKT/EER viewers — the scores were never sent; see getPhase2Data. */
   showScores: boolean;
+  /** MKT committee only — everyone else sees the test links read-only. */
+  canEditMktTests: boolean;
   authorName: string;
   /**
    * Whether each column exists for this viewer at all. Decided on the server
@@ -142,6 +145,7 @@ export function RankedList({
                 applicant={applicant}
                 maxScore={maxScore}
                 showScores={showScores}
+                canEditMktTests={canEditMktTests}
                 authorName={authorName}
                 showNotesColumn={showNotesColumn}
                 showFlagsColumn={showFlagsColumn}

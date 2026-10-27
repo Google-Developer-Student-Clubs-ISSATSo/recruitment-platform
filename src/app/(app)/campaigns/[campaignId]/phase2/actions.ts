@@ -14,7 +14,7 @@ import {
 } from "@/lib/phase2";
 import {
   addPhase2Entry,
-  canViewMktTests,
+  canEditMktTests,
   getViewerCommittee,
 } from "@/lib/phase2-store";
 import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
@@ -150,8 +150,8 @@ export async function addPhase2EntryAction(
 }
 
 /**
- * The marketing-test gate, on top of authorize(): the viewer must be someone
- * who sees the links (MKT committee or the Administrator — canViewMktTests),
+ * The marketing-test gate, on top of authorize(): the member must be on the
+ * MKT committee (canEditMktTests — reading is club-wide, writing is not),
  * and the applicant must have listed a whitelisted MKT skill, the same bar the
  * page uses to show the test block at all. Without the second check a crafted
  * POST could attach a link to someone the page never shows one for.
@@ -168,8 +168,7 @@ async function authorizeMktTest(
 
   if (!isMktTestKind(kind)) return { ok: false, error: "Unknown test." };
 
-  const [viewer, committee, applicant, whitelist] = await Promise.all([
-    getPhase2Viewer(campaignId, gate.userId),
+  const [committee, applicant, whitelist] = await Promise.all([
     getViewerCommittee(gate.userId),
     prisma.applicant.findUnique({
       where: { id: applicantId },
@@ -177,7 +176,7 @@ async function authorizeMktTest(
     }),
     getMktSkillWhitelist(campaignId),
   ]);
-  if (!canViewMktTests(viewer, committee)) {
+  if (!canEditMktTests(committee)) {
     return {
       ok: false,
       error: "Only the MKT committee can record marketing tests.",

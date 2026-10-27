@@ -3,12 +3,11 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import {
   canViewMktSkills,
-  canViewMktTests,
+  canEditMktTests,
   canViewPhase2Scores,
   getPhase2Data,
   getViewerCommittee,
 } from "@/lib/phase2-store";
-import { Committee } from "@/generated/prisma/enums";
 import {
   getPhase2VisibilityState,
   getPhase2Viewer,
@@ -53,17 +52,15 @@ export default async function Phase2Page({
 
   // Resolved before the data read, because what getPhase2Data returns DEPENDS
   // on them: notes and flags this viewer may not read are dropped server-side
-  // rather than hidden in the browser — and so are each applicant's MKT skills
-  // for anyone outside the MKT committee, and the Phase 1 scores for MKT and
-  // EER members (see canViewPhase2Scores).
+  // rather than hidden in the browser — and so are the Phase 1 scores for MKT
+  // and EER members (see canViewPhase2Scores).
   const [viewer, visibility, committee] = await Promise.all([
     getPhase2Viewer(campaignId, session.user.id),
     getPhase2VisibilityState(campaignId),
     getViewerCommittee(session.user.id),
   ]);
-  const mktMember = committee === Committee.MKT;
   const includeScores = canViewPhase2Scores(viewer, committee);
-  const includeMktTests = canViewMktTests(viewer, committee);
+  const canEditTests = canEditMktTests(committee);
 
   const [
     {
@@ -79,14 +76,7 @@ export default async function Phase2Page({
     },
     mayViewSkills,
   ] = await Promise.all([
-    getPhase2Data(
-      campaignId,
-      viewer,
-      visibility,
-      mktMember,
-      includeScores,
-      includeMktTests,
-    ),
+    getPhase2Data(campaignId, viewer, visibility, includeScores),
     canViewMktSkills(session.user.id),
   ]);
   // Live tally, every load — the same rule the interview-note AVGs and the
@@ -127,6 +117,7 @@ export default async function Phase2Page({
           applicants={applicants}
           maxScore={maxScore}
           showScores={showScores}
+          canEditMktTests={canEditTests}
           authorName={authorName}
           showNotesColumn={showNotesColumn}
           showFlagsColumn={showFlagsColumn}

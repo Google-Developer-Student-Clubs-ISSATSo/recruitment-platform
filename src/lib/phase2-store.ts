@@ -89,16 +89,14 @@ export type Phase2Applicant = {
   canViewNotes: boolean;
   canViewFlags: boolean;
   /**
-   * Their Other-skills answer, split into whitelisted MKT skills and write-ins
-   * — or null when the viewer isn't an MKT committee member. Null is dropped on
-   * the server like the entries above, so other members' pages never carry it.
+   * Their Other-skills answer, split into whitelisted MKT skills and write-ins.
+   * Readable by the whole club.
    */
-  mktSkills: ApplicantSkills | null;
+  mktSkills: ApplicantSkills;
   /**
-   * Their marketing-test submissions — or null when the viewer may not see
-   * them (see canViewMktTests) or the applicant listed no whitelisted MKT
-   * skill, so isn't expected to take the test. Dropped on the server like
-   * `mktSkills`.
+   * Their marketing-test submissions, readable by the whole club — or null
+   * when the applicant listed no whitelisted MKT skill, so isn't expected to
+   * take the test. Only editing is restricted (see canEditMktTests).
    */
   mktTests: MktTests | null;
 };
@@ -176,9 +174,7 @@ export type Phase2Data = {
  * Ties break by name then id, the same tiebreak the ranking pass uses, so the
  * order is stable across loads.
  *
- * VIEWER-DEPENDENT. Each applicant's `mktSkills` rides along only when
- * `includeMktSkills` is set (an MKT committee member), and notes and flags
- * are filtered here, on the server, against
+ * VIEWER-DEPENDENT. Notes and flags are filtered here, on the server, against
  * `viewer` and `visibility` (see lib/phase2-visibility.ts) — the ranking,
  * scores, answers and the skills tally are identical for everyone, but the
  * entries a caller gets back are only the ones they are allowed to read. This
@@ -190,12 +186,8 @@ export async function getPhase2Data(
   campaignId: string,
   viewer: Phase2Viewer,
   visibility: Phase2VisibilityState,
-  /** From isMktMember — whether each applicant's MKT skills ride along. */
-  includeMktSkills: boolean,
   /** From canViewPhase2Scores — whether the Phase 1 scores ride along. */
   includeScores: boolean,
-  /** From canViewMktTests — whether the marketing-test links ride along. */
-  includeMktTests: boolean,
 ): Promise<Phase2Data> {
   const [questions, applicants, whitelist] = await Promise.all([
     prisma.phaseOneQuestion.findMany({
@@ -230,10 +222,7 @@ export async function getPhase2Data(
             author: { select: { name: true, email: true } },
           },
         },
-        // `take: 0` rather than a conditional select (which loses the row
-        // type): a viewer who may not see the links never has them read.
         mktTestSubmissions: {
-          take: includeMktTests ? undefined : 0,
           select: {
             kind: true,
             link: true,
@@ -300,7 +289,7 @@ export async function getPhase2Data(
         createdAtISO: e.createdAt.toISOString(),
         text: e.text,
       })),
-      mktTests: includeMktTests ? toMktTests(a.mktTestSubmissions) : null,
+      mktTests: toMktTests(a.mktTestSubmissions),
     };
   });
 
@@ -377,7 +366,7 @@ export async function getPhase2Data(
         ),
         ...access,
         // `matched` is built from `rows` in order, so the index lines up.
-        mktSkills: includeMktSkills ? matched[i].skills : null,
+        mktSkills: matched[i].skills,
         mktTests: testsFor(matched[i]),
       };
     }),
@@ -449,16 +438,13 @@ function toMktTests(
 }
 
 /**
- * May this viewer see — and enter — marketing-test links? MKT committee
- * members, who run the test, plus the Administrator. Committee membership
- * rather than a PermissionKey, the same call isMktMember makes for the
- * per-applicant skills.
+ * May this member add, change or remove marketing-test links? MKT committee
+ * members only — they run the test. Reading the links is open to the whole
+ * club; only writing is restricted. Committee membership rather than a
+ * PermissionKey: running the test is what the MKT committee does.
  */
-export function canViewMktTests(
-  viewer: Phase2Viewer,
-  committee: Committee | null,
-): boolean {
-  return viewer.isAdministrator || committee === Committee.MKT;
+export function canEditMktTests(committee: Committee | null): boolean {
+  return committee === Committee.MKT;
 }
 
 /**
@@ -490,17 +476,6 @@ export async function canViewMktSkills(userId: string): Promise<boolean> {
   return hasPermission(userId, PermissionKey.VIEW_MKT_SKILLS_BREAKDOWN);
 }
 
-/**
- * Whether this member belongs to the MKT committee — the audience for each
- * applicant's MKT skills inside the ranked list. Deliberately committee
- * membership, not VIEW_MKT_SKILLS_BREAKDOWN: the breakdown is a lead-level
- * analysis, while the per-applicant skills are for every MKT member grading
- * the marketing test.
- */
-export async function isMktMember(userId: string): Promise<boolean> {
-  return (await getViewerCommittee(userId)) === Committee.MKT;
-}
-
 /** The committee this member belongs to, or null if the user no longer exists. */
 export async function getViewerCommittee(
   userId: string,
@@ -525,7 +500,7 @@ const SCORE_HIDDEN_COMMITTEES: ReadonlySet<Committee> = new Set([
 /**
  * May this viewer see Phase 1 scores on the Phase 2 page? The Administrator
  * always can, whatever their committee; otherwise it's decided by committee
- * membership alone, like isMktMember.
+ * membership alone, like canEditMktTests.
  */
 export function canViewPhase2Scores(
   viewer: Phase2Viewer,
