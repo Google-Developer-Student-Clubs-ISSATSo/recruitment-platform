@@ -2,6 +2,7 @@ import { Icon } from "@/components/app-shell/icon";
 import { COMMITTEE_LABEL, committeeLabel } from "@/lib/committee";
 import type { MktSkillApplicant } from "@/lib/phase2-store";
 import { Committee } from "@/generated/prisma/enums";
+import { MktTestStatus } from "./MktTestStatus";
 import { SkillChips } from "./SkillChips";
 
 const TH_CLASS =
@@ -110,6 +111,12 @@ export function MktSkillsOutsideMkt({
                     <tr key={a.id}>
                       <td className="break-words px-4 py-3 text-sm font-medium text-foreground sm:px-6">
                         {a.fullName}
+                        {/* Same placement as the breakdown table's. */}
+                        {a.mktTests && (
+                          <span className="mt-1 block">
+                            <MktTestStatus tests={a.mktTests} />
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 sm:px-6">
                         <SkillChips listed={a.skills} writeIns={a.writeIns} />

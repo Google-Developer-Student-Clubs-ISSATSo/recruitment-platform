@@ -50,6 +50,8 @@ const ACTION_LABELS: Record<string, string> = {
   PHASE2_VISIBILITY_OPENED: "opened a Phase 2 surface to all members",
   MKT_SKILL_ADDED: "added a skill to the MKT skills list",
   MKT_SKILL_REMOVED: "removed a skill from the MKT skills list",
+  MKT_TEST_LINK_SET: "recorded a marketing test submission",
+  MKT_TEST_LINK_REMOVED: "removed a marketing test submission",
   INTERVIEW_PANEL_SIZE_SET: "set the interview panel size",
   PANEL_SEAT_ASSIGNED: "assigned an interviewer to a panel",
   PANEL_SEAT_REASSIGNED: "swapped a panel's interviewer for another",
@@ -160,6 +162,10 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // the add/remove colour split every other reversible pair here uses.
   MKT_SKILL_ADDED: "accepted",
   MKT_SKILL_REMOVED: "rejected",
+  // Recording that work exists, not a judgment on it — the same add/remove
+  // colour split as the skills list above.
+  MKT_TEST_LINK_SET: "accepted",
+  MKT_TEST_LINK_REMOVED: "rejected",
   // Panel staffing is routine coordination, not a judgment about anyone.
   INTERVIEW_PANEL_SIZE_SET: "primary",
   PANEL_SEAT_ASSIGNED: "accepted",

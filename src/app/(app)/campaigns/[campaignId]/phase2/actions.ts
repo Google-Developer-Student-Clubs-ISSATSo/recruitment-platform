@@ -5,8 +5,19 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
-import { isPhase2EntryType, PHASE2_ENTRY_MAX_LENGTH } from "@/lib/phase2";
-import { addPhase2Entry } from "@/lib/phase2-store";
+import {
+  isMktTestKind,
+  isPhase2EntryType,
+  mktSkillsOf,
+  normalizeMktTestLink,
+  PHASE2_ENTRY_MAX_LENGTH,
+} from "@/lib/phase2";
+import {
+  addPhase2Entry,
+  canViewMktTests,
+  getViewerCommittee,
+} from "@/lib/phase2-store";
+import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import {
   canViewPhase2Surface,
   surfaceOfEntryType,
@@ -16,7 +27,7 @@ import {
   getPhase2Viewer,
 } from "@/lib/phase2-visibility-store";
 import { PHASE_ONE_ACCEPTED } from "@/lib/phase1-ranking";
-import type { Committee } from "@/generated/prisma/enums";
+import type { Committee, MktTestKind } from "@/generated/prisma/enums";
 
 export type AddEntryResult = { ok: true } | { ok: false; error: string };
 
@@ -132,6 +143,124 @@ export async function addPhase2EntryAction(
     // The entry text itself stays out of the log: it's already stored, with its
     // author, on the row this points at. Only the kind is worth summarising.
     details: { type },
+  });
+
+  revalidatePath(`/campaigns/${campaignId}/phase2`);
+  return { ok: true };
+}
+
+/**
+ * The marketing-test gate, on top of authorize(): the viewer must be someone
+ * who sees the links (MKT committee or the Administrator — canViewMktTests),
+ * and the applicant must have listed a whitelisted MKT skill, the same bar the
+ * page uses to show the test block at all. Without the second check a crafted
+ * POST could attach a link to someone the page never shows one for.
+ */
+async function authorizeMktTest(
+  campaignId: string,
+  applicantId: string,
+  kind: string,
+): Promise<
+  { ok: true; userId: string; kind: MktTestKind } | { ok: false; error: string }
+> {
+  const gate = await authorize(campaignId, applicantId);
+  if (!gate.ok) return gate;
+
+  if (!isMktTestKind(kind)) return { ok: false, error: "Unknown test." };
+
+  const [viewer, committee, applicant, whitelist] = await Promise.all([
+    getPhase2Viewer(campaignId, gate.userId),
+    getViewerCommittee(gate.userId),
+    prisma.applicant.findUnique({
+      where: { id: applicantId },
+      select: { rawFormData: true },
+    }),
+    getMktSkillWhitelist(campaignId),
+  ]);
+  if (!canViewMktTests(viewer, committee)) {
+    return {
+      ok: false,
+      error: "Only the MKT committee can record marketing tests.",
+    };
+  }
+  const skills = mktSkillsOf(
+    applicant?.rawFormData,
+    whitelist.map((s) => s.skillName),
+  );
+  if (skills.listed.length === 0) {
+    return { ok: false, error: "This applicant listed no MKT skill." };
+  }
+
+  return { ok: true, userId: gate.userId, kind };
+}
+
+/**
+ * Record (or replace) the Drive link for one applicant's marketing test.
+ * Existence is all that matters — there is no grade to enter.
+ */
+export async function setMktTestLinkAction(
+  campaignId: string,
+  applicantId: string,
+  rawKind: string,
+  link: string,
+): Promise<AddEntryResult> {
+  const gate = await authorizeMktTest(campaignId, applicantId, rawKind);
+  if (!gate.ok) return gate;
+  const { kind } = gate;
+
+  const normalized = normalizeMktTestLink(link);
+  if (!normalized) {
+    return { ok: false, error: "Paste a full link, starting with https://." };
+  }
+
+  const where = { applicantId_kind: { applicantId, kind } };
+  const previous = await prisma.mktTestSubmission.findUnique({
+    where,
+    select: { link: true },
+  });
+  if (previous?.link === normalized) return { ok: true };
+
+  await prisma.mktTestSubmission.upsert({
+    where,
+    create: { applicantId, kind, link: normalized, submittedById: gate.userId },
+    update: { link: normalized, submittedById: gate.userId },
+  });
+
+  await logActivity({
+    actorId: gate.userId,
+    actionType: "MKT_TEST_LINK_SET",
+    targetType: "Applicant",
+    targetId: applicantId,
+    campaignId,
+    details: { kind, link: normalized, previousLink: previous?.link ?? null },
+  });
+
+  revalidatePath(`/campaigns/${campaignId}/phase2`);
+  return { ok: true };
+}
+
+/** Remove a recorded link, returning the test to "Not submitted". */
+export async function removeMktTestLinkAction(
+  campaignId: string,
+  applicantId: string,
+  rawKind: string,
+): Promise<AddEntryResult> {
+  const gate = await authorizeMktTest(campaignId, applicantId, rawKind);
+  if (!gate.ok) return gate;
+  const { kind } = gate;
+
+  const removed = await prisma.mktTestSubmission.deleteMany({
+    where: { applicantId, kind },
+  });
+  if (removed.count === 0) return { ok: true };
+
+  await logActivity({
+    actorId: gate.userId,
+    actionType: "MKT_TEST_LINK_REMOVED",
+    targetType: "Applicant",
+    targetId: applicantId,
+    campaignId,
+    details: { kind },
   });
 
   revalidatePath(`/campaigns/${campaignId}/phase2`);

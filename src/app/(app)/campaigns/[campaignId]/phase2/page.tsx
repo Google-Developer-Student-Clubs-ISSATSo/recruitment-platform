@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import {
   canViewMktSkills,
+  canViewMktTests,
   canViewPhase2Scores,
   getPhase2Data,
   getViewerCommittee,
@@ -62,6 +63,7 @@ export default async function Phase2Page({
   ]);
   const mktMember = committee === Committee.MKT;
   const includeScores = canViewPhase2Scores(viewer, committee);
+  const includeMktTests = canViewMktTests(viewer, committee);
 
   const [
     {
@@ -77,7 +79,14 @@ export default async function Phase2Page({
     },
     mayViewSkills,
   ] = await Promise.all([
-    getPhase2Data(campaignId, viewer, visibility, mktMember, includeScores),
+    getPhase2Data(
+      campaignId,
+      viewer,
+      visibility,
+      mktMember,
+      includeScores,
+      includeMktTests,
+    ),
     canViewMktSkills(session.user.id),
   ]);
   // Live tally, every load — the same rule the interview-note AVGs and the

@@ -16,6 +16,8 @@ import {
 } from "@/lib/phase2";
 import type { Phase2Applicant } from "@/lib/phase2-store";
 import { EntrySection } from "./EntrySection";
+import { MktTestsBlock } from "./MktTestsBlock";
+import { MktTestStatus, mktTestStatusText } from "./MktTestStatus";
 import { SkillChips } from "./SkillChips";
 
 /**
@@ -157,6 +159,7 @@ export function ApplicantCard({
     ...studyLine,
     mktSkillCount > 0 &&
       `${mktSkillCount} MKT skill${mktSkillCount === 1 ? "" : "s"}`,
+    applicant.mktTests && mktTestStatusText(applicant.mktTests),
     ...visibleTallies.map(
       (c) => `${c.count} ${c.section.label.toLowerCase()}`,
     ),
@@ -207,6 +210,12 @@ export function ApplicantCard({
                     skill{mktSkillCount === 1 ? "" : "s"}
                   </span>
                 </span>
+              )}
+              {/* MKT members and the Administrator only, and only for
+                  applicants expected to take the test — so a missing
+                  submission shows without opening the card. */}
+              {applicant.mktTests && (
+                <MktTestStatus tests={applicant.mktTests} compact />
               )}
               {redFlag && (
                 <span className="shrink-0 sm:hidden">
@@ -364,6 +373,14 @@ export function ApplicantCard({
                         )}
                       </div>
                     </div>
+                  )}
+                  {applicant.mktTests && (
+                    <MktTestsBlock
+                      campaignId={campaignId}
+                      applicantId={applicant.id}
+                      applicantName={applicant.fullName}
+                      tests={applicant.mktTests}
+                    />
                   )}
                 </div>
               </div>

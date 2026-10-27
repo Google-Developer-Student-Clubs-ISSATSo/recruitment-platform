@@ -32,26 +32,27 @@ model User {
   roleTemplateId String?
   roleTemplate   RoleTemplate? @relation(fields: [roleTemplateId], references: [id])
 
-  accounts              Account[]
-  sessions              Session[]
-  permissions           UserPermission[]
-  activityLogs          ActivityLogEntry[]
-  sentInvites           AdminTransferInvite[] @relation("InviteInitiator")
-  phaseOneScoresGiven   PhaseOneScore[]
-  phaseOneNotesWritten  PhaseOneNote[]
-  emailLogsSent         EmailLog[]
-  interviewSlotsEntered InterviewSlot[]
-  panelSeatsClaimed     PanelSeat[]
-  interviewNotesClosed  InterviewNote[]
-  phase2EntriesWritten  Phase2Entry[]
-  phase2NotesClosed     Phase2VisibilityConfig[] @relation("Phase2NotesClosedBy")
-  phase2FlagsClosed     Phase2VisibilityConfig[] @relation("Phase2FlagsClosedBy")
-  campaignLeadsHeld     CampaignLead[]        @relation("CampaignLeadHolder")
-  campaignLeadsAssigned CampaignLead[]        @relation("CampaignLeadAssignedBy")
+  accounts                  Account[]
+  sessions                  Session[]
+  permissions               UserPermission[]
+  activityLogs              ActivityLogEntry[]
+  sentInvites               AdminTransferInvite[]    @relation("InviteInitiator")
+  phaseOneScoresGiven       PhaseOneScore[]
+  phaseOneNotesWritten      PhaseOneNote[]
+  emailLogsSent             EmailLog[]
+  interviewSlotsEntered     InterviewSlot[]
+  panelSeatsClaimed         PanelSeat[]
+  interviewNotesClosed      InterviewNote[]
+  phase2EntriesWritten      Phase2Entry[]
+  mktTestSubmissionsEntered MktTestSubmission[]
+  phase2NotesClosed         Phase2VisibilityConfig[] @relation("Phase2NotesClosedBy")
+  phase2FlagsClosed         Phase2VisibilityConfig[] @relation("Phase2FlagsClosedBy")
+  campaignLeadsHeld         CampaignLead[]           @relation("CampaignLeadHolder")
+  campaignLeadsAssigned     CampaignLead[]           @relation("CampaignLeadAssignedBy")
 
-  seatApprovalsRequested PanelSeatApprovalRequest[] @relation("SeatApprovalRequester")
+  seatApprovalsRequested  PanelSeatApprovalRequest[] @relation("SeatApprovalRequester")
   seatApprovalsAsAssignee PanelSeatApprovalRequest[] @relation("SeatApprovalAssignee")
-  seatApprovalsToAnswer  PanelSeatApprovalRequest[] @relation("SeatApprovalApprover")
+  seatApprovalsToAnswer   PanelSeatApprovalRequest[] @relation("SeatApprovalApprover")
 }
 
 model Account {
@@ -359,15 +360,16 @@ model Applicant {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  campaign       Campaign        @relation(fields: [campaignId], references: [id])
-  phaseOneScores PhaseOneScore[]
-  phaseOneNote   PhaseOneNote?
-  phaseOneResult PhaseOneResult?
-  emailLogs      EmailLog[]
-  interviewSlot  InterviewSlot?
-  interviewPanel InterviewPanel?
-  interviewNote  InterviewNote?
-  phase2Entries  Phase2Entry[]
+  campaign           Campaign            @relation(fields: [campaignId], references: [id])
+  phaseOneScores     PhaseOneScore[]
+  phaseOneNote       PhaseOneNote?
+  phaseOneResult     PhaseOneResult?
+  emailLogs          EmailLog[]
+  interviewSlot      InterviewSlot?
+  interviewPanel     InterviewPanel?
+  interviewNote      InterviewNote?
+  phase2Entries      Phase2Entry[]
+  mktTestSubmissions MktTestSubmission[]
 
   @@unique([campaignId, email])
 }
@@ -555,6 +557,36 @@ model MktSkillWhitelist {
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, skillName])
+}
+
+// The two marketing tests an applicant with MKT skills may have taken. Only
+// whether a submission EXISTS matters — there is deliberately no grade.
+enum MktTestKind {
+  GRAPHIC_DESIGN
+  VIDEO_EDITING
+}
+
+// An applicant's submission for one marketing test: the Drive link holding
+// their work, entered by an MKT committee member. No row means "not
+// submitted", which the Phase 2 page shows as such.
+//
+// Unlike Phase2Entry this is editable — it records a fact (here is the link),
+// not a judgment, so a mistyped link is fixed in place. Every set/remove is
+// still in the activity log. Campaign scoping comes through Applicant, the
+// same as Phase2Entry: callers re-read the applicant's campaignId.
+model MktTestSubmission {
+  id            String      @id @default(cuid())
+  applicantId   String
+  kind          MktTestKind
+  link          String
+  submittedById String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  submittedBy User      @relation(fields: [submittedById], references: [id])
+
+  @@unique([applicantId, kind])
 }
 
 // ============ EMAIL LOG ============

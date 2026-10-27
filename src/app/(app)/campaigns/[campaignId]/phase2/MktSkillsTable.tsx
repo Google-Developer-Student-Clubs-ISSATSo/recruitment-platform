@@ -3,6 +3,7 @@ import { type SkillCount } from "@/lib/phase2";
 import type { MktSkillApplicant } from "@/lib/phase2-store";
 import { Committee } from "@/generated/prisma/enums";
 import { MktSkillsCharts } from "./MktSkillsCharts";
+import { MktTestStatus } from "./MktTestStatus";
 import { SkillChips } from "./SkillChips";
 
 const SUBHEADING_CLASS =
@@ -106,6 +107,14 @@ export function MktSkillsTable({
                     <tr key={a.id}>
                       <td className="px-4 py-3 text-sm font-medium text-foreground sm:px-6">
                         {a.fullName}
+                        {/* Beside the name rather than its own column, so the
+                            table needs no extra width at 375px. Absent for a
+                            viewer who doesn't get the test data. */}
+                        {a.mktTests && (
+                          <span className="mt-1 block">
+                            <MktTestStatus tests={a.mktTests} />
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 sm:px-6">
                         <SkillChips listed={a.skills} writeIns={a.writeIns} />

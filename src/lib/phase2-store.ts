@@ -13,7 +13,13 @@ import {
 import { passedPhaseOneWhere } from "@/lib/phase1-ranking";
 import { getMktSkillWhitelist } from "@/lib/mkt-skills-store";
 import { totalCoefficient } from "@/lib/phase1-score";
-import { hasAnySkill, mktSkillsOf, type ApplicantSkills } from "@/lib/phase2";
+import {
+  hasAnySkill,
+  MKT_TESTS,
+  mktSkillsOf,
+  type ApplicantSkills,
+  type MktTests,
+} from "@/lib/phase2";
 import {
   canViewAnyPhase2Surface,
   canViewPhase2Surface,
@@ -21,7 +27,12 @@ import {
   type Phase2Viewer,
   type Phase2VisibilityState,
 } from "@/lib/phase2-visibility";
-import { Committee, PermissionKey, Phase2EntryType } from "@/generated/prisma/enums";
+import {
+  Committee,
+  MktTestKind,
+  PermissionKey,
+  Phase2EntryType,
+} from "@/generated/prisma/enums";
 
 /** One configured question's text plus this applicant's answer to it. */
 export type Phase2Answer = {
@@ -83,6 +94,13 @@ export type Phase2Applicant = {
    * the server like the entries above, so other members' pages never carry it.
    */
   mktSkills: ApplicantSkills | null;
+  /**
+   * Their marketing-test submissions — or null when the viewer may not see
+   * them (see canViewMktTests) or the applicant listed no whitelisted MKT
+   * skill, so isn't expected to take the test. Dropped on the server like
+   * `mktSkills`.
+   */
+  mktTests: MktTests | null;
 };
 
 /** One applicant behind the skills tally, with the skills that put them there. */
@@ -97,6 +115,8 @@ export type MktSkillApplicant = {
   skills: string[];
   /** "Other:" write-ins, in the applicant's spelling. This or `skills` is non-empty. */
   writeIns: string[];
+  /** Same as Phase2Applicant.mktTests, for the tables' Test column. */
+  mktTests: MktTests | null;
 };
 
 export type Phase2Data = {
@@ -174,6 +194,8 @@ export async function getPhase2Data(
   includeMktSkills: boolean,
   /** From canViewPhase2Scores — whether the Phase 1 scores ride along. */
   includeScores: boolean,
+  /** From canViewMktTests — whether the marketing-test links ride along. */
+  includeMktTests: boolean,
 ): Promise<Phase2Data> {
   const [questions, applicants, whitelist] = await Promise.all([
     prisma.phaseOneQuestion.findMany({
@@ -206,6 +228,17 @@ export async function getPhase2Data(
             text: true,
             createdAt: true,
             author: { select: { name: true, email: true } },
+          },
+        },
+        // `take: 0` rather than a conditional select (which loses the row
+        // type): a viewer who may not see the links never has them read.
+        mktTestSubmissions: {
+          take: includeMktTests ? undefined : 0,
+          select: {
+            kind: true,
+            link: true,
+            updatedAt: true,
+            submittedBy: { select: { name: true, email: true } },
           },
         },
       },
@@ -267,6 +300,7 @@ export async function getPhase2Data(
         createdAtISO: e.createdAt.toISOString(),
         text: e.text,
       })),
+      mktTests: includeMktTests ? toMktTests(a.mktTestSubmissions) : null,
     };
   });
 
@@ -289,6 +323,12 @@ export async function getPhase2Data(
     row,
     skills: mktSkillsOf(row.rawFormData, skillNames),
   }));
+
+  // Only applicants with a whitelisted MKT skill are expected to take the
+  // marketing test — the same bar MktSkillsOutsideMkt uses — so everyone else
+  // gets null rather than a misleading "Not submitted".
+  const testsFor = (m: (typeof matched)[number]): MktTests | null =>
+    m.skills.listed.length > 0 ? m.row.mktTests : null;
 
   /** This viewer's read access to one applicant's two surfaces. */
   const accessFor = (applicantCommittee: Committee) => ({
@@ -338,6 +378,7 @@ export async function getPhase2Data(
         ...access,
         // `matched` is built from `rows` in order, so the index lines up.
         mktSkills: includeMktSkills ? matched[i].skills : null,
+        mktTests: testsFor(matched[i]),
       };
     }),
     maxScore: includeScores ? totalCoefficient(questions) : 0,
@@ -357,6 +398,7 @@ export async function getPhase2Data(
         position: m.position,
         skills: m.skills.listed,
         writeIns: m.skills.writeIns,
+        mktTests: testsFor(m),
       })),
     // The one figure that IS about MKT applicants specifically. Live-counted off
     // the rows above rather than stored, like every other number on this page,
@@ -382,6 +424,41 @@ export async function getPhase2Data(
       state: visibility,
     }),
   };
+}
+
+/** Submission rows keyed by test, with every missing test as null. */
+function toMktTests(
+  rows: {
+    kind: MktTestKind;
+    link: string;
+    updatedAt: Date;
+    submittedBy: { name: string | null; email: string };
+  }[],
+): MktTests {
+  const tests = Object.fromEntries(
+    MKT_TESTS.map((t) => [t.kind, null]),
+  ) as MktTests;
+  for (const r of rows) {
+    tests[r.kind] = {
+      link: r.link,
+      submittedByName: r.submittedBy.name ?? r.submittedBy.email,
+      updatedAtISO: r.updatedAt.toISOString(),
+    };
+  }
+  return tests;
+}
+
+/**
+ * May this viewer see — and enter — marketing-test links? MKT committee
+ * members, who run the test, plus the Administrator. Committee membership
+ * rather than a PermissionKey, the same call isMktMember makes for the
+ * per-applicant skills.
+ */
+export function canViewMktTests(
+  viewer: Phase2Viewer,
+  committee: Committee | null,
+): boolean {
+  return viewer.isAdministrator || committee === Committee.MKT;
 }
 
 /**

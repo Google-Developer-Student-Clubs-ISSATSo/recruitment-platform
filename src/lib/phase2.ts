@@ -4,7 +4,7 @@
 // interview-note-store.ts). Everything that touches prisma is in
 // phase2-store.ts.
 
-import { Phase2EntryType } from "@/generated/prisma/enums";
+import { MktTestKind, Phase2EntryType } from "@/generated/prisma/enums";
 
 import type { IconName } from "@/components/app-shell/icon";
 
@@ -221,4 +221,48 @@ export function tallyMktSkills(
   return [...counts.values()].sort(
     (a, b) => b.count - a.count || a.skill.localeCompare(b.skill),
   );
+}
+
+// ============ MKT TESTS ============
+
+/** The two marketing tests, in display order. */
+export const MKT_TESTS = [
+  { kind: MktTestKind.GRAPHIC_DESIGN, label: "Graphic design" },
+  { kind: MktTestKind.VIDEO_EDITING, label: "Video editing" },
+] as const;
+
+/** One recorded submission — its Drive link and who entered it. */
+export type MktTestSubmissionView = {
+  link: string;
+  submittedByName: string;
+  updatedAtISO: string;
+};
+
+/** Every test for one applicant; null means not submitted. */
+export type MktTests = Record<MktTestKind, MktTestSubmissionView | null>;
+
+export function isMktTestKind(value: unknown): value is MktTestKind {
+  return MKT_TESTS.some((t) => t.kind === value);
+}
+
+export function submittedTestCount(tests: MktTests): number {
+  return MKT_TESTS.filter((t) => tests[t.kind] !== null).length;
+}
+
+export const MKT_TEST_LINK_MAX_LENGTH = 2048;
+
+/**
+ * The trimmed link if it's a usable http(s) URL, else null. Any host is
+ * accepted — the tests live on Drive today, but nothing here should break the
+ * day someone shares a WeTransfer or YouTube link instead.
+ */
+export function normalizeMktTestLink(input: string): string | null {
+  const trimmed = input.trim();
+  if (trimmed === "" || trimmed.length > MKT_TEST_LINK_MAX_LENGTH) return null;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "https:" || url.protocol === "http:" ? trimmed : null;
+  } catch {
+    return null;
+  }
 }
