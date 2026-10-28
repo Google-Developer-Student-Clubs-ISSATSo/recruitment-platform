@@ -38,6 +38,7 @@ const ACTION_LABELS: Record<string, string> = {
   // Accept/Reject actions and the badges, so the log should match what the user
   // actually clicked. The stored actionType string is unchanged.
   PHASE1_MANUAL_OVERRIDE: "overrode a Phase 1 classification",
+  PHASE1_BULK_OVERRIDE: "resolved several Phase 1 applicants at once",
   PHASE1_OVERRIDE_REVERTED: "reverted a Phase 1 classification to automatic",
   PHASE1_MARKED_TO_DISCUSS: "marked a Phase 1 applicant to discuss",
   PHASE1_FINALIZED: "finalized Phase 1 selection",
@@ -150,6 +151,7 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // sensitive enough to stand out in the log.
   PHASE1_MANUAL_RESOLUTION: "pending",
   PHASE1_MANUAL_OVERRIDE: "pending",
+  PHASE1_BULK_OVERRIDE: "pending",
   PHASE1_OVERRIDE_REVERTED: "pending",
   PHASE1_MARKED_TO_DISCUSS: "pending",
   PHASE1_FINALIZED: "accepted",

@@ -93,7 +93,7 @@ export default async function Phase2Page({
           </h1>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
             {showScores
-              ? "Everyone who passed Phase 1, ranked by their screening score."
+              ? "Everyone who passed Phase 1, listed alphabetically."
               : "Everyone who passed Phase 1."}{" "}
             Notes and flags recorded here are permanent and carry into the
             final decision.

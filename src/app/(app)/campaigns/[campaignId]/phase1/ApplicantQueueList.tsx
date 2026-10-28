@@ -82,7 +82,7 @@ export function ApplicantQueueList({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name…"
+          placeholder="Search…"
           aria-label="Search applicants by name"
           className="h-7 min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-2.5 text-sm text-foreground outline-none transition-colors duration-150 ease-out placeholder:text-neutral-400 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder:text-neutral-500"
         />
@@ -115,8 +115,7 @@ export function ApplicantQueueList({
           </li>
         ) : filteredEntries.length === 0 ? (
           <li className="px-4 py-8 text-center text-sm italic text-neutral-400">
-            No applicants match — try a different name or clear “Unscored
-            only”.
+            No applicants match — try a different name or clear “Unscored only”.
           </li>
         ) : (
           filteredEntries.map((e) => {

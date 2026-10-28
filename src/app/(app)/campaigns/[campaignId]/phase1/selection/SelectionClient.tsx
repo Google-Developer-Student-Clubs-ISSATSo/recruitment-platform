@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { Pager } from "@/components/ui/pager";
@@ -16,13 +17,16 @@ import { Icon, type IconName } from "@/components/app-shell/icon";
 import { FilterChip } from "@/components/filter-chip";
 import { PhaseOneClassification } from "@/generated/prisma/enums";
 import {
+  bulkOverrideAction,
   finalizePhaseOneAction,
   manualOverrideAction,
   markToDiscussAction,
   recalculateRankingAction,
   revertOverrideAction,
+  type BulkOutcome,
 } from "./actions";
 import { ClassificationBadge } from "./classification-badge";
+import { SelectionBulkBar } from "./SelectionBulkBar";
 
 export type SelectionRow = {
   applicantId: string;
@@ -166,6 +170,10 @@ export function SelectionClient({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Which bulk outcome is waiting on its confirmation — only accept/reject. */
+  const [bulkConfirm, setBulkConfirm] = useState<
+    null | "ACCEPT" | "REJECT"
+  >(null);
 
   const finalized = finalizedAtISO !== null;
 
@@ -243,6 +251,96 @@ export function SelectionClient({
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const paged = visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Bulk selection: a Set of applicant ids that spans pages and deliberately
+  // outlives paging — "select all matching this filter" is a whole-pool gesture.
+  // It resets whenever the filter changes or the server returns fresh rows
+  // (which every action triggers, so this also covers "clear after an action")
+  // — the same render-time-basis pattern the pager uses above.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selBasis, setSelBasis] = useState({ filter, rows });
+  if (selBasis.filter !== filter || selBasis.rows !== rows) {
+    setSelBasis({ filter, rows });
+    setSelected(new Set());
+  }
+  const visibleIds = useMemo(
+    () => visible.map((r) => r.applicantId),
+    [visible],
+  );
+  const selectedInFilter = visibleIds.filter((id) => selected.has(id)).length;
+  const allVisibleSelected =
+    visibleIds.length > 0 && selectedInFilter === visibleIds.length;
+  const someVisibleSelected =
+    selectedInFilter > 0 && !allVisibleSelected;
+
+  function toggleAllVisible() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of visibleIds) {
+        if (allVisibleSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function doBulk(outcome: BulkOutcome, ids: string[]) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const res = await bulkOverrideAction(campaignId, outcome, ids);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      // Per-applicant accounting: skips (already in that state) are named, and
+      // rows that vanished or are no longer in this campaign are counted.
+      const skips: string[] = [];
+      if (res.skipped > 0) {
+        skips.push(
+          `${res.skipped} already in that state` +
+            (res.skippedNames.length ? `: ${res.skippedNames.join(", ")}` : ""),
+        );
+      }
+      if (res.missing > 0) {
+        skips.push(`${res.missing} no longer in this campaign`);
+      }
+      const verb =
+        outcome === "ACCEPT"
+          ? "Accepted"
+          : outcome === "REJECT"
+            ? "Rejected"
+            : outcome === "TO_DISCUSS"
+              ? "Marked to discuss"
+              : "Reverted to automatic";
+      setNotice(
+        `${verb} ${res.affected} applicant${res.affected === 1 ? "" : "s"}` +
+          (skips.length ? ` — skipped ${skips.join("; ")}` : "") +
+          ".",
+      );
+    });
+  }
+
+  function runBulk(outcome: BulkOutcome) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    // Deciding a block of people is the consequential path — confirm accepts
+    // and rejects; the light moves run straight through.
+    if (outcome === "ACCEPT" || outcome === "REJECT") {
+      setBulkConfirm(outcome);
+      return;
+    }
+    doBulk(outcome, ids);
+  }
 
   function doRecalculate() {
     setError(null);
@@ -549,6 +647,28 @@ export function SelectionClient({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-800/40">
+                <th className="w-12 px-3 py-3">
+                  {/* Selects every row matching the CURRENT FILTER — across
+                      all pages, since the actions are server-side and the Set
+                      spans paging. Once a row is unchecked the selection is
+                      simply "some of the filter", and the header reflects it
+                      with the indeterminate state. */}
+                  <input
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected;
+                    }}
+                    type="checkbox"
+                    aria-label={
+                      allVisibleSelected
+                        ? "Clear the selection"
+                        : `Select all ${visible.length} applicant${visible.length === 1 ? "" : "s"} matching this filter`
+                    }
+                    checked={allVisibleSelected}
+                    onChange={toggleAllVisible}
+                    disabled={pending || visible.length === 0}
+                    className="size-4 accent-primary"
+                  />
+                </th>
                 <th className="w-16 px-4 py-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-500">
                   Rank
                 </th>
@@ -576,6 +696,16 @@ export function SelectionClient({
                       s.isRejected ? "bg-status-rejected/[0.03] opacity-70" : ""
                     } ${s.isToDiscuss ? "bg-status-pending/[0.06]" : ""}`}
                   >
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${row.fullName}`}
+                        checked={selected.has(row.applicantId)}
+                        onChange={() => toggleOne(row.applicantId)}
+                        disabled={pending}
+                        className="size-4 accent-primary"
+                      />
+                    </td>
                     <td className="px-4 py-3 font-semibold text-neutral-500">
                       {row.rank === null ? "—" : `#${row.rank}`}
                     </td>
@@ -614,7 +744,7 @@ export function SelectionClient({
               {visible.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-4 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400"
                   >
                     No applicants match this filter.
@@ -639,6 +769,8 @@ export function SelectionClient({
                   row={row}
                   state={rowStateOf(row)}
                   pending={pending}
+                  selectable={selected.has(row.applicantId)}
+                  onToggle={() => toggleOne(row.applicantId)}
                   actions={actionsFor(row.applicantId)}
                 />
               ))}
@@ -657,6 +789,22 @@ export function SelectionClient({
           />
         )}
       </div>
+
+      {/* Bulk bar while a selection exists. AnimatePresence (the same shape the
+          permissions page uses) lets the exit animation play on the render
+          that clears the selection instead of yanking the bar away. */}
+      <AnimatePresence initial={false}>
+        {selected.size > 0 && (
+          <SelectionBulkBar
+            key="bulk-bar"
+            selectedCount={selected.size}
+            allFilterSelected={allVisibleSelected}
+            pending={pending}
+            onOutcome={runBulk}
+            onClear={() => setSelected(new Set())}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Extra gate: recalculating an already-finalized phase */}
       <ConfirmDialog
@@ -722,6 +870,40 @@ export function SelectionClient({
         }
         confirmLabel="Finalize selection"
         onConfirm={doFinalize}
+      />
+
+      {/* Bulk confirm: accepting a block is one decision shape applied to many
+          people, so it names whom it will commit and that it survives recalc. */}
+      <ConfirmDialog
+        open={bulkConfirm === "ACCEPT"}
+        onOpenChange={(open) => {
+          if (!open) setBulkConfirm(null);
+        }}
+        title={`Accept ${selected.size} applicant${selected.size === 1 ? "" : "s"}?`}
+        description="Every selected applicant is recorded as a manual acceptance — including ones the algorithm was accepting anyway. Manual decisions survive recalculations until explicitly reverted."
+        confirmLabel={`Accept ${selected.size}`}
+        onConfirm={() => {
+          const ids = [...selected];
+          setBulkConfirm(null);
+          doBulk("ACCEPT", ids);
+        }}
+      />
+
+      {/* The consequential one: a bulk manual reject. */}
+      <ConfirmDialog
+        open={bulkConfirm === "REJECT"}
+        onOpenChange={(open) => {
+          if (!open) setBulkConfirm(null);
+        }}
+        title={`Reject ${selected.size} applicant${selected.size === 1 ? "" : "s"}?`}
+        description="Every selected applicant is recorded as a manual rejection, including any the algorithm was accepting. Manual decisions survive recalculations until explicitly reverted."
+        confirmLabel={`Reject ${selected.size}`}
+        destructive
+        onConfirm={() => {
+          const ids = [...selected];
+          setBulkConfirm(null);
+          doBulk("REJECT", ids);
+        }}
       />
     </div>
   );
@@ -804,11 +986,15 @@ function SelectionCard({
   row,
   state,
   pending,
+  selectable,
+  onToggle,
   actions,
 }: {
   row: SelectionRow;
   state: RowState;
   pending: boolean;
+  selectable: boolean;
+  onToggle: () => void;
   actions: RowActions;
 }) {
   return (
@@ -817,6 +1003,14 @@ function SelectionCard({
         state.isRejected ? "bg-status-rejected/[0.03] opacity-70" : ""
       } ${state.isToDiscuss ? "bg-status-pending/[0.06]" : ""}`}
     >
+      <input
+        type="checkbox"
+        aria-label={`Select ${row.fullName}`}
+        checked={selectable}
+        onChange={onToggle}
+        disabled={pending}
+        className="mt-0.5 size-4 shrink-0 accent-primary"
+      />
       <span className="mt-0.5 flex min-w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 px-2 py-1 text-sm font-bold tabular-nums text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
         {row.rank === null ? "—" : `#${row.rank}`}
       </span>

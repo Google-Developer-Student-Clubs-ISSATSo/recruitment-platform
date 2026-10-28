@@ -43,13 +43,26 @@ export async function savePhaseOneNote(
   }
 
   // Applicant must belong to this campaign and still be in the scoring pool —
-  // the same gate the note's UI sits behind (the queue only lists SUBMITTED).
+  // the same gate the note's UI sits behind (the queue lists SUBMITTED plus,
+  // once finalized, the cohort whose outcomes Phase 1 already wrote).
   const applicant = await prisma.applicant.findUnique({
     where: { id: applicantId },
-    select: { campaignId: true, status: true },
+    select: {
+      campaignId: true,
+      status: true,
+      campaign: { select: { phaseOneFinalizedAt: true } },
+    },
   });
   if (!applicant || applicant.campaignId !== campaignId) {
     return { ok: false, error: "That applicant isn't in this campaign." };
+  }
+  // A finalized phase locks the note for EVERYONE — this check runs before the
+  // status check, so the message explains the finalization, not the status.
+  if (applicant.campaign?.phaseOneFinalizedAt) {
+    return {
+      ok: false,
+      error: "Phase 1 has been finalized — screening notes are locked for everyone.",
+    };
   }
   if (applicant.status !== ApplicantStatus.SUBMITTED) {
     return { ok: false, error: "This applicant is no longer being scored." };
@@ -165,13 +178,25 @@ export async function savePhaseOneScore(
   }
 
   // Applicant must belong to this campaign and still be scoreable (SUBMITTED —
-  // auto-rejected applicants are never in the queue).
+  // auto-rejected applicants are never in the queue). A finalized phase locks
+  // the scores for EVERYONE — this check runs before the status check, so the
+  // message explains the finalization, not the status.
   const applicant = await prisma.applicant.findUnique({
     where: { id: applicantId },
-    select: { campaignId: true, status: true },
+    select: {
+      campaignId: true,
+      status: true,
+      campaign: { select: { phaseOneFinalizedAt: true } },
+    },
   });
   if (!applicant || applicant.campaignId !== campaignId) {
     return { ok: false, error: "That applicant isn't in this campaign." };
+  }
+  if (applicant.campaign?.phaseOneFinalizedAt) {
+    return {
+      ok: false,
+      error: "Phase 1 has been finalized — scores are locked for everyone.",
+    };
   }
   if (applicant.status !== ApplicantStatus.SUBMITTED) {
     return { ok: false, error: "This applicant is no longer being scored." };

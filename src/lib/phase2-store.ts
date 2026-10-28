@@ -293,12 +293,12 @@ export async function getPhase2Data(
     };
   });
 
-  // Nulls sort last, the same `?? -1` treatment Selection's score sort uses:
-  // a row with no total yet has nothing to rank on and belongs at the bottom
-  // rather than at the top with a 0.
+  // Alphabetical A→Z, the page's one fixed reading order. Score no longer
+  // drives the order — the list is a working roster for a discussion, and a
+  // known-name lookup shouldn't depend on whoever scores higher. The id
+  // tiebreak keeps two same-named people in a stable, deterministic order.
   rows.sort(
     (x, y) =>
-      (y.score ?? -1) - (x.score ?? -1) ||
       x.fullName.localeCompare(y.fullName) ||
       x.id.localeCompare(y.id),
   );

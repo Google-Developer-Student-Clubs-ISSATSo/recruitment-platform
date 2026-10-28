@@ -279,6 +279,150 @@ export async function revertOverrideAction(
   return { ok: true, classification };
 }
 
+// ============ BULK OUTCOMES ============
+
+/** The four ways a bulk selection can resolve rows */
+export type BulkOutcome = "ACCEPT" | "REJECT" | "TO_DISCUSS" | "REVERT";
+
+const BULK_CLASSIFICATION: Record<
+  Exclude<BulkOutcome, "REVERT">,
+  PhaseOneClassification
+> = {
+  ACCEPT: PhaseOneClassification.MANUAL_ACCEPT,
+  REJECT: PhaseOneClassification.MANUAL_REJECT,
+  TO_DISCUSS: PhaseOneClassification.TO_DISCUSS,
+};
+
+/**
+ * Resolve MANY applicants in one request — the checkbox bulk path. Screeners
+ * regularly owe the same decision to a whole block of applicants, and walking
+ * the single-row menu one at a time is slow and one network round trip each.
+ *
+ * Semantics mirror the single-row actions exactly:
+ *   ACCEPT     → MANUAL_ACCEPT (an AUTO_ACCEPT is upgraded to manual too)
+ *   REJECT     → MANUAL_REJECT
+ *   TO_DISCUSS → TO_DISCUSS (sticky: survives recalculations until resolved)
+ *   REVERT     → every sticky row clears to PENDING, then ONE shared
+ *                recalculation pass reclassifies them all from score and rank —
+ *                the identical semantics to the single revert, in one pass for
+ *                any batch size
+ * Rows already in the requested state (or already under automatic control, for
+ * REVERT) are skipped, not failed, and reported back per applicant by name so
+ * the caller can say who needs nothing.
+ *
+ * The client's selection is never trusted for writes beyond being a hint: rows
+ * are re-read here with a campaign-scoped where, so a stale or foreign id can
+ * only ever become a skip. Logs ONCE per batch with the affected ids in
+ * details, per the app-wide bulk-action convention.
+ */
+export async function bulkOverrideAction(
+  campaignId: string,
+  outcome: BulkOutcome,
+  applicantIds: string[],
+): Promise<
+  ActionResult<{
+    affected: number;
+    /** Selected ids that produced no write because they were already there. */
+    skipped: number;
+    skippedNames: string[];
+    /** Selected ids that matched no applicant in this campaign. */
+    missing: number;
+  }>
+> {
+  const gate = await authorize(campaignId);
+  if (!gate.ok) return gate;
+
+  // Duplicate ids from a double-counted client should write once and count once.
+  const ids = [...new Set(applicantIds)].filter((id) => id.length > 0);
+  if (ids.length === 0) {
+    return { ok: false, error: "Select at least one applicant first." };
+  }
+
+  const applicants = await prisma.applicant.findMany({
+    where: { id: { in: ids }, campaignId },
+    select: {
+      id: true,
+      fullName: true,
+      phaseOneResult: { select: { classification: true } },
+    },
+  });
+  const targetIds = new Set(
+    applicants
+      .filter((a) => {
+        const current =
+          a.phaseOneResult?.classification ?? PhaseOneClassification.PENDING;
+        if (outcome === "REVERT") {
+          return (
+            current === PhaseOneClassification.MANUAL_ACCEPT ||
+            current === PhaseOneClassification.MANUAL_REJECT ||
+            current === PhaseOneClassification.TO_DISCUSS
+          );
+        }
+        return current !== BULK_CLASSIFICATION[outcome];
+      })
+      .map((a) => a.id),
+  );
+
+  if (targetIds.size === 0) {
+    return {
+      ok: false,
+      error:
+        outcome === "REVERT"
+          ? "None of the selected applicants are manually overridden or awaiting discussion."
+          : "None of the selected applicants need that decision — they already sit in it.",
+    };
+  }
+
+  if (outcome === "REVERT") {
+    await prisma.phaseOneResult.updateMany({
+      where: { applicantId: { in: [...targetIds] } },
+      data: { classification: PhaseOneClassification.PENDING },
+    });
+    const recalculated = await recalculatePhaseOneRanking(campaignId);
+    if (!recalculated.ok) return recalculated;
+  } else {
+    const classification = BULK_CLASSIFICATION[outcome];
+    await prisma.$transaction(
+      applicants
+        .filter((a) => targetIds.has(a.id))
+        .map((a) =>
+          prisma.phaseOneResult.upsert({
+            where: { applicantId: a.id },
+            create: { applicantId: a.id, classification },
+            update: { classification },
+          }),
+        ),
+    );
+  }
+
+  await logActivity({
+    actorId: gate.userId,
+    actionType: "PHASE1_BULK_OVERRIDE",
+    targetType: "Applicant",
+    campaignId,
+    // No single target — this decided a group. The ids (not names) live in the
+    // details so the entry survives account deletions.
+    details: {
+      outcome,
+      affectedCount: targetIds.size,
+      affectedApplicantIds: [...targetIds],
+      skippedCount: applicants.length - targetIds.size,
+      missingCount: ids.length - applicants.length,
+    },
+  });
+
+  revalidatePath(`/campaigns/${campaignId}/phase1/selection`);
+  return {
+    ok: true,
+    affected: targetIds.size,
+    skipped: applicants.length - targetIds.size,
+    skippedNames: applicants
+      .filter((a) => !targetIds.has(a.id))
+      .map((a) => a.fullName),
+    missing: ids.length - applicants.length,
+  };
+}
+
 /**
  * Commit Phase 1: write every complete applicant's outcome onto Applicant.status and
  * stamp the campaign. Hard-blocked while any TO_DISCUSS remains — an unresolved

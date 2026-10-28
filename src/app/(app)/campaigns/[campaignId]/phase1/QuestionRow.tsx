@@ -144,6 +144,7 @@ export function QuestionRow({
   value,
   editable,
   saving,
+  lockLabel,
   onSelect,
 }: {
   question: Phase1Question;
@@ -151,6 +152,8 @@ export function QuestionRow({
   value: number | undefined;
   editable: boolean;
   saving: boolean;
+  /** Why the control is read-only, when it is — e.g. "Phase 1 finalized". */
+  lockLabel?: string;
   onSelect: (value: number) => void;
 }) {
   const labelId = `phase1-q-${question.id}`;
@@ -198,9 +201,10 @@ export function QuestionRow({
           editable={editable}
           saving={saving}
           lockLabel={
-            question.requiresTechnicalScorer
+            lockLabel ??
+            (question.requiresTechnicalScorer
               ? "Scored by Technical Team"
-              : undefined
+              : undefined)
           }
           onSelect={onSelect}
         />

@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
-import { PermissionKey, ApplicantStatus } from "@/generated/prisma/enums";
+import { PermissionKey } from "@/generated/prisma/enums";
+import { formatTunisDateTime } from "@/lib/tunis-time";
+import { phaseOneCohortWhere } from "@/lib/phase1-ranking";
 import { Phase1ScoringClient } from "./Phase1ScoringClient";
 import type { Phase1Applicant, Phase1Question, ViewMode } from "./types";
 
@@ -59,7 +61,11 @@ export default async function Phase1Page({
 
   const viewMode: ViewMode = canScreen ? "full" : "technical-only";
 
-  const [questionRows, applicantRows] = await Promise.all([
+  const [campaign, questionRows, applicantRows] = await Promise.all([
+    prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { phaseOneFinalizedAt: true },
+    }),
     prisma.phaseOneQuestion.findMany({
       where: { campaignId, isActive: true },
       orderBy: { order: "asc" },
@@ -74,7 +80,12 @@ export default async function Phase1Page({
       },
     }),
     prisma.applicant.findMany({
-      where: { campaignId, status: ApplicantStatus.SUBMITTED },
+      // The WHOLE Phase 1 cohort, not just the not-yet-scored: once the phase
+      // is finalized, the queue must keep rendering everyone the outcome was
+      // written for (the cohort rules live in phase1-ranking.ts, shared with
+      // the Selection page) — read-only, so nothing already committed can be
+      // quietly adjusted afterwards.
+      where: phaseOneCohortWhere(campaignId),
       // Submission order, first submitted → last — the same order the
       // Applicants page renders, so reviewers work the form in the order it
       // arrived. fullName is the tiebreak for same-instant import batches.
@@ -148,10 +159,17 @@ export default async function Phase1Page({
     };
   });
 
+  // Phase 1 finalized? Scores and notes are then locked for EVERYONE — the
+  // cohort stays visible, read-only. Server-formatted for the banner.
+  const finalizedAt = campaign?.phaseOneFinalizedAt ?? null;
+  const finalized = finalizedAt != null;
+
   return (
     <Phase1ScoringClient
       campaignId={campaignId}
       viewMode={viewMode}
+      finalized={finalized}
+      finalizedLabel={finalizedAt ? formatTunisDateTime(finalizedAt) : null}
       questions={questionsForClient}
       totalQuestions={activeQuestions.length}
       initialApplicants={applicants}

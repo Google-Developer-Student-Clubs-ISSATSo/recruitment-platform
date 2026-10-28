@@ -33,6 +33,8 @@ type FailedScoreAlert = {
 export function Phase1ScoringClient({
   campaignId,
   viewMode,
+  finalized,
+  finalizedLabel,
   questions,
   totalQuestions,
   initialApplicants,
@@ -40,6 +42,10 @@ export function Phase1ScoringClient({
 }: {
   campaignId: string;
   viewMode: ViewMode;
+  /** Phase 1 committed? The whole queue reads read-only — for everyone. */
+  finalized: boolean;
+  /** Server-formatted moment of that commit, for the banner. Null when open. */
+  finalizedLabel: string | null;
   questions: Phase1Question[];
   totalQuestions: number;
   initialApplicants: Phase1Applicant[];
@@ -302,9 +308,11 @@ export function Phase1ScoringClient({
             Phase 1 Scoring Queue
           </h1>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            {viewMode === "technical-only"
-              ? "Enter the Technical Skills score for each applicant. Scores save the moment you pick a value."
-              : "Score each applicant against the active rubric. Scores save the moment you pick a value."}
+            {finalized
+              ? "Phase 1 is finalized — the queue is read-only."
+              : viewMode === "technical-only"
+                ? "Enter the Technical Skills score for each applicant. Scores save the moment you pick a value."
+                : "Score each applicant against the active rubric. Scores save the moment you pick a value."}
           </p>
           {/* Progress lives in the title block as a slim inline strip rather
               than a full-width banner card: the counts answer "how much work
@@ -319,6 +327,20 @@ export function Phase1ScoringClient({
         </div>
         <RefreshButton ariaLabel="Refresh scoring queue" />
       </div>
+
+      {/* The finalized lock, as its own statement — not buried in the subtitle.
+          Sensitive-but-committed: the amber of every other "the rules changed
+          here" surface, with the lock spellout so nobody reads it as a glitch. */}
+      {finalized && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-status-pending/40 bg-status-pending/10 px-4 py-3 text-sm text-[color:var(--status-pending)] dark:border-status-pending/50 dark:bg-status-pending/15">
+          <Icon name="lock" className="shrink-0 text-[16px]" />
+          <span className="min-w-0">
+            Phase 1 was finalized on {finalizedLabel}. Scores and notes are{" "}
+            <strong className="font-semibold">locked for everyone</strong> —
+            including account managers.
+          </span>
+        </div>
+      )}
 
       {/* (The failed-save alert lives in the applicant header — see the
           role="alert" block below.) */}
@@ -466,6 +488,7 @@ export function Phase1ScoringClient({
                     key={selected.id}
                     campaignId={campaignId}
                     applicantId={selected.id}
+                    locked={finalized}
                     initialNote={selected.note ?? ""}
                     draft={noteDrafts[selected.id]}
                     savedBaseline={noteBaselines[selected.id]}
@@ -505,9 +528,16 @@ export function Phase1ScoringClient({
                   question={q}
                   answer={rowAnswer(q, selected.rawFormData)}
                   value={selected.scores[q.id]}
-                  editable={canEditQuestion(q, caps)}
+                  editable={canEditQuestion(q, caps) && !finalized}
                   saving={savingScores.has(`${selected.id}:${q.id}`)}
                   onSelect={(v) => score(q, v)}
+                  lockLabel={
+                    finalized
+                      ? "Phase 1 finalized"
+                      : q.requiresTechnicalScorer
+                        ? "Scored by Technical Team"
+                        : undefined
+                  }
                 />
               ))}
             </QuestionRows>

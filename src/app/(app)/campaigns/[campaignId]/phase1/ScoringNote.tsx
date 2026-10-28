@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { Icon } from "@/components/app-shell/icon";
 import { savePhaseOneNote } from "./actions";
 
 // Must match the cap the server action enforces — the textarea blocks a longer
@@ -31,6 +32,7 @@ export function ScoringNote({
   initialNote,
   draft,
   savedBaseline,
+  locked = false,
   onDraftChange,
   onSaved,
 }: {
@@ -44,6 +46,8 @@ export function ScoringNote({
    *  by Phase1ScoringClient so it survives the keyed remount — the server props'
    *  `note` is only a mount/refresh-time snapshot and never advances on save. */
   savedBaseline?: string;
+  /** Phase 1 finalized — the note is shown but cannot be changed, by anyone. */
+  locked?: boolean;
   onDraftChange: (value: string) => void;
   /** Fired with the acknowledged text after a successful save: the parent
    *  advances its baseline and clears the (matching) unsaved draft entry. */
@@ -105,30 +109,39 @@ export function ScoringNote({
             Shared by everyone screening this applicant.
           </span>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          <p
-            aria-live="polite"
-            className={`text-[11px] ${
-              error
-                ? "text-status-rejected"
-                : dirty
-                  ? "text-neutral-500 dark:text-neutral-400"
-                  : savedFlash
-                    ? "text-status-accepted"
-                    : "text-transparent"
-            }`}
-          >
-            {error ?? (dirty ? "Unsaved changes" : savedFlash ? "Saved" : "")}
-          </p>
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || !dirty}
-            className="cursor-pointer rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-primary-foreground transition-opacity duration-150 ease-out hover:opacity-90 disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none"
-          >
-            {saving ? "Saving…" : "Save note"}
-          </button>
-        </div>
+        {locked ? (
+          // The finalized lock, in the strip where Save otherwise lives — a
+          // locked card with no visible reason reads as broken.
+          <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-[color:var(--status-pending)]">
+            <Icon name="lock" className="text-[14px]" />
+            Locked — Phase 1 finalized
+          </span>
+        ) : (
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            <p
+              aria-live="polite"
+              className={`text-[11px] ${
+                error
+                  ? "text-status-rejected"
+                  : dirty
+                    ? "text-neutral-500 dark:text-neutral-400"
+                    : savedFlash
+                      ? "text-status-accepted"
+                      : "text-transparent"
+              }`}
+            >
+              {error ?? (dirty ? "Unsaved changes" : savedFlash ? "Saved" : "")}
+            </p>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || !dirty}
+              className="cursor-pointer rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-primary-foreground transition-opacity duration-150 ease-out hover:opacity-90 disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none"
+            >
+              {saving ? "Saving…" : "Save note"}
+            </button>
+          </div>
+        )}
       </div>
       <textarea
         id={noteId}
@@ -140,8 +153,16 @@ export function ScoringNote({
           setSavedFlash(false);
         }}
         rows={3}
-        placeholder="e.g. To discuss — claimed higher skill than the CV shows…"
-        className="mt-2 block w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-foreground outline-none transition-colors duration-150 ease-out placeholder:text-neutral-400 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder:text-neutral-500"
+        readOnly={locked}
+        disabled={locked}
+        placeholder={
+          locked ? undefined : "e.g. To discuss — claimed higher skill than the CV shows…"
+        }
+        className={`mt-2 block w-full resize-y rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-foreground outline-none transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none dark:border-neutral-800 ${
+          locked
+            ? "bg-neutral-50 opacity-75 dark:bg-neutral-800/60"
+            : "bg-white placeholder:text-neutral-400 focus:border-ring dark:bg-neutral-900 dark:placeholder:text-neutral-500"
+        }`}
       />
     </div>
   );

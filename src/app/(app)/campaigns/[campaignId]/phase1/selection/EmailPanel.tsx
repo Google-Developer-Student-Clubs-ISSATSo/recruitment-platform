@@ -10,7 +10,12 @@ import { PHASE1_TEMPLATE } from "@/lib/phase1-email-templates";
 
 type Tally = { total: number; sent: number };
 type SendFailure = { name: string; email: string; error: string };
-type SendSummary = { sent: number; failed: number; skipped: number; failures: SendFailure[] };
+type SendSummary = {
+  sent: number;
+  failed: number;
+  skipped: number;
+  failures: SendFailure[];
+};
 type PersistedFailure = {
   applicantId: string;
   fullName: string;
@@ -72,7 +77,9 @@ export function EmailPanel({
   // If a send just happened, its (fresher) result.failures entry wins over
   // the DB-backed persisted one for the same applicant, so nobody's shown
   // twice right after a send.
-  const resultFailureEmails = new Set((result?.failures ?? []).map((f) => f.email));
+  const resultFailureEmails = new Set(
+    (result?.failures ?? []).map((f) => f.email),
+  );
   const visiblePersistedFailures = persistedFailures.filter(
     (f) => !resultFailureEmails.has(f.email),
   );
@@ -137,7 +144,9 @@ export function EmailPanel({
       {/* GDG Day details */}
       <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">GDG Day details</h3>
+          <h3 className="text-sm font-semibold text-foreground">
+            GDG Day details
+          </h3>
           {gdgDaySet && !editing && (
             <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
               <Icon name="edit" className="text-[16px]" />
@@ -149,7 +158,10 @@ export function EmailPanel({
         {gdgDaySet && !editing ? (
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
             <span className="font-medium text-foreground">{gdgDayDisplay}</span>{" "}
-            at <span className="font-medium text-foreground">{gdgDayLocation}</span>
+            at{" "}
+            <span className="font-medium text-foreground">
+              {gdgDayLocation}
+            </span>
           </p>
         ) : (
           <div className="mt-3 space-y-3">
@@ -271,8 +283,9 @@ export function EmailPanel({
           )}
           {canSendEmails && anySent && !needsGdgDay && (
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              {pendingTotal} recipient{pendingTotal === 1 ? "" : "s"} haven&apos;t
-              been emailed yet (earlier sends are skipped automatically).
+              {pendingTotal} recipient{pendingTotal === 1 ? "" : "s"}{" "}
+              haven&apos;t been emailed yet (earlier sends are skipped
+              automatically).
             </span>
           )}
         </div>
@@ -302,9 +315,15 @@ export function EmailPanel({
       {result && (
         <div className="space-y-2 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <p className="font-medium text-foreground">
-            <span className="text-status-accepted">{result.sent} sent successfully</span>
+            <span className="text-status-accepted">
+              {result.sent} sent successfully
+            </span>
             {", "}
-            <span className={result.failed > 0 ? "text-status-rejected" : "text-neutral-500"}>
+            <span
+              className={
+                result.failed > 0 ? "text-status-rejected" : "text-neutral-500"
+              }
+            >
               {result.failed} failed
             </span>
             {result.skipped > 0 && (
@@ -336,8 +355,9 @@ export function EmailPanel({
           <ul className="space-y-1 text-xs text-status-rejected">
             {visiblePersistedFailures.map((f) => (
               <li key={`${f.applicantId}:${f.templateKey}`}>
-                {f.fullName} ({f.email}) — {TEMPLATE_LABEL[f.templateKey] ?? f.templateKey}
-                : {f.error} (attempted {formatSentAt(f.sentAt)})
+                {f.fullName} ({f.email}) —{" "}
+                {TEMPLATE_LABEL[f.templateKey] ?? f.templateKey}: {f.error}{" "}
+                (attempted {formatSentAt(f.sentAt)})
               </li>
             ))}
           </ul>
