@@ -222,7 +222,8 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
       );
     }
 
-    // Close the note → locks to MANAGE_ACCOUNTS only.
+    // Close the note → locks it for EVERYONE; only MANAGE_ACCOUNTS still reads
+    // it, and reopening (admin-only) is the one way back into editing.
     await prisma.interviewNote.upsert({
       where: { applicantId: aId },
       create: { applicantId: aId, closedAt: new Date(), closedById: lead.id },
@@ -230,7 +231,10 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
     });
     record(!(await canEditInterviewNote(panelist.id, aId)), `CLOSED panelist CANNOT edit`);
     record(!(await canViewInterviewNote(panelist.id, aId)), `CLOSED panelist CANNOT view`);
-    record(await canEditInterviewNote(lead.id, aId), `CLOSED lead CAN still edit`);
+    record(
+      !(await canEditInterviewNote(lead.id, aId)),
+      `CLOSED lead CANNOT edit either — reopen first`,
+    );
     record(await canViewInterviewNote(lead.id, aId), `CLOSED lead CAN still view`);
 
     // Reopen → access restored.
@@ -238,6 +242,7 @@ async function auditInterviewNoteLogic(users: SeededUser[]) {
       where: { applicantId: aId },
       data: { closedAt: null, closedById: null },
     });
+    record(await canEditInterviewNote(lead.id, aId), `REOPENED lead CAN edit again`);
     record(await canEditInterviewNote(panelist.id, aId), `REOPENED panelist CAN edit again`);
   } finally {
     // Cleanup — remove the fixture regardless of outcome.

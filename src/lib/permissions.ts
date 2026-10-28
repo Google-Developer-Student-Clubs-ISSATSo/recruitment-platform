@@ -138,11 +138,12 @@ export const isInterviewNoteClosed = cache(async function isInterviewNoteClosed(
  * May this user write the interview note for this applicant?
  *
  * Routes in:
- *   - MANAGE_ACCOUNTS — the TM Lead can always edit any note, panel or not,
- *     open or closed. This is checked first, so nothing below can lock them out.
- *   - Otherwise, once the note is CLOSED nobody but MANAGE_ACCOUNTS may touch it
- *     — a panel member loses all access the moment it's closed, not just the
- *     inputs. Reopening (MANAGE_ACCOUNTS only) restores the access below.
+ *   - MANAGE_ACCOUNTS — the TM Lead can always VIEW any note, panel or not; on
+ *     an open note they may also edit it, regardless of seats. But a CLOSED note
+ *     is edit-locked for THEM too: reopening (MANAGE_ACCOUNTS only, see
+ *     reopenInterviewNote) is the one way back into it.
+ *   - Otherwise, once the note is CLOSED nobody may touch it — a panel member
+ *     loses all access the moment it's closed, not just the inputs.
  *   - On an open note: EDIT_OWN_INTERVIEW_NOTES *and* actually sitting on this
  *     applicant's panel (holding one of its PanelSeats).
  *
@@ -169,8 +170,11 @@ export function evaluateNoteAccess({
   noteClosed: boolean;
   holdsSeat: boolean;
 }): { canEdit: boolean; canView: boolean } {
-  // The TM Lead can always edit any note, panel or not, open or closed.
-  if (canManageAccounts) return { canEdit: true, canView: true };
+  // The TM Lead can always VIEW any note, panel or not, open or closed — but
+  // edit rights follow the same open/closed state as everyone else's: a CLOSED
+  // note is edit-locked for EVERYONE, the lead included. Reopening (an
+  // admin-only act) is the one way back into a closed note.
+  if (canManageAccounts) return { canEdit: !noteClosed, canView: true };
   // A closed note is off-limits to everyone else — no read access either.
   if (noteClosed) return { canEdit: false, canView: false };
   // On an open note: the permission AND a seat on this applicant's panel.
@@ -224,7 +228,9 @@ export const canEditInterviewNote = cache(async function canEditInterviewNote(
  * MANAGE_ACCOUNTS (the TM Lead) always. Otherwise a CLOSED note grants no read
  * access at all: even a panel member is turned away, same as if they never had
  * permission. On an open note, read access is precisely "can edit it", i.e.
- * holding EDIT_OWN_INTERVIEW_NOTES *and* a seat on this applicant's panel.
+ * holding EDIT_OWN_INTERVIEW_NOTES *and* a seat on this applicant's panel. A
+ * closed note is the one asymmetry: the TM Lead can still READ it (to audit or
+ * reopen it) but cannot edit it without reopening first.
  *
  * There is deliberately no permission-flag fallback here. The read-only
  * committee preview this used to grant (via the since-deleted

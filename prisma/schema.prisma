@@ -760,8 +760,9 @@ model InterviewNote {
   remarks          String?
   updatedAt        DateTime @updatedAt
 
-  // Closing an interview note locks it: once closedAt is set, only MANAGE_ACCOUNTS
-  // holders may view or edit it (see canViewInterviewNote / canEditInterviewNote).
+  // Closing an interview note locks it: once closedAt is set, it is read-only
+  // for everyone — even MANAGE_ACCOUNTS must reopen it (see
+  // reopenInterviewNote) before scores or remarks can change again.
   // A MANAGE_ACCOUNTS holder can reopen it, clearing both fields.
   closedAt   DateTime?
   closedById String?

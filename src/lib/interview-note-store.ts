@@ -1,83 +1,40 @@
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
-import { isValidRating, type NoteFieldKey } from "@/lib/interview-note";
+import {
+  computeAverage,
+  formatAverage,
+  isValidRating,
+  NOTE_FIELDS,
+  type NoteScores,
+} from "@/lib/interview-note";
 
 // Server-only persistence for the interview note. Split from
 // interview-note.ts so the pure helpers there stay importable from client
 // components without pulling prisma into the browser bundle.
 
-export type SaveNoteResult = { ok: true } | { ok: false; error: string };
+export type SaveNoteResult = { ok: true } | { ok: false, error: string };
+
+/** Note content as it is handed to closeInterviewNote for storing. */
+export type NoteContent = { scores: NoteScores; remarks: string };
 
 /**
- * Write one rating field. Factored out of the server action so it can run
- * behind the action's access check or from a test harness. Authorization is the
- * caller's job — this assumes `userId` may already edit this note.
+ * Close an interview note — and record its content in the same write. After
+ * this the note is READ-ONLY for everyone, TM Lead included (see
+ * evaluateNoteAccess); reopening, an admin-only act, is the one way back into
+ * it. Authorization — including the "has the slot time passed yet" gate and the
+ * completeness gate — is the caller's job; see closeInterviewNoteAction.
  *
- * Upserts, so the row appears on the first score entered rather than needing to
- * be pre-created with the panel.
- */
-export async function saveNoteRating(
-  applicantId: string,
-  campaignId: string,
-  field: NoteFieldKey,
-  value: number | null,
-  userId: string,
-): Promise<SaveNoteResult> {
-  if (value !== null && !isValidRating(value)) {
-    return { ok: false, error: "That score isn't a valid 0–10 value." };
-  }
-
-  await prisma.interviewNote.upsert({
-    where: { applicantId },
-    create: { applicantId, [field]: value },
-    update: { [field]: value },
-  });
-
-  await logActivity({
-    actorId: userId,
-    actionType: "INTERVIEW_NOTE_UPDATED",
-    targetType: "Applicant",
-    targetId: applicantId,
-    campaignId,
-    details: { field, value },
-  });
-
-  return { ok: true };
-}
-
-/** Write the free-text remarks. Empty input clears the field back to null. */
-export async function saveNoteRemarks(
-  applicantId: string,
-  campaignId: string,
-  remarks: string,
-  userId: string,
-): Promise<SaveNoteResult> {
-  const trimmed = remarks.trim();
-  const value = trimmed === "" ? null : trimmed;
-
-  await prisma.interviewNote.upsert({
-    where: { applicantId },
-    create: { applicantId, remarks: value },
-    update: { remarks: value },
-  });
-
-  await logActivity({
-    actorId: userId,
-    actionType: "INTERVIEW_NOTE_UPDATED",
-    targetType: "Applicant",
-    targetId: applicantId,
-    campaignId,
-    details: { field: "remarks", value },
-  });
-
-  return { ok: true };
-}
-
-/**
- * Close an interview note — locks it to MANAGE_ACCOUNTS only from here on (see
- * canEditInterviewNote / canViewInterviewNote). Upserts, so it works even before
- * any rating has been entered. Authorization — including the "has the slot time
- * passed yet" gate — is the caller's job; see closeInterviewNoteAction.
+ * Closing IS the save (there is no separate save path for an open note), so the
+ * seven ratings and remarks travel in as `content` and land in the SAME upsert
+ * as closedAt — one write, not two, and never a saved note that failed to
+ * close.
+ *
+ * Exactly ONE activity-log entry comes out of this. The old save-then-close
+ * pair produced an INTERVIEW_NOTE_UPDATED immediately followed by a
+ * INTERVIEW_NOTE_CLOSED for the same actor in the same instant — the same fact
+ * logged twice — so the close entry now carries what was entered: each rating
+ * named in `details.ratings`, the running average, and whether remarks were
+ * recorded (the remarks text itself lives in the note row, not the log).
  *
  * `forced` records WHICH path was taken, and is only ever true for an
  * Administrator closing ahead of the scheduled time. It changes nothing about
@@ -89,16 +46,49 @@ export async function closeInterviewNote(
   applicantId: string,
   campaignId: string,
   userId: string,
+  content?: NoteContent,
   forced?: { scheduledTime: Date; allowedAt: Date },
 ): Promise<SaveNoteResult> {
+  let scores: NoteScores | undefined;
+  let remarksValue: string | null = null;
+  let average: number | null = null;
+
+  if (content) {
+    for (const [field, value] of Object.entries(content.scores) as [
+      keyof NoteScores,
+      number | null,
+    ][]) {
+      if (value !== null && !isValidRating(value)) {
+        return {
+          ok: false,
+          error: `The ${field} score isn't a valid 0–10 value.`,
+        };
+      }
+    }
+    scores = content.scores;
+    // Empty input clears the field back to null, same rule the editor applies.
+    const trimmed = content.remarks.trim();
+    remarksValue = trimmed === "" ? null : trimmed;
+    average = computeAverage(content.scores);
+  }
+
   const closedAt = new Date();
 
   await prisma.interviewNote.upsert({
     where: { applicantId },
-    create: { applicantId, closedAt, closedById: userId },
-    update: { closedAt, closedById: userId },
+    create: {
+      applicantId,
+      closedAt,
+      closedById: userId,
+      ...scores,
+      remarks: remarksValue,
+    },
+    update: { closedAt, closedById: userId, ...scores, remarks: remarksValue },
   });
 
+  // Flattened rather than nested: formatDetails stringifies each value for the
+  // Details column, so "personality" has to be "Personality 7.25" from the
+  // start, not an object that renders as "[object Object]".
   await logActivity({
     actorId: userId,
     actionType: forced
@@ -107,20 +97,27 @@ export async function closeInterviewNote(
     targetType: "Applicant",
     targetId: applicantId,
     campaignId,
-    // Only the force path carries detail, and it carries the facts that make
-    // the override reviewable: when the interview was due, when closing would
-    // have become normally available, and how far ahead of that it happened.
-    details: forced
-      ? {
-          reason:
-            "Administrator force-closed before the interview's scheduled time.",
-          scheduledTimeISO: forced.scheduledTime.toISOString(),
-          normallyAllowedAtISO: forced.allowedAt.toISOString(),
-          minutesEarly: Math.round(
-            (forced.allowedAt.getTime() - closedAt.getTime()) / 60_000,
-          ),
-        }
-      : undefined,
+    details: {
+      ...(scores && {
+        ratings: NOTE_FIELDS.map(
+          (f) => `${f.label} ${scores[f.key] ?? "—"}`,
+        ).join(", "),
+        ...(average !== null && { average: formatAverage(average) }),
+        remarks: remarksValue ? "recorded" : "none",
+      }),
+      // Only the force path carries the facts that make the override
+      // reviewable: when the interview was due, when closing would have become
+      // normally available, and how far ahead of that it happened.
+      ...(forced && {
+        reason:
+          "Administrator force-closed before the interview's scheduled time.",
+        scheduledTimeISO: forced.scheduledTime.toISOString(),
+        normallyAllowedAtISO: forced.allowedAt.toISOString(),
+        minutesEarly: Math.round(
+          (forced.allowedAt.getTime() - closedAt.getTime()) / 60_000,
+        ),
+      }),
+    },
   });
 
   return { ok: true };
@@ -128,7 +125,8 @@ export async function closeInterviewNote(
 
 /**
  * Reopen a closed interview note — clears closedAt/closedById, restoring normal
- * panel-member access. MANAGE_ACCOUNTS only; enforced by the caller.
+ * panel-member access (and editability, for everyone). MANAGE_ACCOUNTS only;
+ * enforced by the caller. One entry, covering the one thing that happened.
  */
 export async function reopenInterviewNote(
   applicantId: string,

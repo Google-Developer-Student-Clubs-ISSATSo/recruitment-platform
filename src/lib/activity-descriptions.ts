@@ -67,6 +67,10 @@ const ACTION_LABELS: Record<string, string> = {
   // coordinator who was only editing a schedule would misattribute a judgement.
   PANEL_SEAT_APPROVAL_AUTO_DECLINED:
     "cleared an interview time, closing its pending seat requests",
+  // LEGACY: no longer produced. The save-then-close pair used to emit one of
+  // these immediately before INTERVIEW_NOTE_CLOSED for the same actor in the
+  // same instant; closing now stores the note itself, so the close entry IS the
+  // update (its details carry the ratings). Kept so pre-merge rows still read.
   INTERVIEW_NOTE_UPDATED: "updated an interview note",
   INTERVIEW_NOTE_CLOSED: "closed an interview note",
   // Deliberately worded so the override is unmistakable at a glance in the log:
@@ -181,8 +185,10 @@ const ACTION_TONES: Record<string, ActivityTone> = {
   // Amber, not the "rejected" red its sibling gets: nothing was judged here, a
   // question simply stopped being answerable. Red would read as a verdict.
   PANEL_SEAT_APPROVAL_AUTO_DECLINED: "pending",
+  // LEGACY (see ACTION_LABELS): no longer produced; kept for old rows.
   INTERVIEW_NOTE_UPDATED: "primary",
-  // Closing/reopening a note changes who can see it — sensitive but reversible.
+  // Closing (which also stores the note) changes who can see it — sensitive but
+  // reversible, hence amber. Its details record what was entered.
   INTERVIEW_NOTE_CLOSED: "pending",
   // The one close that overrode a rule. Red, unlike its sibling above: this is
   // the entry someone would come looking for if a note's timing is ever

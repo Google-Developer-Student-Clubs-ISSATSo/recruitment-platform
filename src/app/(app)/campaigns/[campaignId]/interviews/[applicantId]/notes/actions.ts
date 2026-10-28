@@ -6,21 +6,24 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditInterviewNote, hasPermission } from "@/lib/permissions";
 import { PermissionKey } from "@/generated/prisma/enums";
-import { isNoteFieldKey, noteCloseEligibility } from "@/lib/interview-note";
+import {
+  isNoteFieldKey,
+  isValidRating,
+  NOTE_FIELDS,
+  noteCloseEligibility,
+  type NoteScores,
+} from "@/lib/interview-note";
 import { formatTunisDateTime } from "@/lib/tunis-time";
 import {
-  saveNoteRating,
-  saveNoteRemarks,
   closeInterviewNote,
   reopenInterviewNote,
   type SaveNoteResult,
 } from "@/lib/interview-note-store";
 
-// Interview note actions. Both are gated on canEditInterviewNote, which is the
+// Interview note actions. Close is gated on canEditInterviewNote, which is the
 // panel-membership check — NOT merely the EDIT_OWN_INTERVIEW_NOTES permission,
-// which every interviewer holds. A Committee Rep reading someone else's note
-// gets a read-only page, and these actions refuse them even if they POST
-// directly.
+// which every interviewer holds. Being off the panel means these actions refuse
+// you even if you POST directly.
 
 /**
  * Confirm the caller may edit this note AND that the applicant really belongs
@@ -46,70 +49,55 @@ async function authorize(
   if (!(await canEditInterviewNote(userId, applicantId))) {
     return {
       ok: false,
-      error: "You can only edit notes for interviews you're on the panel for.",
+      error:
+        "You can only close notes for interviews you're on the panel for — and a closed note must be reopened first.",
     };
   }
 
   return { ok: true, userId };
 }
 
-/** Save one of the seven ratings. `null` clears it. */
-export async function saveNoteRatingAction(
-  campaignId: string,
-  applicantId: string,
-  field: string,
-  value: number | null,
-): Promise<SaveNoteResult> {
-  const gate = await authorize(campaignId, applicantId);
-  if (!gate.ok) return gate;
-
-  if (!isNoteFieldKey(field)) {
-    return { ok: false, error: "Unknown rating field." };
+/** Collect + client-validate the seven ratings nothing is trusted from. */
+function cleanScores(
+  scores: Record<string, number | null>,
+): { ok: true; scores: NoteScores } | { ok: false; error: string } {
+  const clean: NoteScores = {
+    personality: null,
+    communication: null,
+    motivation: null,
+    creativity: null,
+    problemSolving: null,
+    stressManagement: null,
+    teamWork: null,
+  };
+  for (const [field, value] of Object.entries(scores)) {
+    if (!isNoteFieldKey(field)) {
+      return { ok: false, error: "Unknown rating field." };
+    }
+    if (value !== null && !isValidRating(value)) {
+      return { ok: false, error: "A score isn't a valid 0–10 value." };
+    }
+    clean[field] = value;
   }
-
-  const result = await saveNoteRating(
-    applicantId,
-    campaignId,
-    field,
-    value,
-    gate.userId,
-  );
-  if (!result.ok) return result;
-
-  revalidatePath(`/campaigns/${campaignId}/interviews/${applicantId}/notes`);
-  return { ok: true };
-}
-
-/** Save the free-text remarks. */
-export async function saveNoteRemarksAction(
-  campaignId: string,
-  applicantId: string,
-  remarks: string,
-): Promise<SaveNoteResult> {
-  const gate = await authorize(campaignId, applicantId);
-  if (!gate.ok) return gate;
-
-  const result = await saveNoteRemarks(
-    applicantId,
-    campaignId,
-    remarks,
-    gate.userId,
-  );
-  if (!result.ok) return result;
-
-  revalidatePath(`/campaigns/${campaignId}/interviews/${applicantId}/notes`);
-  return { ok: true };
+  return { ok: true, scores: clean };
 }
 
 /**
- * Close this interview note. Gated on {@link canEditInterviewNote} — for an OPEN
- * note that means a panel member (EDIT_OWN_INTERVIEW_NOTES + a seat) or
- * MANAGE_ACCOUNTS. Closing revokes the panel member's own access afterwards, so
- * both the notes path and the interviews board (whose notes link keys off the
- * same access check) are revalidated.
+ * Close this interview note — and SAVE it in the same request. There is no
+ * separate save path for an open note: closing is the one act that writes,
+ * which is why the two live in one action rather than two round-trips.
  *
- * TIMING GATE, enforced HERE and not only in the UI. A note cannot be closed
- * until the interview's scheduled time plus a short grace has passed (see
+ * Gated on {@link authorize} — for an OPEN note that means a panel member
+ * (EDIT_OWN_INTERVIEW_NOTES + a seat) or MANAGE_ACCOUNTS. Closing revokes the
+ * panel member's own access afterwards, so both the notes path and the
+ * interviews board (whose notes link keys off the same access check) are
+ * revalidated.
+ *
+ * COMPLETENESS GATE, enforced HERE and not only in the UI: all seven ratings
+ * must be non-null BEFORE the note may be closed, whatever the client believed.
+ *
+ * TIMING GATE, also enforced HERE. A note cannot be closed until the
+ * interview's scheduled time plus a short grace has passed (see
  * noteCloseEligibility). The button being disabled is a courtesy; this is the
  * rule, and it holds against a direct POST with whatever arguments.
  *
@@ -122,10 +110,22 @@ export async function saveNoteRemarksAction(
 export async function closeInterviewNoteAction(
   campaignId: string,
   applicantId: string,
+  scores: Record<string, number | null>,
+  remarks: string,
   force = false,
 ): Promise<SaveNoteResult> {
   const gate = await authorize(campaignId, applicantId);
   if (!gate.ok) return gate;
+
+  const cleaned = cleanScores(scores);
+  if (!cleaned.ok) return cleaned;
+
+  if (NOTE_FIELDS.some((f) => cleaned.scores[f.key] === null)) {
+    return {
+      ok: false,
+      error: "All seven ratings must be set before the note can be closed.",
+    };
+  }
 
   // Read fresh rather than trusting anything the client sent: the slot may have
   // been rescheduled since the page rendered.
@@ -168,10 +168,15 @@ export async function closeInterviewNoteAction(
     };
   }
 
+  // Everything is validated: ONE request = ONE database write (all seven
+  // ratings + remarks + closedAt, together) and ONE activity-log entry — the
+  // close entry carries what was entered, so closing never produces the
+  // save-plus-close double log it used to.
   const result = await closeInterviewNote(
     applicantId,
     campaignId,
     gate.userId,
+    { scores: cleaned.scores, remarks: typeof remarks === "string" ? remarks : "" },
     forced,
   );
   if (!result.ok) return result;

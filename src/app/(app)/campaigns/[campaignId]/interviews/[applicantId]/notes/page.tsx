@@ -26,9 +26,10 @@ import { NoteClosingControls } from "./NoteClosingControls";
  *
  * Access is decided by canViewInterviewNote / canEditInterviewNote rather than a
  * flat permission: EDIT_OWN_INTERVIEW_NOTES is held by every interviewer, so the
- * seat on *this* applicant's panel is what actually grants access. Reading and
- * writing now coincide — the panel and the TM Lead, nobody else — so anyone off
- * the panel is redirected away rather than shown a read-only render.
+ * seat on *this* applicant's panel is what actually grants access. A closed note
+ * is read-only for everyone — even the TM Lead must reopen it to change it —
+ * and only the TM Lead can still VIEW it closed. Anyone off the panel is
+ * redirected away rather than shown a read-only render.
  */
 export default async function InterviewNotesPage({
   params,
@@ -83,17 +84,16 @@ export default async function InterviewNotesPage({
   // On an open note, whoever may edit it may also close it (panel member or
   // MANAGE_ACCOUNTS). Reopening is MANAGE_ACCOUNTS-only, and only a closed note
   // shows it — anyone else who can reach this page is looking at an open one.
+  // CLOSING SAVES: there is no separate save step, so the editor renders the
+  // close strip itself, where the live draft lives.
   const canClose = !closed && canEdit;
   const canReopen = closed && isManage;
   const closedByName =
     note?.closedBy?.name ?? note?.closedBy?.email ?? "Someone";
-  // The editor's visual mode. `closed` wins over `canEdit` on purpose: a closed
-  // note is still writable by MANAGE_ACCOUNTS, and that is exactly the case the
-  // loud surface exists to flag.
-  //
-  // "readonly" is currently unreachable — since the committee-preview grant was
-  // removed, anyone who can view an open note can also edit it — and is kept as
-  // the safe fallback should view and edit ever diverge again.
+  // The editor's visual mode. Since a closed note is edit-locked for everyone,
+  // `mode` can never be both closed and editable: an account manager looking at
+  // a closed note is in "locked" — which is now read-only like "readonly", but a
+  // distinctly LOUDER read-only, since a closed note is the exceptional state.
   const mode: NoteMode = closed ? "locked" : canEdit ? "edit" : "readonly";
   const initialScores: NoteScores = {
     personality: note?.personality ?? null,
@@ -185,45 +185,23 @@ export default async function InterviewNotesPage({
           </div>
         </div>
 
-        {/* Closing controls + status. A closed note only ever renders here for a
+        {/* Closing status. A closed note only ever renders here for a
             MANAGE_ACCOUNTS holder (everyone else was redirected away), so the
-            reopen button and closed banner are safe to show unconditionally when
-            `closed` is true. */}
-        {(closed || canClose) && (
+            reopen button and closed banner are safe to show unconditionally
+            when `closed` is true. The close ACTION itself lives at the BOTTOM
+            of the page, next to the note it closes. */}
+        {closed && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-            {closed ? (
-              <p className="flex items-center gap-1.5 rounded-lg bg-status-rejected/10 px-3 py-2 text-xs font-medium text-status-rejected">
-                <Icon name="lock" className="text-[14px]" />
-                Closed by {closedByName}
-                {note?.closedAt ? ` on ${formatTunisDateTime(note.closedAt)}` : ""}.
-                Only account managers can view or edit it now.
-              </p>
-            ) : (
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Closing the note locks it — you&apos;ll lose access to it
-                afterwards.
-              </p>
-            )}
-            {canClose && (
-              <NoteClosingControls
-                campaignId={campaignId}
-                applicantId={applicantId}
-                mode="close"
-                tooEarly={closeTooEarly}
-                canForceClose={isManage}
-                scheduledLabel={scheduled ? formatTunisDateTime(scheduled) : null}
-                allowedAtLabel={
-                  closeEligibility.state === "too_early"
-                    ? formatTunisDateTime(closeEligibility.allowedAt)
-                    : null
-                }
-              />
-            )}
+            <p className="flex items-center gap-1.5 rounded-lg bg-status-rejected/10 px-3 py-2 text-xs font-medium text-status-rejected">
+              <Icon name="lock" className="text-[14px]" />
+              Closed by {closedByName}
+              {note?.closedAt ? ` on ${formatTunisDateTime(note.closedAt)}` : ""}.
+              It&apos;s locked for everyone — reopen it to view or change it.
+            </p>
             {canReopen && (
               <NoteClosingControls
                 campaignId={campaignId}
                 applicantId={applicantId}
-                mode="reopen"
               />
             )}
           </div>
@@ -242,8 +220,19 @@ export default async function InterviewNotesPage({
         applicantId={applicantId}
         editable={canEdit}
         mode={mode}
+        viewerId={userId}
+        noteUpdatedAt={note?.updatedAt ?? null}
         initialScores={initialScores}
         initialRemarks={note?.remarks ?? ""}
+        canClose={canClose}
+        tooEarly={closeTooEarly}
+        canForceClose={isManage}
+        scheduledLabel={scheduled ? formatTunisDateTime(scheduled) : null}
+        allowedAtLabel={
+          closeEligibility.state === "too_early"
+            ? formatTunisDateTime(closeEligibility.allowedAt)
+            : null
+        }
       />
     </div>
   );

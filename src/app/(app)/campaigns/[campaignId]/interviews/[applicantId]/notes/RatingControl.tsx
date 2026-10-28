@@ -34,10 +34,11 @@ function parseRating(text: string): number | null {
  * beside it is for juries who already know the score — type it, or nudge it
  * with ↑/↓ by one step. Both stay in sync.
  *
- * `onCommit` fires only once the user settles (pointer/key release, Enter or
- * blur on the field), while `onDraft` tracks every slider movement — dragging
- * updates the field and the live AVG instantly, but writes one row and one
- * activity-log entry rather than one per pixel.
+ * `onDraft` tracks every slider movement; "settling" (pointer/key release, or
+ * Enter/blur on the field) is purely a LOCAL act — it just confirms the draft
+ * value and pops the field as landing feedback. Nothing goes to the backend
+ * from here: the whole note is written by one Save press (one request), which
+ * is why dragging writes no rows and no activity-log entries at all.
  */
 export function RatingControl({
   id,
@@ -46,15 +47,14 @@ export function RatingControl({
   editable,
   pending,
   onDraft,
-  onCommit,
 }: {
   id: string;
   label: string;
   value: number | null;
   editable: boolean;
+  /** A save is in flight — inputs lock so the draft can't move under it. */
   pending: boolean;
   onDraft: (value: number) => void;
-  onCommit: (value: number) => void;
 }) {
   const reduced = useReducedMotion();
   const [scope, animate] = useAnimate<HTMLInputElement>();
@@ -62,20 +62,20 @@ export function RatingControl({
   // field mirrors `value` (and follows the slider while it's dragged).
   const [text, setText] = useState<string | null>(null);
 
-  function commit(next: number) {
-    // The field pops on commit — neither control gives landing feedback of its
-    // own, so this is the signal that the value was taken. At the `fast` token:
-    // the panel holds seven of these and a slower confirmation would stack up
-    // while a jury works down the list. Animated in place rather than by
-    // remounting, so a commit via Enter keeps focus in the field.
-    if (!reduced && scope.current) {
+  function settle(next: number) {
+    // The field pops when the value settles — neither control gives landing
+    // feedback of its own, so this is the signal the draft was taken. At the
+    // `fast` token: the panel holds seven of these and a slower confirmation
+    // would stack up while a jury works down the list. Animated in place rather
+    // than by remounting, so settling via Enter keeps focus in the field.
+    if (next !== value && !reduced && scope.current) {
       animate(
         scope.current,
         { scale: [0.9, 1] },
         { duration: DURATION.fast, ease: EASE.out },
       );
     }
-    onCommit(next);
+    onDraft(next);
   }
 
   function commitText() {
@@ -85,8 +85,7 @@ export function RatingControl({
     // Invalid or cleared input reverts to the stored value — a rating can't be
     // un-set, and silently writing 0 would be worse than doing nothing.
     if (parsed === null || parsed === value) return;
-    onDraft(parsed);
-    commit(parsed);
+    settle(parsed);
   }
 
   function step(direction: 1 | -1) {
@@ -96,8 +95,7 @@ export function RatingControl({
       Math.max(RATING_MIN, base + direction * RATING_STEP),
     );
     setText(null);
-    onDraft(next);
-    commit(next);
+    settle(next);
   }
 
   if (!editable) {
@@ -156,9 +154,9 @@ export function RatingControl({
         aria-label={`${label} rating slider, 0 to 10`}
         aria-valuetext={value === null ? "Not rated" : fmtRating(value)}
         onChange={(e) => onDraft(Number(e.target.value))}
-        onPointerUp={(e) => commit(Number(e.currentTarget.value))}
-        onKeyUp={(e) => commit(Number(e.currentTarget.value))}
-        onBlur={(e) => commit(Number(e.currentTarget.value))}
+        onPointerUp={(e) => settle(Number(e.currentTarget.value))}
+        onKeyUp={(e) => settle(Number(e.currentTarget.value))}
+        onBlur={(e) => settle(Number(e.currentTarget.value))}
         className="h-2 w-full cursor-pointer appearance-none rounded-full bg-neutral-200 accent-primary disabled:opacity-50 dark:bg-neutral-700"
       />
     </div>
