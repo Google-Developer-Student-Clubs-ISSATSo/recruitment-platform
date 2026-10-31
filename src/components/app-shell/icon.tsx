@@ -1,6 +1,8 @@
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   Armchair,
   Award,
   BadgeCheck,
@@ -108,6 +110,8 @@ const ICONS = {
   admin_panel_settings: ShieldCheck,
   arrow_back: ArrowLeft,
   arrow_forward: ArrowRight,
+  arrow_downward: ArrowDown,
+  arrow_upward: ArrowUp,
   bar_chart: BarChart3,
   bookmark: Bookmark,
   campaign: Megaphone,

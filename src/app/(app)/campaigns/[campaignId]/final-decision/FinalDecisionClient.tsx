@@ -9,7 +9,8 @@ import { NOTE_FIELDS } from "@/lib/interview-note";
 import { seatKindLabel } from "@/lib/panel-seat-kind";
 import {
   capacityLevel,
-  compareByFormScore,
+  compareByInterview,
+  DECISION_PHRASE,
   decisionStateOf,
   formatScore,
   interviewAverage,
@@ -18,6 +19,7 @@ import {
   type DecisionRow,
   type DecisionState,
   type FinalDecision,
+  type SortDirection,
 } from "@/lib/final-decision";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/app-shell/icon";
@@ -25,6 +27,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { studyLineOf } from "@/lib/applicant-form-fields";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { CapacityBar } from "./CapacityBar";
+import { Phase2Entries } from "./Phase2Entries";
 import { ShortlistPool } from "./ShortlistPool";
 import {
   assignCommitteeAction,
@@ -33,7 +36,7 @@ import {
 } from "./actions";
 
 type Tab = "PASS" | "POOL";
-type Filter = "TODO" | "ACCEPTED" | "REJECTED" | "ALL";
+type Filter = "TODO" | "SHORTLISTED" | "ACCEPTED" | "REJECTED" | "ALL";
 
 // A decision that needs the "already completed" gate cleared first, or the
 // completion confirmation itself.
@@ -80,7 +83,6 @@ export function FinalDecisionClient({
   usage,
   completedAtISO,
   emailPanel,
-  showFormScore,
 }: {
   campaignId: string;
   initialRows: DecisionRow[];
@@ -95,11 +97,6 @@ export function FinalDecisionClient({
    * beyond rendering it in place.
    */
   emailPanel: React.ReactNode;
-  /**
-   * False for MKT and EER members (see canViewPhase2Scores). Every formScore is
-   * already null server-side then; this only drops the column/tile around it.
-   */
-  showFormScore: boolean;
 }) {
   // Rows come straight from the server on every render: each action calls
   // revalidatePath, so the RSC payload is the single source of truth. Mirroring
@@ -108,6 +105,7 @@ export function FinalDecisionClient({
 
   const [tab, setTab] = useState<Tab>("PASS");
   const [filter, setFilter] = useState<Filter>("TODO");
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Committee>>({});
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -147,30 +145,35 @@ export function FinalDecisionClient({
   }, [rows, usage]);
 
   const buckets = useMemo(() => {
+    const compare = compareByInterview(sortDir);
     const undecided = rows
       .filter((r) => UNDECIDED_STATUSES.includes(r.status))
-      .sort(compareByFormScore);
+      .sort(compare);
     return {
       undecided,
       accepted: rows
         .filter((r) => r.status === ApplicantStatus.ACCEPTED)
-        .sort(compareByFormScore),
+        .sort(compare),
       rejected: rows
         .filter((r) => r.status === ApplicantStatus.REJECTED_FINAL)
-        .sort(compareByFormScore),
-      pool: rows.filter((r) => r.status === ApplicantStatus.PENDING),
-      all: [...rows].sort(compareByFormScore),
+        .sort(compare),
+      pool: rows
+        .filter((r) => r.status === ApplicantStatus.PENDING)
+        .sort(compare),
+      all: [...rows].sort(compare),
     };
-  }, [rows]);
+  }, [rows, sortDir]);
 
   const visible =
     filter === "TODO"
       ? buckets.undecided
-      : filter === "ACCEPTED"
-        ? buckets.accepted
-        : filter === "REJECTED"
-          ? buckets.rejected
-          : buckets.all;
+      : filter === "SHORTLISTED"
+        ? buckets.pool
+        : filter === "ACCEPTED"
+          ? buckets.accepted
+          : filter === "REJECTED"
+            ? buckets.rejected
+            : buckets.all;
 
   // Selection falls back to the top of whatever list is showing, so the panel is
   // never empty while there's anyone to look at.
@@ -229,7 +232,11 @@ export function FinalDecisionClient({
         setError(res.error);
         return;
       }
-      if (filter === "TODO" && next) setSelectedId(next.id);
+      // Undoing a decision keeps the same person on screen — they're the one
+      // being corrected, so jumping to the next name would lose them.
+      if (filter === "TODO" && next && decision !== "UNDECIDE") {
+        setSelectedId(next.id);
+      }
     });
   }
 
@@ -333,7 +340,6 @@ export function FinalDecisionClient({
           onCommitteeChange={setCommittee}
           onDecide={decide}
           pending={pending}
-          showFormScore={showFormScore}
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -345,6 +351,12 @@ export function FinalDecisionClient({
                 onClick={() => setFilter("TODO")}
               >
                 To decide ({buckets.undecided.length})
+              </FilterChip>
+              <FilterChip
+                active={filter === "SHORTLISTED"}
+                onClick={() => setFilter("SHORTLISTED")}
+              >
+                Shortlisted ({buckets.pool.length})
               </FilterChip>
               <FilterChip
                 active={filter === "ACCEPTED"}
@@ -365,6 +377,23 @@ export function FinalDecisionClient({
                 All ({buckets.all.length})
               </FilterChip>
             </div>
+
+            {/* Interview-score order. Un-interviewed applicants stay at the
+                bottom either way — see compareByInterview. */}
+            <button
+              type="button"
+              onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+              aria-label={`Sorted by interview score, ${
+                sortDir === "desc" ? "best first" : "lowest first"
+              }. Click to reverse.`}
+              className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-neutral-500 transition-colors hover:text-foreground motion-reduce:transition-none dark:text-neutral-400"
+            >
+              <Icon
+                name={sortDir === "desc" ? "arrow_downward" : "arrow_upward"}
+                className="text-[14px]"
+              />
+              Interview score: {sortDir === "desc" ? "best first" : "lowest first"}
+            </button>
 
             <div className="space-y-2">
               {visible.length === 0 && (
@@ -398,9 +427,9 @@ export function FinalDecisionClient({
                         />
                         {style.label}
                       </span>
-                      {showFormScore && (
-                        <span className="text-xs font-medium tabular-nums text-neutral-400">
-                          {formatScore(row.formScore, 2)}
+                      {avg !== null && (
+                        <span className="text-xs font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+                          {formatScore(avg)}
                         </span>
                       )}
                     </div>
@@ -410,8 +439,7 @@ export function FinalDecisionClient({
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">
                       {row.assignedCommittee ?? row.preferredCommittee}
                       {studyLineOf(row) && ` · ${studyLineOf(row)}`}
-                      {" · "}
-                      {avg === null ? "No interview" : `${formatScore(avg)} avg`}
+                      {avg === null && " · No interview"}
                     </p>
                   </button>
                 );
@@ -513,17 +541,8 @@ export function FinalDecisionClient({
                   </div>
                 </div>
 
-                {/* Scores */}
-                <div
-                  className={`mt-6 grid gap-4 ${showFormScore ? "sm:grid-cols-2" : ""}`}
-                >
-                  {showFormScore && (
-                    <ScoreTile
-                      label="Form Score"
-                      value={formatScore(selected.formScore, 2)}
-                      hint="Phase 1 weighted total"
-                    />
-                  )}
+                {/* Score */}
+                <div className="mt-6">
                   <ScoreTile
                     label="Interview Score"
                     value={
@@ -537,34 +556,70 @@ export function FinalDecisionClient({
                 </div>
 
                 {/* Drill-in: jury, all 7 ratings, remarks, closed status.
-                    Collapsed by default so the AVG-first view stays primary;
-                    keyed by applicant so switching resets it to collapsed. */}
+                    Expanded by default — the meeting reads the notes for every
+                    applicant, so it shouldn't take a click each time. Keyed by
+                    applicant so switching resets it to expanded. */}
                 <FullInterviewNotes key={selected.id} row={selected} />
+
+                <Phase2Entries row={selected} />
               </div>
 
               {/* STEP 6 — three large decision buttons */}
               <div className="grid gap-3 sm:grid-cols-3">
-                <DecisionButton
-                  tone="accept"
-                  icon="check_circle"
-                  label="Accept"
-                  disabled={pending}
-                  onClick={() => decide(selected, "ACCEPT")}
-                />
-                <DecisionButton
-                  tone="shortlist"
-                  icon="bookmark"
-                  label="Shortlist"
-                  disabled={pending}
-                  onClick={() => decide(selected, "SHORTLIST")}
-                />
-                <DecisionButton
-                  tone="reject"
-                  icon="cancel"
-                  label="Reject"
-                  disabled={pending}
-                  onClick={() => decide(selected, "REJECT")}
-                />
+                {/* The button for the applicant's CURRENT outcome turns into its
+                    undo; the other two stay, so switching straight to a
+                    different outcome is still one click. */}
+                {selected.status === ApplicantStatus.ACCEPTED ? (
+                  <DecisionButton
+                    tone="undo"
+                    icon="undo"
+                    label="Remove accepted"
+                    disabled={pending}
+                    onClick={() => decide(selected, "UNDECIDE")}
+                  />
+                ) : (
+                  <DecisionButton
+                    tone="accept"
+                    icon="check_circle"
+                    label="Accept"
+                    disabled={pending}
+                    onClick={() => decide(selected, "ACCEPT")}
+                  />
+                )}
+                {selected.status === ApplicantStatus.PENDING ? (
+                  <DecisionButton
+                    tone="undo"
+                    icon="undo"
+                    label="Remove from shortlisted"
+                    disabled={pending}
+                    onClick={() => decide(selected, "UNDECIDE")}
+                  />
+                ) : (
+                  <DecisionButton
+                    tone="shortlist"
+                    icon="bookmark"
+                    label="Shortlist"
+                    disabled={pending}
+                    onClick={() => decide(selected, "SHORTLIST")}
+                  />
+                )}
+                {selected.status === ApplicantStatus.REJECTED_FINAL ? (
+                  <DecisionButton
+                    tone="undo"
+                    icon="undo"
+                    label="Unreject"
+                    disabled={pending}
+                    onClick={() => decide(selected, "UNDECIDE")}
+                  />
+                ) : (
+                  <DecisionButton
+                    tone="reject"
+                    icon="cancel"
+                    label="Reject"
+                    disabled={pending}
+                    onClick={() => decide(selected, "REJECT")}
+                  />
+                )}
               </div>
             </motion.div>
           ) : (
@@ -607,7 +662,7 @@ export function FinalDecisionClient({
               Final decisions were completed on{" "}
               {formatCompletedAt(completedAtISO)}. This changes{" "}
               <strong>{dialog.row.fullName}</strong> to{" "}
-              <strong>{dialog.decision.toLowerCase()}</strong>.
+              <strong>{DECISION_PHRASE[dialog.decision]}</strong>.
             </>
           ) : null
         }
@@ -704,11 +759,11 @@ function ScoreTile({
  * Collapsible drill-in below the lean AVG summary. The Final Decision page is
  * MANAGE_ACCOUNTS/ENTER_FINAL_DECISION-gated, so Part B's closed-note lockout
  * does NOT apply here — the full jury, every rating, remarks and the note's
- * open/closed status are always shown. Collapsed by default (remounted per
- * applicant via a key on the caller) so the live call keeps the AVG-first view.
+ * open/closed status are always shown. Expanded by default (remounted per
+ * applicant via a key on the caller); the header still collapses it.
  */
 function FullInterviewNotes({ row }: { row: DecisionRow }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const reduced = useReducedMotion();
 
   return (
@@ -873,6 +928,8 @@ const DECISION_TONE = {
   shortlist: "bg-primary text-primary-foreground hover:bg-primary/85",
   reject:
     "bg-status-rejected text-white dark:text-neutral-950 hover:bg-status-rejected/85",
+  // Neutral on purpose: undoing is not a verdict, so it borrows no status colour.
+  undo: "bg-neutral-200 text-foreground hover:bg-neutral-300 dark:bg-neutral-700 dark:hover:bg-neutral-600",
 } as const;
 
 /**

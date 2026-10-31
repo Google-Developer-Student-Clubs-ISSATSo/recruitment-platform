@@ -37,7 +37,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * for an extra confirmation once completed; that is a speed bump, not a rule
  * this action enforces.
  *
- * `committee` is only meaningful for ACCEPT. Reject and Shortlist clear
+ * `committee` is only meaningful for ACCEPT. Every other decision clears
  * assignedCommittee, so whatever the dropdown happened to show is ignored.
  */
 export async function recordDecisionAction(
