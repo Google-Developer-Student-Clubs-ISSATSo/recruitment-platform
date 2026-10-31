@@ -626,8 +626,8 @@ Logging: `ActivityLogEntry` (has nullable, no-FK `campaignId`)
 - Login enumeration message --- deliberately kept as the friendly
   "not registered" text, not a generic message (reviewed tradeoff, not
   a bug)
-- Session `maxAge` --- 3 days (confirmed intentional after a config
-  drift briefly set it to 24h)
+- Session `maxAge` --- 1 week (raised from 3 days, which was earlier
+  confirmed intentional after a config drift briefly set it to 24h)
 - Nonce-based CSP, blanket zod adoption --- both deferred, current
   validation approach is manual-but-solid, not worth the regression
   risk of a rewrite

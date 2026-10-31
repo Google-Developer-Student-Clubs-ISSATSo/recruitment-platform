@@ -66,7 +66,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: "database",
-    maxAge: 60 * 60 * 24 * 3, // 3 days
+    maxAge: 60 * 60 * 24 * 7, // 7 days (1 week)
     updateAge: 60 * 60 * 12, // only extend after 12h of activity
   },
 
