@@ -8,7 +8,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 
-import { ApplicantStatus, Phase2EntryType } from "@/generated/prisma/enums";
+import { Phase2EntryType } from "@/generated/prisma/enums";
 import { committeeLabel } from "@/lib/committee";
 import { compareByInterview, interviewAverage, type DecisionRow } from "@/lib/final-decision";
 import { formatAverage, NOTE_FIELDS, RATING_MAX } from "@/lib/interview-note";
@@ -16,15 +16,21 @@ import { seatKindLabel } from "@/lib/panel-seat-kind";
 import { PHASE2_SECTIONS } from "@/lib/phase2";
 import { formatTunisDateTime } from "@/lib/tunis-time";
 
-// The interview-reviews PDF: one cover page, then one page per applicant —
-// details, jury, the seven ratings with their average and the panel's remarks
-// across the top, and the Phase 2 notes / red flags / green flags beneath —
-// ordered by interview average, best first.
+// The interview-reviews PDF: a centred cover page, then one page per applicant —
+// the name with their preferred committee and interview time beside it, the
+// seven ratings with their average, the jury and the panel's remarks across the
+// top, and the Phase 2 notes / red flags / green flags beneath — ordered by
+// interview average, best first.
 //
-// Landscape A4 (842 × 595pt): the page is wide and short, so the top row is four
-// columns and spacing is kept tight enough that a typical applicant, Phase 2
+// Landscape A4 (842 × 595pt): the page is wide and short, so the committee and
+// interview time live in the header next to the name (they need no column of
+// their own) and spacing is kept tight enough that a typical applicant, Phase 2
 // entries included, fits on ONE page. A very long remark or a long run of
 // entries still flows onto a second page rather than being cut off.
+//
+// The applicant's decision is deliberately NOT printed, nor the committee they
+// were assigned (which only exists once accepted and would say the same thing):
+// the packet is read before the decision, and should not tell anyone how it went.
 //
 // This renders to a PDF, not to the app's UI, so the design tokens in
 // globals.css (CSS custom properties) don't exist here: a PDF needs literal
@@ -65,17 +71,6 @@ const SECTION_TONE = {
   rejected: { heading: COLOR.redText, border: COLOR.red, bg: COLOR.redTint },
   accepted: { heading: COLOR.greenText, border: COLOR.green, bg: COLOR.greenTint },
 } as const;
-
-const DECISION_LABEL: Record<ApplicantStatus, string> = {
-  [ApplicantStatus.ACCEPTED]: "Accepted",
-  [ApplicantStatus.REJECTED_FINAL]: "Rejected",
-  [ApplicantStatus.PENDING]: "Shortlisted",
-  [ApplicantStatus.SHORTLISTED]: "Not decided",
-  [ApplicantStatus.SUBMITTED]: "Not decided",
-  [ApplicantStatus.REJECTED_PHASE1]: "Not decided",
-  [ApplicantStatus.INVITED_GDG_DAY]: "Not decided",
-  [ApplicantStatus.INTERVIEW_SCHEDULED]: "Not decided",
-};
 
 // Latin-1 plus the WinAnsi extras Helvetica also carries.
 const WIN_ANSI_EXTRAS = new Set("–—‘’‚“”„•…€™".split(""));
@@ -128,30 +123,95 @@ const styles = StyleSheet.create({
   },
 
   // cover
-  brandBar: { flexDirection: "row", width: 180, height: 5, marginBottom: 34 },
-  brand: { fontSize: 18, fontFamily: "Helvetica-Bold", marginBottom: 16 },
+  coverPage: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0 },
+  coverBand: { flexDirection: "row", height: 12 },
+  coverBody: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 90,
+    paddingBottom: 38,
+  },
+  brand: {
+    fontSize: 15,
+    letterSpacing: 3,
+    fontFamily: "Helvetica-Bold",
+    marginBottom: 22,
+  },
   title: {
     fontSize: 40,
-    lineHeight: 1.1,
+    lineHeight: 1.12,
     fontFamily: "Helvetica-Bold",
     color: COLOR.blue,
+    textAlign: "center",
   },
-  subtitle: { fontSize: 15, color: COLOR.muted, marginTop: 24 },
-  metaRow: { flexDirection: "row", gap: 36, marginTop: 30 },
+  subtitle: {
+    fontSize: 14,
+    color: COLOR.muted,
+    marginTop: 14,
+    textAlign: "center",
+  },
+  coverDivider: { flexDirection: "row", width: 120, height: 3, marginTop: 24 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 28,
+    marginTop: 24,
+  },
+  metaItem: { alignItems: "center" },
+  metaSep: { width: 0.5, height: 28, backgroundColor: COLOR.rule },
   metaLabel: {
     fontSize: 8,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     fontFamily: "Helvetica-Bold",
     color: COLOR.muted,
     textTransform: "uppercase",
   },
   metaValue: { fontSize: 12, marginTop: 3 },
-  coverNote: { fontSize: 11, marginTop: 30 },
-  internal: {
+  coverNote: {
+    fontSize: 9.5,
+    color: COLOR.muted,
+    marginTop: 14,
+    textAlign: "center",
+  },
+  messageCard: {
+    width: 560,
+    marginTop: 26,
+    paddingVertical: 20,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    backgroundColor: COLOR.blueTint,
+    alignItems: "center",
+  },
+  messageKicker: {
+    fontSize: 8,
+    letterSpacing: 1.6,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR.blue,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  messageText: {
     fontSize: 11,
+    lineHeight: 1.6,
+    textAlign: "center",
+    color: COLOR.ink,
+  },
+  messageSign: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR.blue,
+    marginTop: 10,
+  },
+  internal: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 48,
+    textAlign: "center",
+    fontSize: 9.5,
     fontFamily: "Helvetica-Bold",
     color: COLOR.redText,
-    marginTop: 12,
   },
 
   // applicant
@@ -161,7 +221,27 @@ const styles = StyleSheet.create({
     color: COLOR.muted,
     textTransform: "uppercase",
   },
-  name: { fontSize: 24, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 24,
+    marginTop: 2,
+  },
+  // The Text sits in a flex View rather than being flex:1 itself: a flexing Text
+  // is measured at a collapsed width first and its box kept two lines tall,
+  // which inflated the whole header row.
+  nameBox: { flex: 1 },
+  name: { fontSize: 24, fontFamily: "Helvetica-Bold" },
+  headerMeta: { flexDirection: "row", gap: 26 },
+  headerMetaLabel: {
+    fontSize: 7.5,
+    letterSpacing: 1,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR.muted,
+    textTransform: "uppercase",
+  },
+  headerMetaValue: { fontSize: 10.5, marginTop: 2 },
   rule: {
     borderBottomWidth: 1.2,
     borderBottomColor: COLOR.blue,
@@ -185,14 +265,6 @@ const styles = StyleSheet.create({
     color: COLOR.blue,
     textTransform: "uppercase",
     marginBottom: 8,
-  },
-  fieldLabel: { fontSize: 8, color: COLOR.muted },
-  fieldValue: { fontSize: 10, marginTop: 1 },
-  field: {
-    paddingBottom: 5,
-    marginBottom: 5,
-    borderBottomWidth: 0.5,
-    borderBottomColor: COLOR.rule,
   },
   juryHead: {
     flexDirection: "row",
@@ -240,17 +312,17 @@ const styles = StyleSheet.create({
     height: 3.5,
     borderRadius: 2,
     backgroundColor: COLOR.track,
-    marginTop: 2,
-    marginBottom: 5,
+    marginTop: 1,
+    marginBottom: 3,
   },
   barFill: { height: 3.5, borderRadius: 2, backgroundColor: COLOR.blue },
   remarks: {
     backgroundColor: COLOR.blueTint,
     borderLeftWidth: 3,
     borderLeftColor: COLOR.blue,
-    padding: 10,
-    fontSize: 10,
-    lineHeight: 1.45,
+    padding: 12,
+    fontSize: 10.5,
+    lineHeight: 1.5,
   },
   muted: { color: COLOR.muted },
   italicMuted: { color: COLOR.muted, fontFamily: "Helvetica-Oblique" },
@@ -263,7 +335,7 @@ const styles = StyleSheet.create({
   },
 
   // phase 2
-  phase2: { marginTop: 10 },
+  phase2: { marginTop: 14 },
   entryHeading: {
     fontSize: 8.5,
     letterSpacing: 1,
@@ -277,7 +349,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     marginBottom: 5,
   },
-  entryText: { fontSize: 9, lineHeight: 1.4 },
+  entryText: { fontSize: 9.5, lineHeight: 1.4 },
   entryMeta: { fontSize: 7.5, color: COLOR.muted, marginTop: 3 },
 });
 
@@ -302,42 +374,69 @@ function Footer({ campaignName }: { campaignName: string }) {
 }
 
 function Cover({ campaignName, generatedAt, rows }: Props) {
+  const band = [COLOR.blue, COLOR.red, COLOR.yellow, COLOR.green];
   return (
-    <Page size="A4" orientation="landscape" style={styles.page}>
-      <View style={styles.brandBar}>
-        {[COLOR.blue, COLOR.red, COLOR.yellow, COLOR.green].map((c) => (
+    <Page size="A4" orientation="landscape" style={[styles.page, styles.coverPage]}>
+      <View style={styles.coverBand}>
+        {band.map((c) => (
           <View key={c} style={{ flex: 1, backgroundColor: c }} />
         ))}
       </View>
-      <Text style={styles.brand}>
-        <Text style={{ color: COLOR.blue }}>G</Text>
-        <Text style={{ color: COLOR.red }}>D</Text>
-        <Text style={{ color: COLOR.yellow }}>G</Text>
-        <Text style={{ color: COLOR.green }}>C</Text>
-        {" ISSATSo"}
-      </Text>
-      <Text style={styles.title}>Core Team Recruitment Interview Review</Text>
-      <Text style={styles.subtitle}>
-        Candidate scorecards for the decision meeting
-      </Text>
-      <View style={styles.metaRow}>
-        <View>
-          <Text style={styles.metaLabel}>Campaign</Text>
-          <Text style={styles.metaValue}>{pdfSafe(campaignName)}</Text>
+
+      <View style={styles.coverBody}>
+        <Text style={styles.brand}>
+          <Text style={{ color: COLOR.blue }}>G</Text>
+          <Text style={{ color: COLOR.red }}>D</Text>
+          <Text style={{ color: COLOR.yellow }}>G</Text>
+          <Text style={{ color: COLOR.green }}>C</Text>
+          {" ISSATSo"}
+        </Text>
+        <Text style={styles.title}>
+          {"Core Team Recruitment\nInterview Review"}
+        </Text>
+        <Text style={styles.subtitle}>
+          Candidate scorecards for the decision meeting
+        </Text>
+
+        <View style={styles.coverDivider}>
+          {band.map((c) => (
+            <View key={c} style={{ flex: 1, backgroundColor: c }} />
+          ))}
         </View>
-        <View>
-          <Text style={styles.metaLabel}>Generated</Text>
-          <Text style={styles.metaValue}>{formatTunisDateTime(generatedAt)}</Text>
+
+        <View style={styles.metaRow}>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Campaign</Text>
+            <Text style={styles.metaValue}>{pdfSafe(campaignName)}</Text>
+          </View>
+          <View style={styles.metaSep} />
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Generated</Text>
+            <Text style={styles.metaValue}>
+              {formatTunisDateTime(generatedAt)}
+            </Text>
+          </View>
+          <View style={styles.metaSep} />
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Applicants</Text>
+            <Text style={styles.metaValue}>{rows.length}</Text>
+          </View>
         </View>
-        <View>
-          <Text style={styles.metaLabel}>Applicants</Text>
-          <Text style={styles.metaValue}>{rows.length}</Text>
+        <Text style={styles.coverNote}>
+          Applicants are ordered by interview score, best first.
+        </Text>
+
+        <View style={styles.messageCard}>
+          <Text style={styles.messageKicker}>A note for the core team</Text>
+          <Text style={styles.messageText}>
+            {
+              "Behind every page of this packet are weeks of your time and care: forms read, scores entered, interviews held, notes written late into the evening. This process has run as well as it has because of how seriously you took it, and how fairly. Thank you for everything you have given so far. Now trust the work you have done, and choose together the people who will carry the club forward."
+            }
+          </Text>
+          <Text style={styles.messageSign}>With gratitude, GDGC ISSATSo</Text>
         </View>
       </View>
-      <Text style={styles.coverNote}>
-        Applicants are ordered by interview score, best first. Applicants who
-        have not been interviewed come last.
-      </Text>
+
       <Text style={styles.internal}>
         Internal — contains applicant data. Do not distribute.
       </Text>
@@ -346,11 +445,20 @@ function Cover({ campaignName, generatedAt, rows }: Props) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+/** One label/value pair in the applicant header. */
+function HeaderMeta({
+  label,
+  value,
+  width,
+}: {
+  label: string;
+  value: string;
+  width: number;
+}) {
   return (
-    <View style={styles.field} wrap={false}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <Text style={styles.fieldValue}>{pdfSafe(value)}</Text>
+    <View style={{ width }}>
+      <Text style={styles.headerMetaLabel}>{label}</Text>
+      <Text style={styles.headerMetaValue}>{pdfSafe(value)}</Text>
     </View>
   );
 }
@@ -372,9 +480,7 @@ function ApplicantPage({
     NOTE_FIELDS.some((f) => typeof row.noteScores?.[f.key] === "number");
 
   const interview = row.interviewAtISO
-    ? `${formatTunisDateTime(new Date(row.interviewAtISO))}${
-        row.interviewRoom ? ` · ${roomLabel(row.interviewRoom)}` : ""
-      }`
+    ? `${formatTunisDateTime(new Date(row.interviewAtISO))}`
     : "Not booked";
 
   let noteState: string;
@@ -402,29 +508,24 @@ function ApplicantPage({
       <Text style={styles.eyebrow}>
         Applicant {index + 1} of {total}
       </Text>
-      <Text style={styles.name}>{pdfSafe(row.fullName)}</Text>
+      <View style={styles.headerRow}>
+        <View style={styles.nameBox}>
+          <Text style={styles.name}>{pdfSafe(row.fullName)}</Text>
+        </View>
+        <View style={styles.headerMeta}>
+          <HeaderMeta
+            label="Preferred committee"
+            value={committeeLabel(row.preferredCommittee)}
+            width={165}
+          />
+          <HeaderMeta label="Interview" value={interview} width={215} />
+        </View>
+      </View>
       <View style={styles.rule} />
 
       <View style={styles.columns}>
-        {/* Details */}
-        <View style={{ flex: 1 }}>
-          <Text style={styles.heading}>Details</Text>
-          <Field
-            label="Preferred committee"
-            value={committeeLabel(row.preferredCommittee)}
-          />
-          {row.assignedCommittee && (
-            <Field
-              label="Assigned committee"
-              value={committeeLabel(row.assignedCommittee)}
-            />
-          )}
-          <Field label="Decision" value={DECISION_LABEL[row.status]} />
-          <Field label="Interview" value={interview} />
-        </View>
-
         {/* Jury */}
-        <View style={{ flex: 0.85 }}>
+        <View style={{ flex: 0.8 }}>
           <Text style={styles.heading}>Jury</Text>
           {row.jury.length === 0 ? (
             <Text style={styles.italicMuted}>No panel seats recorded.</Text>
@@ -449,7 +550,7 @@ function ApplicantPage({
         </View>
 
         {/* Ratings */}
-        <View style={{ flex: 1.05 }}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.heading}>Interview scores</Text>
           {hasScores ? (
             <View>
@@ -491,7 +592,7 @@ function ApplicantPage({
         </View>
 
         {/* Remarks */}
-        <View style={{ flex: 1.4 }}>
+        <View style={{ flex: 1.7 }}>
           <Text style={styles.heading}>Remarks</Text>
           {row.remarks?.trim() ? (
             <Text style={styles.remarks}>{pdfSafe(row.remarks.trim())}</Text>
