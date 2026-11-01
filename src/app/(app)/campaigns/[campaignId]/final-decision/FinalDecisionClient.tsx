@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { ApplicantStatus, Committee } from "@/generated/prisma/enums";
@@ -28,14 +28,12 @@ import { studyLineOf } from "@/lib/applicant-form-fields";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { CapacityBar } from "./CapacityBar";
 import { Phase2Entries } from "./Phase2Entries";
-import { ShortlistPool } from "./ShortlistPool";
 import {
   assignCommitteeAction,
   completeFinalDecisionsAction,
   recordDecisionAction,
 } from "./actions";
 
-type Tab = "PASS" | "POOL";
 type Filter = "TODO" | "SHORTLISTED" | "ACCEPTED" | "REJECTED" | "ALL";
 
 // A decision that needs the "already completed" gate cleared first, or the
@@ -57,17 +55,17 @@ const STATE_STYLE: Record<
   ACCEPTED: {
     label: "Accepted",
     dot: "bg-status-accepted",
-    text: "text-status-accepted",
+    text: "text-status-accepted-text",
   },
   REJECTED: {
     label: "Rejected",
     dot: "bg-status-rejected",
-    text: "text-status-rejected",
+    text: "text-status-rejected-text",
   },
   SHORTLISTED: {
     label: "Shortlisted",
     dot: "bg-status-pending",
-    text: "text-status-pending",
+    text: "text-status-pending-text",
   },
 };
 
@@ -103,7 +101,6 @@ export function FinalDecisionClient({
   // them into state would risk a stale capacity count mid-meeting.
   const rows = initialRows;
 
-  const [tab, setTab] = useState<Tab>("PASS");
   const [filter, setFilter] = useState<Filter>("TODO");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -112,7 +109,21 @@ export function FinalDecisionClient({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // What the last successful decision did, shown next to the buttons with a way
+  // back. Lives here (not in the panel) because the panel remounts for the next
+  // applicant the moment a decision advances the queue.
+  const [lastDecision, setLastDecision] = useState<{
+    id: string;
+    text: string;
+    undoable: boolean;
+  } | null>(null);
   const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (!lastDecision) return;
+    const timer = setTimeout(() => setLastDecision(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [lastDecision]);
 
   const completed = completedAtISO !== null;
 
@@ -221,17 +232,25 @@ export function FinalDecisionClient({
     const index = list.findIndex((r) => r.id === row.id);
     const next = index >= 0 ? (list[index + 1] ?? list[index - 1]) : undefined;
 
+    const committee = decision === "ACCEPT" ? committeeFor(row) : null;
+
     startTransition(async () => {
       const res = await recordDecisionAction(
         campaignId,
         row.id,
         decision,
-        decision === "ACCEPT" ? committeeFor(row) : null,
+        committee,
       );
       if (!res.ok) {
         setError(res.error);
+        setLastDecision(null);
         return;
       }
+      setLastDecision({
+        id: row.id,
+        text: decisionSummary(row.fullName, decision, committee),
+        undoable: decision !== "UNDECIDE",
+      });
       // Undoing a decision keeps the same person on screen — they're the one
       // being corrected, so jumping to the next name would lose them.
       if (filter === "TODO" && next && decision !== "UNDECIDE") {
@@ -247,6 +266,12 @@ export function FinalDecisionClient({
       return;
     }
     doDecide(row, decision);
+  }
+
+  // Goes through decide(), so a completed campaign still asks first.
+  function undoLast() {
+    const row = lastDecision && rows.find((r) => r.id === lastDecision.id);
+    if (row) decide(row, "UNDECIDE");
   }
 
   function complete() {
@@ -290,9 +315,9 @@ export function FinalDecisionClient({
 
       {completed && (
         <div className="flex items-start gap-3 rounded-xl border border-status-accepted/30 bg-status-accepted/10 px-4 py-3">
-          <Icon name="task_alt" className="text-[20px] text-status-accepted" />
+          <Icon name="task_alt" className="text-[20px] text-status-accepted-text" />
           <div className="text-sm">
-            <p className="font-semibold text-status-accepted">
+            <p className="font-semibold text-status-accepted-text">
               Final decisions completed on {formatCompletedAt(completedAtISO)}
             </p>
             <p className="mt-0.5 text-neutral-600 dark:text-neutral-400">
@@ -304,12 +329,18 @@ export function FinalDecisionClient({
       )}
 
       {error && (
-        <div className="rounded-xl border border-status-rejected/30 bg-status-rejected/10 px-4 py-3 text-sm font-medium text-status-rejected">
+        <div
+          role="alert"
+          className="rounded-xl border border-status-rejected/30 bg-status-rejected/10 px-4 py-3 text-sm font-medium text-status-rejected-text"
+        >
           {error}
         </div>
       )}
       {notice && !error && (
-        <div className="rounded-xl border border-status-accepted/30 bg-status-accepted/10 px-4 py-3 text-sm font-medium text-status-accepted">
+        <div
+          role="status"
+          className="rounded-xl border border-status-accepted/30 bg-status-accepted/10 px-4 py-3 text-sm font-medium text-status-accepted-text"
+        >
           {notice}
         </div>
       )}
@@ -322,249 +353,247 @@ export function FinalDecisionClient({
           renders whatever it was handed. */}
       {emailPanel}
 
-      {/* Tabs. Scrolls horizontally rather than wrapping below ~400px: two tab
-          labels on two lines would push the whole decision panel down a row. */}
-      <div className="flex gap-1 overflow-x-auto border-b border-neutral-200 dark:border-neutral-800">
-        <TabButton active={tab === "PASS"} onClick={() => setTab("PASS")}>
-          Decision Pass ({buckets.undecided.length})
-        </TabButton>
-        <TabButton active={tab === "POOL"} onClick={() => setTab("POOL")}>
-          Shortlist Pool ({buckets.pool.length})
-        </TabButton>
+      {/* The five list filters, as tabs. Scrolls horizontally rather than
+          wrapping on narrow screens: a second row of tabs would push the whole
+          decision panel down. */}
+      <div className="flex items-center gap-1 overflow-x-auto border-b border-neutral-200 dark:border-neutral-800">
+        <div role="group" aria-label="Filter applicants" className="flex gap-1">
+          <TabButton
+            active={filter === "TODO"}
+            onClick={() => setFilter("TODO")}
+          >
+            To decide ({buckets.undecided.length})
+          </TabButton>
+          <TabButton
+            active={filter === "SHORTLISTED"}
+            onClick={() => setFilter("SHORTLISTED")}
+          >
+            Shortlisted ({buckets.pool.length})
+          </TabButton>
+          <TabButton
+            active={filter === "ACCEPTED"}
+            onClick={() => setFilter("ACCEPTED")}
+          >
+            Accepted ({buckets.accepted.length})
+          </TabButton>
+          <TabButton
+            active={filter === "REJECTED"}
+            onClick={() => setFilter("REJECTED")}
+          >
+            Rejected ({buckets.rejected.length})
+          </TabButton>
+          <TabButton active={filter === "ALL"} onClick={() => setFilter("ALL")}>
+            All ({buckets.all.length})
+          </TabButton>
+        </div>
+        {/* Un-interviewed applicants stay at the bottom either way — see
+            compareByInterview. */}
+        <SortToggle
+          direction={sortDir}
+          onToggle={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+        />
       </div>
 
-      {tab === "POOL" ? (
-        <ShortlistPool
-          rows={buckets.pool}
-          committeeFor={committeeFor}
-          onCommitteeChange={setCommittee}
-          onDecide={decide}
-          pending={pending}
-        />
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          {/* List navigation */}
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-              <FilterChip
-                active={filter === "TODO"}
-                onClick={() => setFilter("TODO")}
-              >
-                To decide ({buckets.undecided.length})
-              </FilterChip>
-              <FilterChip
-                active={filter === "SHORTLISTED"}
-                onClick={() => setFilter("SHORTLISTED")}
-              >
-                Shortlisted ({buckets.pool.length})
-              </FilterChip>
-              <FilterChip
-                active={filter === "ACCEPTED"}
-                onClick={() => setFilter("ACCEPTED")}
-              >
-                Accepted ({buckets.accepted.length})
-              </FilterChip>
-              <FilterChip
-                active={filter === "REJECTED"}
-                onClick={() => setFilter("REJECTED")}
-              >
-                Rejected ({buckets.rejected.length})
-              </FilterChip>
-              <FilterChip
-                active={filter === "ALL"}
-                onClick={() => setFilter("ALL")}
-              >
-                All ({buckets.all.length})
-              </FilterChip>
-            </div>
-
-            {/* Interview-score order. Un-interviewed applicants stay at the
-                bottom either way — see compareByInterview. */}
-            <button
-              type="button"
-              onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
-              aria-label={`Sorted by interview score, ${
-                sortDir === "desc" ? "best first" : "lowest first"
-              }. Click to reverse.`}
-              className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-neutral-500 transition-colors hover:text-foreground motion-reduce:transition-none dark:text-neutral-400"
-            >
-              <Icon
-                name={sortDir === "desc" ? "arrow_downward" : "arrow_upward"}
-                className="text-[14px]"
-              />
-              Interview score: {sortDir === "desc" ? "best first" : "lowest first"}
-            </button>
-
-            <div className="space-y-2">
-              {visible.length === 0 && (
-                <p className="rounded-xl border border-dashed border-neutral-300 px-4 py-6 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-                  Nobody here.
-                </p>
-              )}
-              {visible.map((row) => {
-                const state = decisionStateOf(row.status);
-                const style = STATE_STYLE[state];
-                const isSelected = selected?.id === row.id;
-                const avg = interviewAverage(row);
-                return (
-                  <button
-                    key={row.id}
-                    type="button"
-                    onClick={() => setSelectedId(row.id)}
-                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                      isSelected
-                        ? "border-primary bg-primary/10"
-                        : "border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800/50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      {/* STEP 7 — current decision state, at a glance */}
-                      <span
-                        className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider ${style.text}`}
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full ${style.dot}`}
-                        />
-                        {style.label}
-                      </span>
-                      {avg !== null && (
-                        <span className="text-xs font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
-                          {formatScore(avg)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-base font-semibold text-foreground">
-                      {row.fullName}
-                    </p>
-                    <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                      {row.assignedCommittee ?? row.preferredCommittee}
-                      {studyLineOf(row) && ` · ${studyLineOf(row)}`}
-                      {avg === null && " · No interview"}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Main panel.
-              Crossfade only, keyed on the applicant, at the `fast` token — the
-              panel swaps wholesale when a decision advances the queue, and with
-              no signal at all that swap reads as a glitch on a shared screen.
-              Opacity and nothing else: no travel, no layout animation, so the
-              next name is legible ~0.15s after the button is pressed. */}
-          {selected ? (
-            <motion.div
-              // `reduced` is part of the key for the same reason it is on
-              // StatBar: the hook reads false in the hydration snapshot, so
-              // without a remount the mount-time fade starts anyway and the
-              // zero-length transition arrives too late to stop it.
-              key={`${selected.id}:${reduced}`}
-              initial={reduced ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={
-                reduced
-                  ? { duration: 0 }
-                  : { duration: DURATION.fast, ease: EASE.out }
-              }
-              className="space-y-4"
-            >
-              <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-6">
-                <div className="flex flex-wrap items-start justify-between gap-6">
-                  <div className="min-w-0">
-                    <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                      {selected.fullName}
-                    </h2>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-base text-neutral-500 dark:text-neutral-400">
-                      <span className="flex items-center gap-1.5">
-                        <Icon name="school" className="text-[18px]" />
-                        {studyLineOf(selected) ?? "Year not given"}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Icon name="favorite" className="text-[18px]" />
-                        Prefers {selected.preferredCommittee}
-                      </span>
-                      <span
-                        className={`flex items-center gap-1.5 font-semibold ${
-                          STATE_STYLE[decisionStateOf(selected.status)].text
-                        }`}
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full ${
-                            STATE_STYLE[decisionStateOf(selected.status)].dot
-                          }`}
-                        />
-                        {STATE_STYLE[decisionStateOf(selected.status)].label}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Assigned committee — independent of the decision itself */}
-                  <div className="min-w-[200px]">
-                    <label
-                      htmlFor="assigned-committee"
-                      className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-neutral-500"
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+        {/* List navigation. Sticks below the fixed 64px header and scrolls
+            inside itself, so picking someone far down the list never leaves
+            the panel — or the list — out of view. */}
+        <div className="flex flex-col gap-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start">
+          <div className="space-y-2 lg:-m-1 lg:min-h-0 lg:overflow-y-auto lg:p-1">
+            {visible.length === 0 && (
+              <p className="rounded-xl border border-dashed border-neutral-300 px-4 py-6 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                Nobody here.
+              </p>
+            )}
+            {visible.map((row) => {
+              const state = decisionStateOf(row.status);
+              const style = STATE_STYLE[state];
+              const isSelected = selected?.id === row.id;
+              const avg = interviewAverage(row);
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => setSelectedId(row.id)}
+                  aria-current={isSelected ? "true" : undefined}
+                  className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                    isSelected
+                      ? "border-primary bg-primary/10"
+                      : "border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    {/* STEP 7 — current decision state, at a glance */}
+                    <span
+                      className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider ${style.text}`}
                     >
-                      Assigned Committee
-                    </label>
-                    <select
-                      id="assigned-committee"
-                      value={committeeFor(selected)}
-                      disabled={pending}
-                      onChange={(e) =>
-                        setCommittee(selected.id, e.target.value as Committee)
-                      }
-                      className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-lg font-semibold text-foreground dark:border-neutral-700 dark:bg-neutral-900"
-                    >
-                      {CAPACITY_COMMITTEES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    {selectedLevel !== "under" && selectedUsage && (
-                      <p
-                        className={`mt-1.5 flex items-start gap-1 text-sm font-semibold ${
-                          selectedLevel === "over"
-                            ? "text-status-rejected"
-                            : "text-status-pending"
-                        }`}
-                      >
-                        <Icon name="warning" className="text-[16px]" />
-                        {selectedUsage.committee}{" "}
-                        {selectedLevel === "over"
-                          ? "is over capacity"
-                          : "is at capacity"}{" "}
-                        ({selectedUsage.accepted}/{selectedUsage.target})
-                      </p>
+                      <span
+                        className={`h-2 w-2 rounded-full ${style.dot}`}
+                      />
+                      {style.label}
+                    </span>
+                    {avg !== null && (
+                      <span className="text-xs font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+                        {formatScore(avg)} avg
+                      </span>
                     )}
                   </div>
+                  <p className="mt-1 text-base font-semibold text-foreground">
+                    {row.fullName}
+                  </p>
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                    {row.assignedCommittee ?? row.preferredCommittee}
+                    {studyLineOf(row) && ` · ${studyLineOf(row)}`}
+                    {avg === null && " · No interview"}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Main panel.
+            Crossfade only, keyed on the applicant, at the `fast` token — the
+            panel swaps wholesale when a decision advances the queue, and with
+            no signal at all that swap reads as a glitch on a shared screen.
+            Opacity and nothing else: no travel, no layout animation, so the
+            next name is legible ~0.15s after the button is pressed. */}
+        {selected ? (
+          <motion.div
+            // `reduced` is part of the key for the same reason it is on
+            // StatBar: the hook reads false in the hydration snapshot, so
+            // without a remount the mount-time fade starts anyway and the
+            // zero-length transition arrives too late to stop it.
+            key={`${selected.id}:${reduced}`}
+            initial={reduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { duration: DURATION.fast, ease: EASE.out }
+            }
+            className="space-y-4"
+          >
+            <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-6">
+                <div className="min-w-0">
+                  <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                    {selected.fullName}
+                  </h2>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-base text-neutral-500 dark:text-neutral-400">
+                    <span className="flex items-center gap-1.5">
+                      <Icon name="school" className="text-[18px]" />
+                      {studyLineOf(selected) ?? "Year not given"}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Icon name="favorite" className="text-[18px]" />
+                      Prefers {selected.preferredCommittee}
+                    </span>
+                    <span
+                      className={`flex items-center gap-1.5 font-semibold ${
+                        STATE_STYLE[decisionStateOf(selected.status)].text
+                      }`}
+                    >
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          STATE_STYLE[decisionStateOf(selected.status)].dot
+                        }`}
+                      />
+                      {STATE_STYLE[decisionStateOf(selected.status)].label}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Score */}
-                <div className="mt-6">
-                  <ScoreTile
-                    label="Interview Score"
-                    value={
-                      interviewAverage(selected) === null
-                        ? null
-                        : formatScore(interviewAverage(selected))
+                {/* Assigned committee — independent of the decision itself */}
+                <div className="min-w-[200px]">
+                  <label
+                    htmlFor="assigned-committee"
+                    className="mb-1 block text-[11px] font-semibold uppercase tracking-widest text-neutral-500"
+                  >
+                    Assigned Committee
+                  </label>
+                  <select
+                    id="assigned-committee"
+                    value={committeeFor(selected)}
+                    disabled={pending}
+                    onChange={(e) =>
+                      setCommittee(selected.id, e.target.value as Committee)
                     }
-                    hint="Average of the 7 panel ratings"
-                    emptyLabel="Not yet interviewed"
-                  />
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-lg font-semibold text-foreground dark:border-neutral-700 dark:bg-neutral-900"
+                  >
+                    {CAPACITY_COMMITTEES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedLevel !== "under" && selectedUsage && (
+                    <p
+                      className={`mt-1.5 flex items-start gap-1 text-sm font-semibold ${
+                        selectedLevel === "over"
+                          ? "text-status-rejected-text"
+                          : "text-status-pending-text"
+                      }`}
+                    >
+                      <Icon name="warning" className="text-[16px]" />
+                      {selectedUsage.committee}{" "}
+                      {selectedLevel === "over"
+                        ? "is over capacity"
+                        : "is at capacity"}{" "}
+                      ({selectedUsage.accepted}/{selectedUsage.target})
+                    </p>
+                  )}
                 </div>
-
-                {/* Drill-in: jury, all 7 ratings, remarks, closed status.
-                    Expanded by default — the meeting reads the notes for every
-                    applicant, so it shouldn't take a click each time. Keyed by
-                    applicant so switching resets it to expanded. */}
-                <FullInterviewNotes key={selected.id} row={selected} />
-
-                <Phase2Entries row={selected} />
               </div>
 
-              {/* STEP 6 — three large decision buttons */}
+              {/* Score */}
+              <div className="mt-6">
+                <ScoreTile
+                  label="Interview Score"
+                  value={
+                    interviewAverage(selected) === null
+                      ? null
+                      : formatScore(interviewAverage(selected))
+                  }
+                  hint="Average of the 7 panel ratings"
+                  emptyLabel="Not yet interviewed"
+                />
+              </div>
+
+              {/* Drill-in: jury, all 7 ratings, remarks, closed status.
+                  Expanded by default — the meeting reads the notes for every
+                  applicant, so it shouldn't take a click each time. Keyed by
+                  applicant so switching resets it to expanded. */}
+              <FullInterviewNotes key={selected.id} row={selected} />
+
+              <Phase2Entries row={selected} />
+            </div>
+
+            {/* STEP 6 — three large decision buttons */}
+            {/* Decision buttons stay in place under the panel — deliberately
+                not sticky, so they scroll with the content. */}
+            <div className="space-y-2">
+              {lastDecision && (
+                <div
+                  role="status"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-neutral-100 px-3 py-2 text-sm dark:bg-neutral-800"
+                >
+                  <span className="font-medium text-foreground">
+                    {lastDecision.text}
+                  </span>
+                  {lastDecision.undoable && (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={undoLast}
+                      className="inline-flex cursor-pointer items-center gap-1 font-semibold text-primary-text underline-offset-2 hover:underline disabled:opacity-50 dark:text-primary"
+                    >
+                      <Icon name="undo" className="text-[14px]" />
+                      Move back to undecided
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-3">
                 {/* The button for the applicant's CURRENT outcome turns into its
                     undo; the other two stay, so switching straight to a
@@ -621,19 +650,19 @@ export function FinalDecisionClient({
                   />
                 )}
               </div>
-            </motion.div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-neutral-300 p-10 text-center dark:border-neutral-700">
-              <p className="text-base font-medium text-foreground">
-                No applicants to decide.
-              </p>
-              <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                Nobody in this campaign is shortlisted or waitlisted.
-              </p>
             </div>
-          )}
-        </div>
-      )}
+          </motion.div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-neutral-300 p-10 text-center dark:border-neutral-700">
+            <p className="text-base font-medium text-foreground">
+              No applicants to decide.
+            </p>
+            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+              Nobody in this campaign is shortlisted or waitlisted.
+            </p>
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={dialog?.kind === "complete"}
@@ -675,6 +704,50 @@ export function FinalDecisionClient({
   );
 }
 
+/** What a decision did, in one sentence, for the confirmation line. */
+function decisionSummary(
+  name: string,
+  decision: FinalDecision,
+  committee: Committee | null,
+): string {
+  switch (decision) {
+    case "ACCEPT":
+      return `${name} accepted${committee ? ` to ${committee}` : ""}`;
+    case "REJECT":
+      return `${name} rejected`;
+    case "SHORTLIST":
+      return `${name} shortlisted`;
+    case "UNDECIDE":
+      return `${name} moved back to undecided`;
+  }
+}
+
+function SortToggle({
+  direction,
+  onToggle,
+}: {
+  direction: SortDirection;
+  onToggle: () => void;
+}) {
+  const label = `Interview score: ${direction === "desc" ? "best first" : "lowest first"}`;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      // Starts with the visible text so voice control ("click interview
+      // score") matches the accessible name.
+      aria-label={`${label}. Activate to reverse.`}
+      className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap px-3 py-2 text-xs font-semibold text-neutral-500 transition-colors hover:text-foreground motion-reduce:transition-none dark:text-neutral-400"
+    >
+      <Icon
+        name={direction === "desc" ? "arrow_downward" : "arrow_upward"}
+        className="text-[14px]"
+      />
+      {label}
+    </button>
+  );
+}
+
 function TabButton({
   active,
   onClick,
@@ -687,35 +760,12 @@ function TabButton({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={`-mb-px shrink-0 cursor-pointer whitespace-nowrap border-b-2 px-4 py-2.5 text-base font-semibold transition-colors motion-reduce:transition-none ${
         active
           ? "border-primary text-primary"
           : "border-transparent text-neutral-500 hover:text-foreground dark:text-neutral-400"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-        active
-          ? "bg-primary text-primary-foreground"
-          : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
       }`}
     >
       {children}
@@ -740,7 +790,7 @@ function ScoreTile({
         {label}
       </p>
       {value === null ? (
-        <p className="mt-1 text-2xl font-semibold text-neutral-400">
+        <p className="mt-1 text-2xl font-semibold text-neutral-500 dark:text-neutral-400">
           {emptyLabel ?? "—"}
         </p>
       ) : (
@@ -775,7 +825,7 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
         className="flex w-full cursor-pointer items-center justify-between gap-2 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Icon name="description" className="text-[18px] text-neutral-400" />
+          <Icon name="description" className="text-[18px] text-neutral-500 dark:text-neutral-400" />
           View Full Interview Notes
         </span>
         {/* The chevron rotates rather than swapping glyphs — one element that
@@ -790,7 +840,7 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
               : { duration: DURATION.fast, ease: EASE.out }
           }
         >
-          <Icon name="expand_more" className="text-[20px] text-neutral-400" />
+          <Icon name="expand_more" className="text-[20px] text-neutral-500 dark:text-neutral-400" />
         </motion.span>
       </button>
 
@@ -838,7 +888,7 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
                       {j.name}
                     </span>
                   ) : (
-                    <span className="text-sm italic text-neutral-400">Open</span>
+                    <span className="text-sm italic text-neutral-500 dark:text-neutral-400">Open</span>
                   )}
                 </li>
               ))}
@@ -851,7 +901,7 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
               Panel Ratings
             </p>
             {row.noteScores === null ? (
-              <p className="text-sm italic text-neutral-400">
+              <p className="text-sm italic text-neutral-500 dark:text-neutral-400">
                 No interview note recorded yet.
               </p>
             ) : (
@@ -886,7 +936,7 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
                 {row.remarks}
               </p>
             ) : (
-              <p className="text-sm italic text-neutral-400">No remarks.</p>
+              <p className="text-sm italic text-neutral-500 dark:text-neutral-400">No remarks.</p>
             )}
           </div>
 
@@ -895,7 +945,7 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
             <Icon
               name={row.noteClosed ? "lock" : "lock_open"}
               className={`text-[14px] ${
-                row.noteClosed ? "text-status-rejected" : "text-status-accepted"
+                row.noteClosed ? "text-status-rejected-text" : "text-status-accepted-text"
               }`}
             />
             {row.noteClosed ? (
@@ -924,10 +974,12 @@ function FullInterviewNotes({ row }: { row: DecisionRow }) {
 // combination on a page whose whole job is to be readable over a video call.
 const DECISION_TONE = {
   accept:
-    "bg-status-accepted text-white dark:text-neutral-950 hover:bg-status-accepted/85",
-  shortlist: "bg-primary text-primary-foreground hover:bg-primary/85",
+    "bg-status-accepted-text text-white dark:text-neutral-950 hover:bg-status-accepted-text/90",
+  // Same status-pending token as the "Shortlisted" dot in the list. Dark label:
+  // white on this amber is 1.7:1.
+  shortlist: "bg-status-pending text-neutral-950 hover:bg-status-pending/85",
   reject:
-    "bg-status-rejected text-white dark:text-neutral-950 hover:bg-status-rejected/85",
+    "bg-status-rejected-text text-white dark:text-neutral-950 hover:bg-status-rejected-text/90",
   // Neutral on purpose: undoing is not a verdict, so it borrows no status colour.
   undo: "bg-neutral-200 text-foreground hover:bg-neutral-300 dark:bg-neutral-700 dark:hover:bg-neutral-600",
 } as const;

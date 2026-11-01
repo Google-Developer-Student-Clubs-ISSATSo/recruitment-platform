@@ -95,7 +95,7 @@ export function FinalEmailPanel({
         <div className="flex items-start gap-2 rounded-lg border border-status-pending/40 bg-status-pending/10 px-4 py-3 text-sm">
           <Icon
             name="warning"
-            className="text-[18px] text-status-pending shrink-0"
+            className="text-[18px] text-status-pending-text shrink-0"
           />
           <p className="text-foreground">
             Set{" "}
@@ -112,14 +112,20 @@ export function FinalEmailPanel({
       )}
 
       {error && (
-        <div className="rounded-lg border border-status-rejected/30 bg-status-rejected/10 px-4 py-3 text-sm font-medium text-status-rejected">
+        <div
+          role="alert"
+          className="rounded-lg border border-status-rejected/30 bg-status-rejected/10 px-4 py-3 text-sm font-medium text-status-rejected-text"
+        >
           {error}
         </div>
       )}
 
       {result && (
-        <div className="rounded-lg border border-status-accepted/30 bg-status-accepted/10 px-4 py-3 text-sm">
-          <p className="font-semibold text-status-accepted">
+        <div
+          role="status"
+          className="rounded-lg border border-status-accepted/30 bg-status-accepted/10 px-4 py-3 text-sm"
+        >
+          <p className="font-semibold text-status-accepted-text">
             {result.sent} sent
             {result.failed > 0 ? `, ${result.failed} failed` : ""}
             {result.skipped > 0
@@ -149,7 +155,7 @@ export function FinalEmailPanel({
           {pending ? "Sending…" : "Send Final Results"}
         </Button>
         {pendingCount === 0 && total > 0 && !needsLinks && (
-          <span className="flex items-center gap-1 text-sm text-status-accepted">
+          <span className="flex items-center gap-1 text-sm text-status-accepted-text">
             <Icon name="check" className="text-[16px]" />
             Everyone has been emailed.
           </span>

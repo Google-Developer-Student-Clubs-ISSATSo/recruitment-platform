@@ -15,17 +15,17 @@ import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 // amber exactly at it, red over it.
 const LEVEL_STYLE = {
   under: {
-    text: "text-status-accepted",
+    text: "text-status-accepted-text",
     fill: "bg-status-accepted",
     ring: "border-neutral-200 dark:border-neutral-800",
   },
   at: {
-    text: "text-status-pending",
+    text: "text-status-pending-text",
     fill: "bg-status-pending",
     ring: "border-status-pending/40",
   },
   over: {
-    text: "text-status-rejected",
+    text: "text-status-rejected-text",
     fill: "bg-status-rejected",
     ring: "border-status-rejected/50",
   },
@@ -73,7 +73,7 @@ export function CapacityBar({ usage }: { usage: CommitteeUsage[] }) {
               </span>
               <span className={`text-3xl font-bold tabular-nums ${style.text}`}>
                 {accepted}
-                <span className="text-neutral-400 dark:text-neutral-600">
+                <span className="text-neutral-500 dark:text-neutral-400">
                   /{target}
                 </span>
               </span>
