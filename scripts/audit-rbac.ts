@@ -92,6 +92,7 @@ function buildGates(): Gate[] {
     ["action committee capacity update", [K.MANAGE_CAPACITY]],
     ["action final-decision email links", [K.SEND_EMAILS]],
     ["action final-decision record/complete", [K.ENTER_FINAL_DECISION]],
+    ["route final-decision interview-reviews PDF", [K.ENTER_FINAL_DECISION]],
     ["action final-decision send emails", [K.SEND_EMAILS]],
     ["action interview booking invite/reminder send", [K.SEND_EMAILS]],
     ["action interview slot entry", [K.ENTER_INTERVIEW_SLOT]],

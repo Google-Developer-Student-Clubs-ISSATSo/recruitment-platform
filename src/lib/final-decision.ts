@@ -124,6 +124,11 @@ export type DecisionRow = {
   noteClosed: boolean;
   /** Who closed it, if closed. */
   closedByName: string | null;
+  /** When it was closed, as an ISO instant — null while open. */
+  closedAtISO: string | null;
+  /** Booked interview time (an ISO instant) and room, or null when not booked. */
+  interviewAtISO: string | null;
+  interviewRoom: string | null;
   /**
    * Every Phase 2 note and flag for this applicant, oldest first. Unfiltered by
    * the Phase 2 visibility switches — this page is already permission-gated.

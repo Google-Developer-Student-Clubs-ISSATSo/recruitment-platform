@@ -27,6 +27,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { studyLineOf } from "@/lib/applicant-form-fields";
 import { DURATION, EASE, useReducedMotion } from "@/lib/motion-tokens";
 import { CapacityBar } from "./CapacityBar";
+import { InterviewReviewsButton } from "./InterviewReviewsButton";
 import { Phase2Entries } from "./Phase2Entries";
 import {
   assignCommitteeAction,
@@ -303,14 +304,17 @@ export function FinalDecisionClient({
               : `${remaining} applicant${remaining === 1 ? "" : "s"} still to decide.`}
           </p>
         </div>
-        <Button
-          size="lg"
-          disabled={pending || remaining > 0}
-          onClick={() => setDialog({ kind: "complete" })}
-        >
-          <Icon name="task_alt" className="text-[18px]" />
-          Mark Final Decisions Complete
-        </Button>
+        <div className="flex flex-wrap items-start gap-3">
+          <InterviewReviewsButton campaignId={campaignId} />
+          <Button
+            size="lg"
+            disabled={pending || remaining > 0}
+            onClick={() => setDialog({ kind: "complete" })}
+          >
+            <Icon name="task_alt" className="text-[18px]" />
+            Mark Final Decisions Complete
+          </Button>
+        </div>
       </div>
 
       {completed && (
