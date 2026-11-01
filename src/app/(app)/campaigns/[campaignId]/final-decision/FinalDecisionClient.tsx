@@ -205,6 +205,14 @@ export function FinalDecisionClient({
 
   const remaining = buckets.undecided.length;
 
+  // The badge/subtitle count, deliberately narrower than `remaining`: only
+  // applicants whose status is "Not decided" (gray dot). The shortlisted pool
+  // (`PENDING` / yellow dot) is still open work — it stays in `remaining`,
+  // which gates the "Mark Complete" button — but it is not "not decided".
+  const notDecided = rows.filter(
+    (r) => decisionStateOf(r.status) === "UNDECIDED",
+  ).length;
+
   function setCommittee(applicantId: string, committee: Committee) {
     setDrafts((d) => ({ ...d, [applicantId]: committee }));
     setError(null);
@@ -295,14 +303,15 @@ export function FinalDecisionClient({
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Final Decision
-          </h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            {remaining === 0
-              ? "Everyone has been decided."
-              : `${remaining} applicant${remaining === 1 ? "" : "s"} still to decide.`}
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold text-foreground">
+              Final Decision
+            </h1>
+            <RemainingBadge
+              notDecided={notDecided}
+              shortlistedLeft={remaining > 0}
+            />
+          </div>
         </div>
         <div className="flex flex-wrap items-start gap-3">
           <InterviewReviewsButton campaignId={campaignId} />
@@ -749,6 +758,44 @@ function SortToggle({
       />
       {label}
     </button>
+  );
+}
+
+/**
+ * STEP 0 — how many applicants are still "Not decided" (gray dot), at a
+ * glance. Shortlisted-pool applicants are NOT counted here — they are still
+ * open work for the meeting (gated by `remaining`), but not undecided.
+ * Derived from the same rows the list renders — never stored, so it can't
+ * drift. Amber while any remain; green check at zero.
+ */
+function RemainingBadge({
+  notDecided,
+  shortlistedLeft,
+}: {
+  notDecided: number;
+  /** True when any shortlisted-pool applicants remain open. */
+  shortlistedLeft: boolean;
+}) {
+  return notDecided === 0 ? (
+    <span
+      role="status"
+      className="inline-flex items-center gap-2 rounded-full border border-status-accepted/40 bg-status-accepted/10 px-4 py-2 text-lg font-semibold text-status-accepted-text"
+    >
+      <Icon name="task_alt" className="text-[22px]" />
+      {shortlistedLeft ? "No not-decided left" : "All decided"}
+    </span>
+  ) : (
+    <span
+      role="status"
+      className="inline-flex items-center gap-2 rounded-full border border-status-pending/40 bg-status-pending/10 px-4 py-2 text-status-pending-text"
+    >
+      <span className="text-2xl font-bold leading-none tabular-nums">
+        {notDecided}
+      </span>
+      <span className="text-sm font-semibold uppercase tracking-wide">
+        left
+      </span>
+    </span>
   );
 }
 
