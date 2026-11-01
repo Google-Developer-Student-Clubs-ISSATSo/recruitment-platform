@@ -17,9 +17,14 @@ import { PHASE2_SECTIONS } from "@/lib/phase2";
 import { formatTunisDateTime } from "@/lib/tunis-time";
 
 // The interview-reviews PDF: one cover page, then one page per applicant —
-// details and jury, the seven ratings with their average, the panel's remarks,
-// and the Phase 2 notes / red flags / green flags — ordered by interview
-// average, best first.
+// details, jury, the seven ratings with their average and the panel's remarks
+// across the top, and the Phase 2 notes / red flags / green flags beneath —
+// ordered by interview average, best first.
+//
+// Landscape A4 (842 × 595pt): the page is wide and short, so the top row is four
+// columns and spacing is kept tight enough that a typical applicant, Phase 2
+// entries included, fits on ONE page. A very long remark or a long run of
+// entries still flows onto a second page rather than being cut off.
 //
 // This renders to a PDF, not to the app's UI, so the design tokens in
 // globals.css (CSS custom properties) don't exist here: a PDF needs literal
@@ -102,9 +107,9 @@ function formatRating(value: number): string {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 44,
-    paddingHorizontal: 44,
-    paddingBottom: 64,
+    paddingTop: 30,
+    paddingHorizontal: 40,
+    paddingBottom: 44,
     fontFamily: "Helvetica",
     fontSize: 10,
     color: COLOR.ink,
@@ -112,9 +117,9 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: "absolute",
-    left: 44,
-    right: 44,
-    bottom: 28,
+    left: 40,
+    right: 40,
+    bottom: 22,
     borderTopWidth: 0.5,
     borderTopColor: COLOR.rule,
     paddingTop: 8,
@@ -123,16 +128,16 @@ const styles = StyleSheet.create({
   },
 
   // cover
-  brandBar: { flexDirection: "row", width: 180, height: 5, marginBottom: 40 },
-  brand: { fontSize: 18, fontFamily: "Helvetica-Bold", marginBottom: 20 },
+  brandBar: { flexDirection: "row", width: 180, height: 5, marginBottom: 34 },
+  brand: { fontSize: 18, fontFamily: "Helvetica-Bold", marginBottom: 16 },
   title: {
-    fontSize: 38,
+    fontSize: 40,
     lineHeight: 1.1,
     fontFamily: "Helvetica-Bold",
     color: COLOR.blue,
   },
-  subtitle: { fontSize: 15, color: COLOR.muted, marginTop: 36 },
-  metaRow: { flexDirection: "row", gap: 36, marginTop: 40 },
+  subtitle: { fontSize: 15, color: COLOR.muted, marginTop: 24 },
+  metaRow: { flexDirection: "row", gap: 36, marginTop: 30 },
   metaLabel: {
     fontSize: 8,
     letterSpacing: 1,
@@ -141,7 +146,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   metaValue: { fontSize: 12, marginTop: 3 },
-  coverNote: { fontSize: 11, marginTop: 44 },
+  coverNote: { fontSize: 11, marginTop: 30 },
   internal: {
     fontSize: 11,
     fontFamily: "Helvetica-Bold",
@@ -156,14 +161,23 @@ const styles = StyleSheet.create({
     color: COLOR.muted,
     textTransform: "uppercase",
   },
-  name: { fontSize: 26, fontFamily: "Helvetica-Bold", marginTop: 4 },
+  name: { fontSize: 24, fontFamily: "Helvetica-Bold", marginTop: 2 },
   rule: {
     borderBottomWidth: 1.2,
     borderBottomColor: COLOR.blue,
-    marginTop: 14,
-    marginBottom: 16,
+    marginTop: 12,
+    marginBottom: 10,
   },
-  columns: { flexDirection: "row", gap: 22 },
+  columns: { flexDirection: "row", gap: 18 },
+  continued: {
+    position: "absolute",
+    top: 16,
+    left: 40,
+    fontSize: 8,
+    letterSpacing: 0.8,
+    color: COLOR.muted,
+    textTransform: "uppercase",
+  },
   heading: {
     fontSize: 8.5,
     letterSpacing: 1,
@@ -175,8 +189,8 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 8, color: COLOR.muted },
   fieldValue: { fontSize: 10, marginTop: 1 },
   field: {
-    paddingBottom: 6,
-    marginBottom: 6,
+    paddingBottom: 5,
+    marginBottom: 5,
     borderBottomWidth: 0.5,
     borderBottomColor: COLOR.rule,
   },
@@ -226,8 +240,8 @@ const styles = StyleSheet.create({
     height: 3.5,
     borderRadius: 2,
     backgroundColor: COLOR.track,
-    marginTop: 3,
-    marginBottom: 7,
+    marginTop: 2,
+    marginBottom: 5,
   },
   barFill: { height: 3.5, borderRadius: 2, backgroundColor: COLOR.blue },
   remarks: {
@@ -249,7 +263,7 @@ const styles = StyleSheet.create({
   },
 
   // phase 2
-  phase2: { marginTop: 22 },
+  phase2: { marginTop: 10 },
   entryHeading: {
     fontSize: 8.5,
     letterSpacing: 1,
@@ -259,9 +273,9 @@ const styles = StyleSheet.create({
   },
   entry: {
     borderLeftWidth: 2.5,
-    paddingVertical: 5,
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    marginBottom: 6,
+    marginBottom: 5,
   },
   entryText: { fontSize: 9, lineHeight: 1.4 },
   entryMeta: { fontSize: 7.5, color: COLOR.muted, marginTop: 3 },
@@ -289,7 +303,7 @@ function Footer({ campaignName }: { campaignName: string }) {
 
 function Cover({ campaignName, generatedAt, rows }: Props) {
   return (
-    <Page size="A4" style={styles.page}>
+    <Page size="A4" orientation="landscape" style={styles.page}>
       <View style={styles.brandBar}>
         {[COLOR.blue, COLOR.red, COLOR.yellow, COLOR.green].map((c) => (
           <View key={c} style={{ flex: 1, backgroundColor: c }} />
@@ -375,7 +389,16 @@ function ApplicantPage({
   }
 
   return (
-    <Page size="A4" style={styles.page}>
+    <Page size="A4" orientation="landscape" style={styles.page}>
+      {/* Only on a spill-over page: says whose it is. Renders nothing on the
+          first page of the applicant, where the real heading already is. */}
+      <Text
+        fixed
+        style={styles.continued}
+        render={({ subPageNumber }) =>
+          subPageNumber > 1 ? pdfSafe(`${row.fullName} — continued`) : ""
+        }
+      />
       <Text style={styles.eyebrow}>
         Applicant {index + 1} of {total}
       </Text>
@@ -383,7 +406,7 @@ function ApplicantPage({
       <View style={styles.rule} />
 
       <View style={styles.columns}>
-        {/* Details + jury */}
+        {/* Details */}
         <View style={{ flex: 1 }}>
           <Text style={styles.heading}>Details</Text>
           <Field
@@ -398,19 +421,24 @@ function ApplicantPage({
           )}
           <Field label="Decision" value={DECISION_LABEL[row.status]} />
           <Field label="Interview" value={interview} />
+        </View>
 
-          <Text style={[styles.heading, { marginTop: 10 }]}>Jury</Text>
+        {/* Jury */}
+        <View style={{ flex: 0.85 }}>
+          <Text style={styles.heading}>Jury</Text>
           {row.jury.length === 0 ? (
             <Text style={styles.italicMuted}>No panel seats recorded.</Text>
           ) : (
             <View>
               <View style={styles.juryHead}>
-                <Text style={{ width: 44 }}>Seat</Text>
+                <Text style={{ width: 40 }}>Seat</Text>
                 <Text>Panellist</Text>
               </View>
               {row.jury.map((j) => (
                 <View key={j.kind} style={styles.juryRow} wrap={false}>
-                  <Text style={styles.jurySeat}>{seatKindLabel(j.kind)}</Text>
+                  <Text style={[styles.jurySeat, { width: 40 }]}>
+                    {seatKindLabel(j.kind)}
+                  </Text>
                   <Text style={j.name ? undefined : styles.italicMuted}>
                     {j.name ? pdfSafe(j.name) : "Open"}
                   </Text>
@@ -421,7 +449,7 @@ function ApplicantPage({
         </View>
 
         {/* Ratings */}
-        <View style={{ flex: 1.1 }}>
+        <View style={{ flex: 1.05 }}>
           <Text style={styles.heading}>Interview scores</Text>
           {hasScores ? (
             <View>
@@ -463,7 +491,7 @@ function ApplicantPage({
         </View>
 
         {/* Remarks */}
-        <View style={{ flex: 1.3 }}>
+        <View style={{ flex: 1.4 }}>
           <Text style={styles.heading}>Remarks</Text>
           {row.remarks?.trim() ? (
             <Text style={styles.remarks}>{pdfSafe(row.remarks.trim())}</Text>
